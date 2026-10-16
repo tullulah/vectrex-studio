@@ -338,6 +338,18 @@ export class VectrexSystem implements ISystem, IBus {
   }
 
   /**
+   * Expose the live AudioContext and the output node feeding ctx.destination
+   * so a parallel MediaStreamAudioDestinationNode can be attached for the
+   * video recorder. Returns null when audio hasn't started yet.
+   */
+  getAudioContextAndOutputNode(): { ctx: AudioContext; outputNode: AudioNode } | null {
+    if (this.audioCtx && this.audioNode) {
+      return { ctx: this.audioCtx, outputNode: this.audioNode };
+    }
+    return null;
+  }
+
+  /**
    * Update joystick axis input for the 6809/Vectrex analog path.
    * x, y are raw signed values in [-127, 127] (0 = centred), matching the
    * range produced by inputManager.update() in EmulatorPanel.tsx.

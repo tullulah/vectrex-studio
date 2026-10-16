@@ -14,8 +14,25 @@
 const ALG_MAX_X      = 33000;
 const ALG_MAX_Y      = 41000;
 const VECTREX_COLORS = 128;
+// Floor for lit vectors injected via addSegmentDirect (RP2350 draw path). The AAE
+// ports can hand us colour 0 for genuinely-visible geometry (Speed Freak's HUD),
+// which would render pure black; a real drawn vector always lights, so clamp to a
+// small-but-visible grey. ~half the mid ccpu level (0x40) reads as a dim HUD.
+const DIRECT_MIN_INTENSITY = 32;
 const VECTOR_HASH    = 65521;
 const VECTOR_CNT     = (1500000 / 30) | 0; // VECTREX_MHZ / VECTREX_PDECAY
+/**
+ * THE RAMP'S TAIL: the integrators keep going for 2.5 bus cycles after RAMP goes inactive.
+ * Measured on a console (2026-09-15, uvmc2-sdk's ramps bench, see T1_EXTRA_Q8 in
+ * vectrex-draw/src/ramp.rs): every ramp travels v * (t1 + 2.5), the 6522 counting t1 + 1.5
+ * on a one-shot plus the integrator settling. This model used to integrate exactly while
+ * PB7 was low, so a ramp of t1 = 8 came out 24% short of what a console draws and one of
+ * t1 = 18 12% — and code that programs its speeds for the real travel (the UVM2 SDK does)
+ * drew text whose letters climbed and wandered off their baseline.
+ */
+const RAMP_TAIL = 2.5;
+/** The DAC value of no movement: what the integrators measure against (see update). */
+const ZERO_REF = 128;
 
 /**
  * A single rendered vector segment.
@@ -29,12 +46,20 @@ export interface VectorEntry {
   x1: number;
   y1: number;
   color: number;
+  /**
+   * Bus cycles the beam spent LIT on this segment. On a CRT the phosphor charge is
+   * intensity × time: a beam parked lit for 24 cycles is a bright DOT (zero length,
+   * high ticks) and an 8-cycle ramp stroke is dimmer per unit length. Without this
+   * a stream of T1=8 micro-segments renders as clean strokes in the emulator
+   * while the real console shows dots — the renderer needs the dwell to be faithful.
+   */
+  ticks: number;
 }
 
 /** Mutable vector slot (matches vector_t in vecx_full.js). */
 class VectorSlot implements VectorEntry {
-  x0 = 0; y0 = 0; x1 = 0; y1 = 0; color = 0;
-  reset(): void { this.x0 = this.y0 = this.x1 = this.y1 = this.color = 0; }
+  x0 = 0; y0 = 0; x1 = 0; y1 = 0; color = 0; ticks = 0;
+  reset(): void { this.x0 = this.y0 = this.x1 = this.y1 = this.color = this.ticks = 0; }
 }
 
 export class Beam {
@@ -87,6 +112,23 @@ export class Beam {
   alg_vector_dx: number = 0;
   alg_vector_dy: number = 0;
   alg_vector_color: number = 0;
+  /** Bus cycles the current segment has been lit (dwell). See VectorEntry.ticks. */
+  alg_vector_ticks: number = 0;
+
+  /** Where the beam may draw (alg units): the 0–ALG_MAX field unless setBounds widens it. */
+  private minX = 0;
+  private maxX = ALG_MAX_X;
+  private minY = 0;
+  private maxY = ALG_MAX_Y;
+
+  /** Let the beam draw over a wider field than vecx's 0–ALG_MAX one (see Uvm2System). */
+  setBounds(minX: number, minY: number, maxX: number, maxY: number): void {
+    this.minX = minX; this.minY = minY; this.maxX = maxX; this.maxY = maxY;
+  }
+
+  /** Integration still owed after RAMP went inactive (RAMP_TAIL), and the last ramp level. */
+  private rampTail = 0;
+  private rampWas = 1;
 
   // ------------------------------------------------------------------ //
   // Double-buffered vector lists (draw / erase, swapped per frame)
@@ -156,16 +198,26 @@ export class Beam {
     // Comparator: joystick vs X reference
     this.alg_compare = this.alg_jsh > this.alg_xsh ? 0x20 : 0;
 
-    // Compute integrator deltas from XSH / RSH / YSH
-    this.alg_dx = this.alg_xsh - this.alg_rsh;
-    this.alg_dy = this.alg_rsh - this.alg_ysh;
+    /* Integrator deltas from XSH / YSH, against a CALIBRATED zero.
+     *
+     * The X,Y offset channel (mux 01) is still sampled into alg_rsh, but it does not shift
+     * the beam here. On a console that channel exists to null the console's OWN analog
+     * offsets: the UVM2 SDK primes it on every re-zero with an offset swept per console
+     * (0x23 by default, Vectorblade's text value) and then a short $FF touch, copied byte for
+     * byte from a capture that draws clean. Taken at full weight and latched at once, as
+     * vecx does, that left the zero at $FF = -1: every ramp drifted 1 unit a cycle and text
+     * climbed to the right; and no time constant makes that sequence settle on zero. An
+     * emulator has no analog offset to null, so it behaves as the calibrated console does:
+     * no drift. Code that writes 0 there (the BIOS's Reset0Ref) sees no difference. */
+    this.alg_dx = this.alg_xsh - ZERO_REF;
+    this.alg_dy = ZERO_REF - this.alg_ysh;
 
   }
 
   // ------------------------------------------------------------------ //
   // alg_addline — mirrors vecx_full.js lines 5135–5198
   // ------------------------------------------------------------------ //
-  private addLine(x0: number, y0: number, x1: number, y1: number, color: number): void {
+  private addLine(x0: number, y0: number, x1: number, y1: number, color: number, ticks: number): void {
     // Compute hash for deduplication
     let key = x0;
     key = key * 31 + y0;
@@ -180,6 +232,7 @@ export class Beam {
       const v = this._vectors_draw[index];
       if (v.x0 === x0 && v.y0 === y0 && v.x1 === x1 && v.y1 === y1) {
         v.color = color;
+        v.ticks += ticks;   // redrawn within the frame: the phosphor charges again
         return;
       }
     }
@@ -199,6 +252,7 @@ export class Beam {
     slot.x1    = x1;
     slot.y1    = y1;
     slot.color = color;
+    slot.ticks = ticks;
     this._vector_hash[key] = this.vector_draw_cnt;
     this.vector_draw_cnt++;
   }
@@ -245,16 +299,28 @@ export class Beam {
       if (sig_ramp === 0) {
         sig_dx = this.alg_dx;
         sig_dy = this.alg_dy;
+        this.rampTail = 0;
+      } else {
+        // The ramp just ended: the integrators carry on for RAMP_TAIL cycles more
+        if (this.rampWas === 0) this.rampTail = RAMP_TAIL;
+        if (this.rampTail > 0) {
+          const f = this.rampTail >= 1 ? 1 : this.rampTail;
+          sig_dx = this.alg_dx * f;
+          sig_dy = this.alg_dy * f;
+          this.rampTail -= f;
+        }
+        // else sig_dx/sig_dy remain 0 (ramp holds beam still)
       }
-      // else sig_dx/sig_dy remain 0 (ramp holds beam still)
     }
+    this.rampWas = via_ca2 === 0 ? 1 : (sig_ramp === 0 ? 0 : 1);
+    if (via_ca2 === 0) this.rampTail = 0;   // ZERO clamps the integrators: nothing is owed
 
     if (this.alg_vectoring === 0) {
       // Not currently drawing — check if beam should start
       if (
         sig_blank === 1 &&
-        this.alg_curr_x >= 0 && this.alg_curr_x < ALG_MAX_X &&
-        this.alg_curr_y >= 0 && this.alg_curr_y < ALG_MAX_Y
+        this.alg_curr_x >= this.minX && this.alg_curr_x < this.maxX &&
+        this.alg_curr_y >= this.minY && this.alg_curr_y < this.maxY
       ) {
         this.alg_vectoring   = 1;
         this.alg_vector_x0   = this.alg_curr_x;
@@ -264,6 +330,7 @@ export class Beam {
         this.alg_vector_dx   = sig_dx;
         this.alg_vector_dy   = sig_dy;
         this.alg_vector_color = this.alg_zsh & 0xff;
+        this.alg_vector_ticks = 0;
       }
     } else {
       // Currently drawing a vector
@@ -274,6 +341,7 @@ export class Beam {
           this.alg_vector_x0, this.alg_vector_y0,
           this.alg_vector_x1, this.alg_vector_y1,
           this.alg_vector_color,
+          this.alg_vector_ticks,
         );
       } else if (
         sig_dx !== this.alg_vector_dx ||
@@ -285,11 +353,12 @@ export class Beam {
           this.alg_vector_x0, this.alg_vector_y0,
           this.alg_vector_x1, this.alg_vector_y1,
           this.alg_vector_color,
+          this.alg_vector_ticks,
         );
         // Start new segment if still in bounds
         if (
-          this.alg_curr_x >= 0 && this.alg_curr_x < ALG_MAX_X &&
-          this.alg_curr_y >= 0 && this.alg_curr_y < ALG_MAX_Y
+          this.alg_curr_x >= this.minX && this.alg_curr_x < this.maxX &&
+          this.alg_curr_y >= this.minY && this.alg_curr_y < this.maxY
         ) {
           this.alg_vector_x0   = this.alg_curr_x;
           this.alg_vector_y0   = this.alg_curr_y;
@@ -298,6 +367,7 @@ export class Beam {
           this.alg_vector_dx   = sig_dx;
           this.alg_vector_dy   = sig_dy;
           this.alg_vector_color = this.alg_zsh & 0xff;
+          this.alg_vector_ticks = 0;
         } else {
           this.alg_vectoring = 0;
         }
@@ -305,14 +375,15 @@ export class Beam {
     }
 
     // Advance beam position
+    if (this.alg_vectoring === 1) this.alg_vector_ticks++;
     this.alg_curr_x += sig_dx;
     this.alg_curr_y += sig_dy;
 
     // Extend current vector if still in bounds
     if (
       this.alg_vectoring === 1 &&
-      this.alg_curr_x >= 0 && this.alg_curr_x < ALG_MAX_X &&
-      this.alg_curr_y >= 0 && this.alg_curr_y < ALG_MAX_Y
+      this.alg_curr_x >= this.minX && this.alg_curr_x < this.maxX &&
+      this.alg_curr_y >= this.minY && this.alg_curr_y < this.maxY
     ) {
       this.alg_vector_x1 = this.alg_curr_x;
       this.alg_vector_y1 = this.alg_curr_y;
@@ -362,6 +433,9 @@ export class Beam {
     this.alg_curr_x   = ALG_MAX_X >> 1;
     this.alg_curr_y   = ALG_MAX_Y >> 1;
     this.alg_vectoring = 0;
+    this.alg_vector_ticks = 0;
+    this.rampTail = 0;
+    this.rampWas = 1;
     this.vector_draw_cnt = 0;
     this.vector_erse_cnt = 0;
 
@@ -382,9 +456,16 @@ export class Beam {
    * coordinate system doesn't map cleanly through the VIA S&H model.
    */
   addSegmentDirect(x0: number, y0: number, x1: number, y1: number, color: number): void {
-    if (x0 !== x1 || y0 !== y1) {
-      this.addLine(x0, y0, x1, y1, color);
-    }
+    // A segment reaching this direct path IS a lit vector — beam-off repositioning
+    // goes through SYS_MOVE (svc #3), never here. But the AAE ports derive intensity
+    // from an abstracted "colour" that can floor to 0 for perfectly visible content
+    // (Speed Freak's whole TIME/SCORE HUD comes through at colour 0; on the real
+    // monochrome Cinematronics monitor every drawn vector lights uniformly). Colour
+    // 0 would render as a pure-black line → invisible AND it erases crossings. So
+    // clamp any lit vector to a minimum visible intensity instead of dropping it.
+    if (x0 === x1 && y0 === y1) return;            // zero-length: nothing to draw
+    if (color === 0) color = DIRECT_MIN_INTENSITY; // only pure-0 (→black) needs the floor
+    this.addLine(x0, y0, x1, y1, color, 0);       // 0 = no dwell data (direct path)
   }
 
   /** VECTREX_COLORS constant exposed so Canvas can check sentinel value. */

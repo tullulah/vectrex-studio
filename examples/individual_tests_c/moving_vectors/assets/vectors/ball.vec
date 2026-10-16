@@ -1,0 +1,1 @@
+{"version":"1.0","name":"ball","canvas":{"width":256,"height":256,"origin":"center"},"layers":[{"name":"default","visible":true,"paths":[{"name":"ball_circle","intensity":127,"closed":true,"points":[{"x":0,"y":3},{"x":2,"y":2},{"x":3,"y":0},{"x":2,"y":-2},{"x":0,"y":-3},{"x":-2,"y":-2},{"x":-3,"y":0},{"x":-2,"y":2}]}]}]}

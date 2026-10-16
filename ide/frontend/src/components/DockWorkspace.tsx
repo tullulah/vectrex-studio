@@ -21,8 +21,10 @@ import { MemoryPanel } from './panels/MemoryPanel';
 import { TracePanel } from './panels/TracePanel';
 import { PsgLogPanel } from './panels/PsgLogPanel';
 import { BiosCallsPanel } from './panels/BiosCallsPanel';
+import { CallStackPanel } from './panels/CallStackPanel';
 import { AiAssistantPanel } from './panels/AiAssistantPanel';
 import { PlaygroundPanel } from './panels/PlaygroundPanel';
+import { TerminalPanel } from './panels/TerminalPanel';
 
 // Bumped to v4 to use new Activity Bar layout (Files/Git in sidebar)
 const STORAGE_KEY = 'vpy_dock_model_v4';
@@ -52,6 +54,7 @@ const defaultJson = {
             "weight": 23.96,
             "children": [
               { "type": "tab", "name": "Debug", "component": "debug" },
+              { "type": "tab", "name": "Call Stack", "component": "callstack" },
               { "type": "tab", "name": "Errors", "component": "errors" },
               { "type": "tab", "name": "Build Output", "component": "build-output" },
               { "type": "tab", "name": "Compiler Output", "component": "compiler-output" },
@@ -114,16 +117,18 @@ export const DockWorkspace: React.FC = () => {
   trace: { json: null as any },
   psglog: { json: null as any },
   bioscalls: { json: null as any },
+  callstack: { json: null as any },
   output: { json: null as any },
   'build-output': { json: null as any },
   'compiler-output': { json: null as any },
   'ai-assistant': { json: null as any },
-  playground: { json: null as any }
+  playground: { json: null as any },
+  terminal: { json: null as any }
   });
   // Extra metadata to preserve docking edge for panels so re-pin restores original side
-  const panelMetaRef = useRef<Partial<Record<DockComponent | 'build-output' | 'compiler-output', { edge: 'left'|'right'|'bottom'|'top'; parentTabsetId?: string }>>>({ files:{edge:'left'}, emulator:{edge:'right'}, debug:{edge:'bottom'}, errors:{edge:'bottom'}, output:{edge:'bottom'}, memory:{edge:'right'}, trace:{edge:'right'}, psglog:{edge:'right'}, bioscalls:{edge:'right'}, playground:{edge:'right'}, 'build-output':{edge:'bottom'}, 'compiler-output':{edge:'bottom'} });
+  const panelMetaRef = useRef<Partial<Record<DockComponent | 'build-output' | 'compiler-output', { edge: 'left'|'right'|'bottom'|'top'; parentTabsetId?: string }>>>({ files:{edge:'left'}, emulator:{edge:'right'}, debug:{edge:'bottom'}, callstack:{edge:'bottom'}, errors:{edge:'bottom'}, output:{edge:'bottom'}, memory:{edge:'right'}, trace:{edge:'right'}, psglog:{edge:'right'}, bioscalls:{edge:'right'}, playground:{edge:'right'}, 'build-output':{edge:'bottom'}, 'compiler-output':{edge:'bottom'}, terminal:{edge:'bottom'} });
   const hiddenSetRef = useRef<Set<DockComponent>>(new Set());
-  const pinnedSetRef = useRef<Set<DockComponent | 'build-output' | 'compiler-output'>>(new Set(['files','emulator','memory','trace','psglog','bioscalls','playground','debug','errors','output','build-output','compiler-output']));
+  const pinnedSetRef = useRef<Set<DockComponent | 'build-output' | 'compiler-output'>>(new Set(['files','emulator','memory','trace','psglog','bioscalls','playground','debug','callstack','errors','output','build-output','compiler-output']));
   const [, forceRerender] = useState(0); // for pin UI updates
   (window as any).__pinnedPanelsRef = pinnedSetRef;
   // Expose globally so static handlers can reach
@@ -146,11 +151,13 @@ export const DockWorkspace: React.FC = () => {
   case 'trace': return <TracePanel key="trace-panel" />;
   case 'psglog': return <PsgLogPanel key="psglog-panel" />;
   case 'bioscalls': return <BiosCallsPanel key="bioscalls-panel" />;
+  case 'callstack': return <CallStackPanel key="callstack-panel" />;
   case 'output': return <OutputPanel key="output-panel" />;
   case 'build-output': return <BuildOutputPanel key="build-output-panel" />;
   case 'compiler-output': return <CompilerOutputPanel key="compiler-output-panel" />;
   case 'ai-assistant': return <AiAssistantPanel key="ai-assistant-panel-singleton" />;
   case 'playground': return <PlaygroundPanel key="playground-panel" />;
+  case 'terminal': return <TerminalPanel key="terminal-panel" />;
       default: return <div>Unknown: {comp}</div>;
     }
   }, []);
@@ -198,14 +205,31 @@ export const DockWorkspace: React.FC = () => {
   // Tabset-level pin button (mueve pin junto al botón de maximizar del grupo)
   // (tabset-level pin button moved below after helper callbacks are declared)
 
+  // The native View menu's checkboxes show the panels the layout has (as the in-window
+  // menu's do, main.tsx isComponentVisible)
+  const publishVisiblePanels = useCallback(() => {
+    const open = new Set<string>();
+    model.visitNodes((n: any) => {
+      const c = typeof n.getComponent === 'function' ? n.getComponent() : n?._attributes?.component;
+      if (typeof c === 'string' && !c.startsWith('doc:')) open.add(c);
+    });
+    try { (window as any).viewMenu?.setVisiblePanels([...open]); } catch { /* no Electron */ }
+  }, [model]);
+  useEffect(() => {
+    publishVisiblePanels(); // the saved layout, at start
+    const off = dockBus.on((ev) => { if (ev.type === 'changed') publishVisiblePanels(); });
+    return () => { off(); };
+  }, [publishVisiblePanels]);
+
   // Persist changes
   const onModelChange = useCallback(() => {
     const json = model.toJson();
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(json));
+    publishVisiblePanels();
     persistPinnedPanels();
     // schedule DOM tagging refresh shortly after React commit
     requestAnimationFrame(() => tagTabsetsWithIds(model));
-  }, [model]);
+  }, [model, publishVisiblePanels]);
 
   // Force relayout of Monaco when editor tab becomes visible
   const onAction = useCallback((action: any) => {
@@ -295,8 +319,10 @@ export const DockWorkspace: React.FC = () => {
       trace: t('panel.trace', 'Trace'),
       psglog: t('panel.psglog', 'PSG Log'),
       bioscalls: t('panel.bioscalls', 'BIOS Calls'),
+      callstack: t('panel.callstack', 'Call Stack'),
       'ai-assistant': t('panel.ai', 'PyPilot'),
-      playground: t('panel.playground', 'Playground')
+      playground: t('panel.playground', 'Playground'),
+      terminal: t('panel.terminal', 'Terminal')
     };
     if (customName) nameMap[comp] = customName;
 
@@ -325,9 +351,26 @@ export const DockWorkspace: React.FC = () => {
       model.visitNodes(n => { if (!editorTabset && (n as any).getType && (n as any).getType()==='tabset') editorTabset = (n as any).getId?.(); });
     }
 
+    // Terminal: join the bottom tabset that holds the build/compiler output (VS Code-like
+    // bottom panel); if there is none, dock below the editor.
+    if (comp === 'terminal') {
+      let bottomTabset: string | undefined;
+      model.visitNodes((n:any) => {
+        if (bottomTabset || !(n.getType && n.getType()==='tabset')) return;
+        const children: any[] = n.getChildren?.() || [];
+        if (children.some(c => ['build-output','compiler-output','errors','debug'].includes(c?._attributes?.component))) bottomTabset = n.getId?.();
+      });
+      try {
+        if (bottomTabset) model.doAction(Actions.addNode({ type:'tab', component: comp, name: nameMap[comp] } as any, bottomTabset, DockLocation.CENTER, -1));
+        else if (editorTabset) model.doAction(Actions.addNode({ type:'tab', component: comp, name: nameMap[comp] } as any, editorTabset, DockLocation.BOTTOM, -1));
+      } catch (e) { logger.warn('Dock', 'add terminal failed', e); }
+      persistPinnedPanels();
+      return;
+    }
+
     // Decide desired docking relative to editor for each component
     let location: typeof DockLocation.CENTER = DockLocation.CENTER; // default center (same tabset)
-  if (comp === 'files') location = DockLocation.LEFT; else if (comp === 'emulator' || comp === 'playground') location = DockLocation.RIGHT; else if (comp === 'memory' || comp === 'trace' || comp === 'bioscalls') location = DockLocation.RIGHT; else if (comp === 'debug' || comp === 'errors' || comp === 'output') location = DockLocation.BOTTOM; else if (comp === 'editor-placeholder') location = DockLocation.CENTER; else if ((comp as string).startsWith('doc:')) location = DockLocation.CENTER;
+  if (comp === 'files') location = DockLocation.LEFT; else if (comp === 'emulator' || comp === 'playground') location = DockLocation.RIGHT; else if (comp === 'memory' || comp === 'trace' || comp === 'bioscalls') location = DockLocation.RIGHT; else if (comp === 'debug' || comp === 'callstack' || comp === 'errors' || comp === 'output') location = DockLocation.BOTTOM; else if (comp === 'editor-placeholder') location = DockLocation.CENTER; else if ((comp as string).startsWith('doc:')) location = DockLocation.CENTER;
       // If we have meta specifying parent tabset and it still exists, attempt to restore directly there instead of relative add
       const meta = panelMetaRef.current[comp as DockComponent];
       if (meta?.parentTabsetId) {
@@ -387,7 +430,7 @@ export const DockWorkspace: React.FC = () => {
   const onRenderTabSet = useCallback((tabsetNode: any, renderValues: any) => {
     try {
       const children: any[] = tabsetNode.getChildren?.() || [];
-  const panelChildren: DockComponent[] = children.map(c => (typeof c.getComponent === 'function' ? c.getComponent() : c?._attributes?.component)).filter((n: any) => ['files','emulator','debug','errors','output','memory','trace','bioscalls','playground'].includes(n));
+  const panelChildren: DockComponent[] = children.map(c => (typeof c.getComponent === 'function' ? c.getComponent() : c?._attributes?.component)).filter((n: any) => ['files','emulator','debug','callstack','errors','output','memory','trace','bioscalls','playground'].includes(n));
       if (panelChildren.length === 0) return; // not a pure panel tabset
       const hasMixed = children.some(c => {
         const compName = (typeof c.getComponent === 'function' ? c.getComponent() : c?._attributes?.component);
@@ -408,7 +451,7 @@ export const DockWorkspace: React.FC = () => {
         if (parentId) {
           // edge inference again
           let edge: 'left'|'right'|'bottom'|'top' = 'top';
-          if (pc === 'files') edge='left'; else if (pc==='emulator' || pc==='memory' || pc==='trace' || pc==='bioscalls' || pc==='playground') edge='right'; else if (pc==='debug' || pc==='errors' || pc==='output') edge='bottom';
+          if (pc === 'files') edge='left'; else if (pc==='emulator' || pc==='memory' || pc==='trace' || pc==='bioscalls' || pc==='playground') edge='right'; else if (pc==='debug' || pc==='callstack' || pc==='errors' || pc==='output') edge='bottom';
           panelMetaRef.current[pc] = { edge, parentTabsetId: parentId };
         }
       });
@@ -465,7 +508,7 @@ export const DockWorkspace: React.FC = () => {
     const unsub = dockBus.on((ev: DockEvent) => {
       if (ev.type === 'toggle') {
         const comp = ev.component;
-  if (hasComponent(comp) && ['files','editor','emulator','debug','errors','output','memory','trace','bioscalls','editor-placeholder'].includes(comp)) {
+  if (hasComponent(comp) && ['files','editor','emulator','debug','callstack','errors','output','memory','trace','bioscalls','editor-placeholder','terminal'].includes(comp)) {
           // Capture existing node before removal for restoration later
           let targetNode: any | undefined; let parentId: string | undefined; let index: number | undefined; let parentWeight: number | undefined;
           model.visitNodes((n:any) => {

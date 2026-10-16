@@ -1,0 +1,63 @@
+{
+  "version": "1.0",
+  "name": "test_center",
+  "author": "Test",
+  "created": "",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "box",
+          "intensity": 127,
+          "closed": true,
+          "points": [
+            {
+              "x": -5,
+              "y": -5
+            },
+            {
+              "x": 5,
+              "y": -5
+            },
+            {
+              "x": 5,
+              "y": 5
+            },
+            {
+              "x": -5,
+              "y": 5
+            }
+          ]
+        },
+        {
+          "name": "line",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {
+              "x": -8,
+              "y": 0
+            },
+            {
+              "x": 8,
+              "y": 0
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "animations": [],
+  "metadata": {
+    "hitbox": null,
+    "origin": null,
+    "tags": []
+  }
+}

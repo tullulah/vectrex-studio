@@ -1,0 +1,178 @@
+diff --git a/ide/frontend/src/emulator/systems/Uvm2System.ts b/ide/frontend/src/emulator/systems/Uvm2System.ts
+index f8bfe865..ea905de7 100644
+--- a/ide/frontend/src/emulator/systems/Uvm2System.ts
++++ b/ide/frontend/src/emulator/systems/Uvm2System.ts
+@@ -289,7 +289,7 @@ export class Uvm2System implements ISystem, IBus {
+   private dataIn   = 0xFF;             // what the VIA drives back at us
+   private busCycle = 0;
+   /** Ciclos de CPU emulada desde el reset, sin truncar. La base del TIMER0. */
+-  private cpuCiclos = 0;
++  cpuCiclos = 0;
+   /** La parte alta que TIMELR dejo enganchada en su ultima lectura. */
+   private timerAlta = 0;
+ 
+@@ -325,6 +325,12 @@ export class Uvm2System implements ISystem, IBus {
+    * Con dos relojes no hay bloqueo mutuo: avanzar CUALQUIERA de los dos mueve el minimo en
+    * cuanto el otro le alcanza, asi que un nucleo girando a la espera del reloj de bus deja
+    * correr al otro igual. */
++  /** Que nucleo esta ejecutando ahora: lo necesita el colapso de giro para cobrarle a quien toca. */
++  /** El lote que el DMA tiene apuntado para el PIO, y lo que queda de la palabra de park. */
++  private dmaSrc = 0;
++  private dmaRestan = 0;
++  private pioEspera = 0;
++  private enCore1 = false;
+   private relojCore0 = 0;
+   private relojCore1 = 0;
+   private relojBus   = 0;
+@@ -683,7 +689,8 @@ export class Uvm2System implements ISystem, IBus {
+       this.cpu1 = null;
+       return 0;
+     }
+-    return this.cpu1.step(this);
++    this.enCore1 = true;
++    try { return this.cpu1.step(this); } finally { this.enCore1 = false; }
+   }
+ 
+   /* El bus, hasta el instante que LOS DOS nucleos han alcanzado ya. */
+@@ -711,6 +718,9 @@ export class Uvm2System implements ISystem, IBus {
+   private halfStep(): void {
+     if (this.clkHigh) {
+       this.clkHigh = false;
++      /* EL PIO VA ENGANCHADO AL RELOJ DE BUS, no al reves: una palabra por periodo de E, y
++       * los pines puestos ANTES de que la VIA enganche en este mismo flanco. */
++      this.sirvePio();
+       this.onFallingEdge();
+       this.busCycle++;
+       // Integrate one bus cycle's worth of beam movement.
+@@ -743,16 +753,37 @@ export class Uvm2System implements ISystem, IBus {
+    * honest 100:1 ratio against the bus.
+    */
+   private maybeCollapseSpin(): void {
+-    const pc = this.cpu.getReg(15) >>> 0;
+-    if (pc === this.lastPollPc) {
++    const cpu = this.enCore1 ? this.cpu1 : this.cpu;
++    if (!cpu) return;
++    /* La clave lleva el nucleo: los dos giran esperando el mismo reloj, y con una sola
++     * clave el giro de uno cancelaba la deteccion del otro. */
++    const clave = (cpu.getReg(15) >>> 0) + (this.enCore1 ? 0x100000000 : 0);
++    if (clave === this.lastPollPc) {
+       this.lastPollPc = -1;      // one collapse per pair of polls
+-      this.halfStep();
+-      // The collapse REPLACES the cycles the spin would have burned; leaving
+-      // them in the accumulator counts the same phase twice, which stretches
+-      // every ramp and blows up the geometry.
++      /* EL GIRO NO ES TRABAJO, PERO TAMPOCO ES GRATIS.
++       *
++       * Aqui habia un `halfStep()` a pelo y un `cpuAcc = 0`: medio ciclo de bus SIN cobrar
++       * un solo ciclo de CPU. Como los dos nucleos se pasan buena parte del frame girando
++       * a la espera del reloj, el bus adelantaba al tiempo de verdad — y eso descoloca
++       * cualquier cosa que compare las dos escalas.
++       *
++       * MEDIDO con el TIMER del propio juego (que cuenta microsegundos) contra el contador
++       * de ciclos de bus del emulador: por cada microsegundo tienen que pasar 1,5 ciclos
++       * (bus a 1,5 MHz), y pasaban 2,742. O sea un 83% de ciclos de bus regalados.
++       *
++       * Ahora el giro se cobra: se le suma al reloj de SU nucleo lo que dura medio ciclo de
++       * bus, y el bus avanza por el camino de siempre. Se sigue ahorrando el trabajo —no se
++       * ejecutan las instrucciones del giro— pero el tiempo se apunta. */
++      this.halfStep();          // el flanco que el giro estaba esperando, como siempre
+       this.cpuAcc = 0;
++      /* ...y AHORA se apunta: medio ciclo de bus son CPU_PER_BUS/2 ciclos de CPU. Se le
++       * cobran al nucleo que giraba y se le suman al reloj del bus, que ya ha avanzado por
++       * su cuenta ahi arriba — si no, `sincronizaBus` lo volveria a avanzar. */
++      if (this.enCore1) this.relojCore1 += CPU_PER_BUS / 2;
++      else              this.relojCore0 += CPU_PER_BUS / 2;
++      this.relojBus += CPU_PER_BUS / 2;
+     } else {
+-      this.lastPollPc = pc;
++      this.lastPollPc = clave;
+     }
+   }
+ 
+@@ -793,14 +824,48 @@ export class Uvm2System implements ISystem, IBus {
+   }
+ 
+   /** La transferencia del canal 0: n palabras del lote al TX FIFO, de golpe. */
++  /* EL LOTE SE APUNTA, NO SE EJECUTA.
++   *
++   * Aqui se recorria la transferencia ENTERA —hasta 65536 palabras— corriendo un periodo
++   * de E por cada una, y todo eso en cero ciclos de CPU. O sea que el reloj del bus lo
++   * movian DOS cosas a la vez: el tiempo de CPU (por `advanceBus`) y el consumo de
++   * palabras. En la placa hay UN solo reloj de bus y el PIO va enganchado a el; el DMA se
++   * para en el DREQ cuando la FIFO esta llena, asi que la transferencia dura lo que dura
++   * el stream, no cero.
++   *
++   * MEDIDO con el TIMER del propio juego contra el contador de ciclos de bus: por cada
++   * microsegundo tienen que pasar 1,5 ciclos (bus a 1,5 MHz), y pasaban 2,742.
++   *
++   * Ahora el lote queda apuntado y lo consume `sirvePio` a razon de UNA palabra por periodo
++   * de E. Que el juego no llegue a llenar el lote deja de ser invisible: el PIO aparca, que
++   * es lo que hace la placa. */
+   private dmaTransferencia(): void {
+-    const src = this.dmaRegs[DMA_READ_ADDR >>> 2] >>> 0;
+-    const n   = this.dmaRegs[DMA_TRANS_COUNT >>> 2] & 0x0FFFFFFF;   // 31:28 = MODE
+-    for (let i = 0; i < n && i < 65536; i++) {
+-      this.dmaPalabras++;
+-      this.pioPalabra(this.read32((src + i * 4) >>> 0) >>> 0);
++    this.dmaSrc    = this.dmaRegs[DMA_READ_ADDR >>> 2] >>> 0;
++    this.dmaRestan = this.dmaRegs[DMA_TRANS_COUNT >>> 2] & 0x0FFFFFFF;   // 31:28 = MODE
++  }
++
++  /** Un periodo de E del PIO: consume como mucho UNA palabra. Lo llama `halfStep`. */
++  private sirvePio(): void {
++    const PINES = (1 << 27) - 1;
++    if (this.pioEspera > 0) {                       // palabra de park, con su cuenta
++      this.pioEspera--;
++      this.gpioOut = ((this.gpioOut & ~PINES) | this.pioPark) >>> 0;
++      return;
+     }
+-    this.dmaRegs[DMA_TRANS_COUNT >>> 2] = 0;
++    /* SIN LOTE, EL PIO NO TOCA LOS PINES.
++     *
++     * Aqui se aparcaba igualmente, y eso PISA a la CPU: `gpioOut` es el mismo sitio por el
++     * que el nucleo conduce el bus a mano (leer los mandos, el arranque). Aparcando en cada
++     * periodo de E aunque no hubiera nada que sacar, el juego se quedaba en el menu — la
++     * pulsacion no llegaba — y el dibujo bajaba a la mitad. La SM solo presenta su patron
++     * mientras esta corriendo el stream. */
++    if (this.dmaRestan <= 0) return;
++    const w = this.read32(this.dmaSrc) >>> 0;
++    this.dmaSrc = (this.dmaSrc + 4) >>> 0;
++    this.dmaRestan--;
++    this.dmaRegs[DMA_TRANS_COUNT >>> 2] = this.dmaRestan;
++    this.dmaPalabras++;
++    this.pioPalabra(w);
+   }
+ 
+   /** Una palabra del stream: se presenta en los pines y se corre su periodo de E.
+@@ -835,14 +900,16 @@ export class Uvm2System implements ISystem, IBus {
+ 
+     if (w & 1) {
+       this.gpioOut = ((this.gpioOut & ~PINES) | ((w >>> 1) & PINES)) >>> 0;
+-      this.correPeriodoE();
+       /* Y SE APARCA EN CUANTO SE ENGANCHA. En el hardware la SM del PIO ocupa cada periodo
+        * de E; aqui el reloj avanza TAMBIEN con la CPU, asi que unos pines que se quedan
+        * puestos los vuelve a enganchar la VIA en el siguiente flanco. Medido en la traza:
+        * cada escritura aparecia DOS O TRES veces seguidas —"ORB=0x81 ORB=0x81",
+        * "DDRB=0x9f" tres veces— y una repeticion es inocua para un puerto pero NO para
+-       * T1CH, que reinicia la rampa. */
+-      this.gpioOut = ((this.gpioOut & ~PINES) | this.pioPark) >>> 0;
++       * T1CH, que reinicia la rampa.
++       *
++       * YA NO HACE FALTA APARCAR AQUI: con el PIO servido por el reloj de bus, esta
++       * escritura ocupa SU periodo de E y el siguiente lo decide `sirvePio` — otra palabra,
++       * o el patron de park si no hay ninguna. Que es lo que hace la SM. */
+     } else if (w & 2) {
+       /* APARCAR ES PRESENTAR EL PATRON DE PARK, no dejar los pines como estaban.
+        *
+@@ -856,9 +923,9 @@ export class Uvm2System implements ISystem, IBus {
+        * decodifica a la VIA: aparcar es no escribir. */
+       this.gpioOut = ((this.gpioOut & ~PINES) | this.pioPark) >>> 0;
+       const n = ((w >>> 2) & 0xFFFFFF) + 1;      // la cuenta va como N-1, ver el .pio
+-      for (let i = 0; i < n && i < 4096; i++) this.correPeriodoE();
++      this.pioEspera = Math.min(n, 4096) - 1;    // este periodo ya es el primero
+     } else {
+-      this.correPeriodoE();                       // silencio: los pines se quedan como esten
++      /* silencio: los pines se quedan como esten, y ocupa su periodo igual */
+     }
+   }
+ 

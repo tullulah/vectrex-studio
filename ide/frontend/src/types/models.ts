@@ -24,6 +24,8 @@ export interface DocumentModel {
   mtime?: number;
   // (Optional) snapshot of content at last save/load for advanced dirty detection.
   lastSavedContent?: string;
+  // A pinned tab sits at the front of the tab bar, and Close Others / Close All leave it open.
+  pinned?: boolean;
 }
 
 export interface DiagnosticModel {

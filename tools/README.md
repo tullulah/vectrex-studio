@@ -163,7 +163,7 @@ Run from workspace root. BIOS is at `ide/frontend/src/assets/bios.bin`.
 ### "Compiler not found"
 Run:
 ```bash
-cargo build --bin vectrexc
+cargo build --bin vpy_cli
 ```
 
 ### Multi-backend fails with "Bundle not found"

@@ -1,11 +1,15 @@
-import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
+import { contextBridge, ipcRenderer, IpcRendererEvent, webUtils } from 'electron';
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  lspStart: () => ipcRenderer.invoke('lsp_start'),
-  lspSend: (payload: string) => ipcRenderer.invoke('lsp_send', payload),
-  onLspMessage: (cb: (json: string) => void) => ipcRenderer.on('lsp://message', (_e: IpcRendererEvent, data: string) => cb(data)),
+  // Multi-language LSP: serverId selects the server ('vpy' | 'clangd'); cwd is
+  // the project root (clangd finds compile_flags.txt / compile_commands.json there).
+  lspStart: (args?: { serverId?: string; cwd?: string }) => ipcRenderer.invoke('lsp_start', args),
+  lspSend: (args: { serverId?: string; payload: string } | string) => ipcRenderer.invoke('lsp_send', args),
+  lspStop: (args?: { serverId?: string }) => ipcRenderer.invoke('lsp_stop', args),
+  // Messages/diagnostics are tagged with the originating serverId.
+  onLspMessage: (cb: (msg: { serverId: string; body: string }) => void) => ipcRenderer.on('lsp://message', (_e: IpcRendererEvent, data: { serverId: string; body: string }) => cb(data)),
   onLspStdout: (cb: (line: string) => void) => ipcRenderer.on('lsp://stdout', (_e: IpcRendererEvent, data: string) => cb(data)),
-  onLspStderr: (cb: (line: string) => void) => ipcRenderer.on('lsp://stderr', (_e: IpcRendererEvent, data: string) => cb(data)),
+  onLspStderr: (cb: (msg: { serverId: string; line: string }) => void) => ipcRenderer.on('lsp://stderr', (_e: IpcRendererEvent, data: { serverId: string; line: string }) => cb(data)),
   onCommand: (cb: (cmd: string, payload?: any) => void) => {
     const handler = (_e: IpcRendererEvent, cmd: string, payload?: any) => cb(cmd, payload);
     ipcRenderer.on('command', handler);
@@ -15,15 +19,32 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateRecentProjects: (recents: Array<{name: string; path: string}>) => ipcRenderer.invoke('menu:updateRecentProjects', recents),
   // Legacy emulator IPC removed. All runtime control now via WASM service in renderer.
   emuAssemble: (args: { asmPath: string; outPath?: string; extra?: string[] }) => ipcRenderer.invoke('emu:assemble', args) as Promise<{ ok?: boolean; error?: string; binPath?: string; size?: number; base64?: string; stdout?: string; stderr?: string }>,
-  runCompile: (args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; compilerBackend?: 'buildtools' | 'core'; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; pitrexCopyToSD?: boolean; pitrexSdPath?: string; uvm2CopyToSD?: boolean; uvm2SdPath?: string }) => ipcRenderer.invoke('run:compile', args) as Promise<{ ok?: boolean; error?: string; binPath?: string; size?: number; stdout?: string; stderr?: string; conflict?: boolean; currentMTime?: number }>,
+  runCompile: (args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; pitrexCopyToSD?: boolean; pitrexSdPath?: string; uvm2CopyToSD?: boolean; uvm2SdPath?: string; rp2350FlashMethod?: 'none' | 'swd' | 'usb'; rp2350FirmwareDir?: string; rp2350Ram?: boolean; rp2350SdPath?: string }) => ipcRenderer.invoke('run:compile', args) as Promise<{ ok?: boolean; error?: string; binPath?: string; size?: number; stdout?: string; stderr?: string; conflict?: boolean; currentMTime?: number }>,
+  // External C/C++ projects: build (and optionally deploy) via their own toolchain.
+  runBuildExternal: (args: { manifestPath: string; deploy?: boolean; sdPath?: string; target?: 'pitrex' | 'rp2350' | 'uvm2'; preview?: boolean; uvm2Flags?: string }) => ipcRenderer.invoke('run:buildExternal', args) as Promise<{ ok?: boolean; artifactPath?: string; error?: string; detail?: string }>,
+  // Build the WASM simulator module (for the emulator panel) of an external project.
+  runBuildSim: (args: { manifestPath: string }) => ipcRenderer.invoke('run:buildSim', args) as Promise<{ ok?: boolean; modulePath?: string; romZipBase64?: string | null; error?: string; detail?: string }>,
+  importCProject: (args?: { dir?: string }) => ipcRenderer.invoke('project:importC', args) as Promise<{ ok?: boolean; manifestPath?: string; existed?: boolean; detectedTarget?: string | null; canceled?: boolean; error?: string }>,
   onRunStdout: (cb: (chunk: string) => void) => ipcRenderer.on('run://stdout', (_e: IpcRendererEvent, data: string) => cb(data)),
   onRunStderr: (cb: (chunk: string) => void) => ipcRenderer.on('run://stderr', (_e: IpcRendererEvent, data: string) => cb(data)),
   onRunDiagnostics: (cb: (diags: Array<{ file: string; line: number; col: number; message: string }>) => void) => ipcRenderer.on('run://diagnostics', (_e: IpcRendererEvent, diags) => cb(diags)),
   onRunStatus: (cb: (line: string) => void) => ipcRenderer.on('run://status', (_e: IpcRendererEvent, data: string) => cb(data)),
   onEmuLoaded: (cb: (info: { size: number }) => void) => ipcRenderer.on('emu://loaded', (_e: IpcRendererEvent, data) => cb(data)), // kept for backward compatibility (may be unused)
-  onCompiledBin: (cb: (payload: { base64: string; size: number; binPath: string }) => void) => ipcRenderer.on('emu://compiledBin', (_e: IpcRendererEvent, data) => cb(data)),
+  // Returns the unsubscribe: the Emulator panel remounts with the dock layout, and a
+  // listener left behind by an unmounted panel would load (and start) every build again.
+  onCompiledBin: (cb: (payload: { base64: string; size: number; binPath: string; sFileText?: string | null; libvpyAsm?: string | null; elfBase64?: string | null; sdFiles?: Record<string, string>; sdDeferred?: Record<string, number> }) => void) => {
+    const handler = (_e: IpcRendererEvent, data: any) => cb(data);
+    ipcRenderer.on('emu://compiledBin', handler);
+    return () => { ipcRenderer.removeListener('emu://compiledBin', handler); };
+  },
   // setVectorMode legacy removed
   listSources: (args?: { limit?: number }) => ipcRenderer.invoke('list:sources', args) as Promise<{ ok?:boolean; sources?: Array<{ path:string; kind:'vpy'|'asm'; size:number; mtime:number }> }> ,
+  sdSimList: () => ipcRenderer.invoke('sd:simList') as Promise<{ ok?: boolean; dir?: string; files?: string[]; previews?: Record<string, string>; error?: string }>,
+  sdSimFiles: () => ipcRenderer.invoke('sd:simFiles') as Promise<{ ok?: boolean; dir?: string; files?: Record<string, string>; deferred?: Record<string, number>; error?: string }>,
+  // One deferred file of the simulated card, synchronously (null if it is not there).
+  sdReadSync: (rel: string) => ipcRenderer.sendSync('sd:readSync', rel) as Uint8Array | null,
+  sdRomZip: (stem: string, binPath?: string) => ipcRenderer.invoke('sd:romZip', stem, binPath) as Promise<{ ok?: boolean; dir?: string; name?: string; size?: number; base64?: string; error?: string; want?: string; have?: string[] }>,
+  vrecCompile: (vrecPath: string) => ipcRenderer.invoke('vrec:compile', vrecPath) as Promise<{ ok?: boolean; vrbPath?: string; error?: string }>,
   // Disassemble a ROM snapshot (base64) using buildtools/vpy_disasm
   disassembleSnapshot: (args: { base64: string; startHex?: string; binPath?: string }) => ipcRenderer.invoke('tools:disassembleSnapshot', args) as Promise<{ ok: boolean; output?: string; error?: string; snapshotPath?: string; dissPath?: string; message?: string; stderr?: string }>,
 
@@ -38,6 +59,59 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener(channel, handler);
     }
   }
+});
+
+// On-cartridge debugging (electron/src/hwdebug/session.ts): a probe-rs DAP session on the
+// RP2350 cartridge's core 1, driven by frontend/src/debug/hwDebug.ts.
+// The UVMC2 debugger's connection to the game's monitor (hwdebug/uvmc2Serial.ts, DebugConn)
+contextBridge.exposeInMainWorld('uvmc2Debug', {
+  start: () => ipcRenderer.invoke('uvmc2dbg:start') as Promise<{ ok: true; version: string } | { error: string }>,
+  request: (line: string) => ipcRenderer.invoke('uvmc2dbg:request', line) as Promise<{ line: string } | { error: string }>,
+  end: () => ipcRenderer.invoke('uvmc2dbg:end'),
+  onEvent: (cb: (ev: { reason: string; pc: number }) => void) => {
+    const h = (_e: any, ev: any) => cb(ev);
+    ipcRenderer.on('uvmc2dbg:event', h);
+    return () => ipcRenderer.removeListener('uvmc2dbg:event', h);
+  },
+  onText: (cb: (text: string) => void) => {
+    const h = (_e: any, t: string) => cb(t);
+    ipcRenderer.on('uvmc2dbg:text', h);
+    return () => ipcRenderer.removeListener('uvmc2dbg:text', h);
+  },
+  onEnded: (cb: (why: string) => void) => {
+    const h = (_e: any, why: string) => cb(why);
+    ipcRenderer.on('uvmc2dbg:ended', h);
+    return () => ipcRenderer.removeListener('uvmc2dbg:ended', h);
+  },
+});
+
+// The UVMC2's USB upload (hwdebug/uvmc2Serial.ts): the .um2 onto the cartridge's card, progress lines
+contextBridge.exposeInMainWorld('uvmc2', {
+  upload: async (um2Path: string, onProgress: (line: string) => void) => {
+    const h = (_e: any, line: string) => onProgress(line);
+    ipcRenderer.on('uvmc2:progress', h);
+    try {
+      return await ipcRenderer.invoke('uvmc2:upload', um2Path) as { ok: boolean; message: string };
+    } finally {
+      ipcRenderer.removeListener('uvmc2:progress', h);
+    }
+  },
+});
+
+contextBridge.exposeInMainWorld('hwDebug', {
+  start: (args: { elfPath: string }) => ipcRenderer.invoke('hwdebug:start', args) as Promise<{ ok: true } | { error: string }>,
+  request: (command: string, args?: unknown) => ipcRenderer.invoke('hwdebug:request', command, args ?? {}) as Promise<any>,
+  end: () => ipcRenderer.invoke('hwdebug:end') as Promise<{ ok: true }>,
+  onEvent: (cb: (ev: any) => void) => {
+    const h = (_e: IpcRendererEvent, ev: any) => cb(ev);
+    ipcRenderer.on('hwdebug:event', h);
+    return () => ipcRenderer.removeListener('hwdebug:event', h);
+  },
+  onEnded: (cb: (why: string) => void) => {
+    const h = (_e: IpcRendererEvent, why: string) => cb(why);
+    ipcRenderer.on('hwdebug:ended', h);
+    return () => ipcRenderer.removeListener('hwdebug:ended', h);
+  },
 });
 
 contextBridge.exposeInMainWorld('files', {
@@ -59,6 +133,13 @@ contextBridge.exposeInMainWorld('files', {
   openBin: () => ipcRenderer.invoke('bin:open') as Promise<{ path: string; base64: string; size: number } | { error: string } | null>,
   deleteFile: (path: string) => ipcRenderer.invoke('file:delete', path) as Promise<{ success: boolean; path: string } | { error: string }>,
   moveFile: (args: { sourcePath: string; targetDir: string }) => ipcRenderer.invoke('file:move', args) as Promise<{ success: boolean; sourcePath: string; targetPath: string } | { error: string; targetPath?: string }>,
+  // The file tree's context menu: absolute paths; a taken name answers { error: 'exists' }.
+  mkdir: (path: string) => ipcRenderer.invoke('file:mkdir', path) as Promise<{ ok: true; path: string } | { error: string }>,
+  createFile: (path: string) => ipcRenderer.invoke('file:create', path) as Promise<{ ok: true; path: string } | { error: string }>,
+  rename: (args: { path: string; newName: string }) => ipcRenderer.invoke('file:rename', args) as Promise<{ ok: true; path: string } | { error: string }>,
+  copy: (args: { sourcePath: string; targetDir: string }) => ipcRenderer.invoke('file:copy', args) as Promise<{ ok: true; targetPath: string } | { error: string }>,
+  trash: (path: string) => ipcRenderer.invoke('file:trash', path) as Promise<{ ok: true; path: string } | { error: string }>,
+  reveal: (path: string) => ipcRenderer.invoke('file:reveal', path) as Promise<{ ok: true } | { error: string }>,
   watchDirectory: (path: string) => ipcRenderer.invoke('file:watchDirectory', path) as Promise<{ ok: boolean; error?: string }>,
   unwatchDirectory: (path: string) => ipcRenderer.invoke('file:unwatchDirectory', path) as Promise<{ ok: boolean }>,
   onFileChanged: (cb: (event: { type: 'added' | 'removed' | 'changed'; path: string; isDir: boolean }) => void) => {
@@ -66,6 +147,35 @@ contextBridge.exposeInMainWorld('files', {
     ipcRenderer.on('file://changed', handler);
     // Return cleanup function to remove listener
     return () => ipcRenderer.removeListener('file://changed', handler);
+  },
+});
+
+// Gameplay video export: renderer records the emulator as WebM, main
+// transcodes to MP4 with the bundled ffmpeg and returns the saved path.
+contextBridge.exposeInMainWorld('videoExport', {
+  saveMp4: (args: { webmBytes: ArrayBuffer | Uint8Array; name?: string }) =>
+    ipcRenderer.invoke('video:saveMp4', args) as Promise<{ path: string } | { canceled: true } | { error: string }>,
+  // Raw WebM save (no ffmpeg) — isolates whether MediaRecorder encoded audio.
+  saveWebm: (args: { webmBytes: ArrayBuffer | Uint8Array; name?: string }) =>
+    ipcRenderer.invoke('video:saveWebm', args) as Promise<{ path: string } | { canceled: true } | { error: string }>,
+});
+
+// Vector Movie editor: spawn Python converters + progress stream + file picker.
+contextBridge.exposeInMainWorld('movie', {
+  convert: (args: { kind: 'video' | 'audio'; inputPath: string; outPath: string; opts?: Record<string, any> }) =>
+    ipcRenderer.invoke('movie:convert', args) as Promise<{ ok: true; outPath: string; stdout?: string; stderr?: string } | { error: string }>,
+  pickFile: (args: { kind: 'video' | 'audio' }) =>
+    ipcRenderer.invoke('movie:pickFile', args) as Promise<{ path: string; name: string } | null>,
+  probe: (args: { videoPath: string }) =>
+    ipcRenderer.invoke('movie:probe', args) as Promise<{ durationSec: number; hasAudio: boolean } | { error: string }>,
+  previewFrame: (args: { videoPath: string; time: number; opts?: Record<string, any> }) =>
+    ipcRenderer.invoke('movie:previewFrame', args) as Promise<
+      { segments: Array<{ x0: number; y0: number; x1: number; y1: number; i: number }>; width: number; height: number; originalPng: string; maskPng: string } | { error: string }
+    >,
+  onProgress: (cb: (line: string) => void) => {
+    const handler = (_e: IpcRendererEvent, data: string) => cb(data);
+    ipcRenderer.on('movie://progress', handler);
+    return () => ipcRenderer.removeListener('movie://progress', handler);
   },
 });
 
@@ -91,15 +201,53 @@ contextBridge.exposeInMainWorld('project', {
   } | { error: string }>,
   
   // Create new project
-  create: (args: { name: string; location?: string }) => ipcRenderer.invoke('project:create', args) as Promise<{
+  create: (args: { name: string; location?: string; kind?: 'vpy' | 'c' }) => ipcRenderer.invoke('project:create', args) as Promise<{
     ok: boolean;
     projectFile: string;
     projectDir: string;
+    entryFile: string;
+    kind: 'vpy' | 'c';
     name: string;
   } | { canceled: true } | { error: string }>,
   
+  // The default workspace (~/VectrexStudio/projects), created if missing
+  defaultLocation: () => ipcRenderer.invoke('project:defaultLocation') as Promise<string>,
+
   // Find project file in directory or parents
   find: (startDir: string) => ipcRenderer.invoke('project:find', startDir) as Promise<{ path: string | null }>,
+});
+
+// SDK versions (uvmc2-sdk). Downloaded per version into ~/VectrexStudio/sdk/<tag>/;
+// each project pins one in its project file ([sdk] version).
+contextBridge.exposeInMainWorld('sdk', {
+  // Installed versions and GitHub tags, newest first. remote = null when offline.
+  list: (args?: { refresh?: boolean }) => ipcRenderer.invoke('sdk:list', args) as Promise<{
+    installed: string[];
+    remote: string[] | null;
+    latest: string | null;
+    root: string;
+  }>,
+  // Download a version if it isn't installed. Progress arrives through onProgress.
+  install: (tag: string) => ipcRenderer.invoke('sdk:install', tag) as Promise<{ ok: true; dir: string } | { ok: false; error: string }>,
+  onProgress: (cb: (p: { tag: string; phase: 'download' | 'extract' | 'done'; received: number; total: number | null }) => void) => {
+    const handler = (_e: IpcRendererEvent, p: any) => cb(p);
+    ipcRenderer.on('sdk://progress', handler);
+    return () => ipcRenderer.removeListener('sdk://progress', handler);
+  },
+  // The project's pinned version. A project without one is pinned to the latest
+  // tag here (pinned: true says this call wrote it).
+  getProjectVersion: (projectFile: string) => ipcRenderer.invoke('sdk:project:get', projectFile) as Promise<
+    { ok: true; version: string; pinned: boolean; installed: boolean } | { ok: false; error: string }>,
+  // Change the project's version (rewrites only the [sdk] table of the file).
+  setProjectVersion: (projectFile: string, tag: string) => ipcRenderer.invoke('sdk:project:set', projectFile, tag) as Promise<
+    { ok: true } | { ok: false; error: string }>,
+  // Arm GNU Toolchain (needed by uvm2 builds; never downloaded): the one the build will
+  // use, or every place looked at and why each was rejected.
+  toolchain: () => ipcRenderer.invoke('sdk:toolchain') as Promise<{
+    found: { dir: string; version: string | null; source: string } | null;
+    candidates: Array<{ dir: string; source: string; problem: string | null }>;
+  }>,
+  openToolchainDownload: () => ipcRenderer.invoke('sdk:toolchain:openDownload') as Promise<void>,
 });
 
 // Git operations API
@@ -357,6 +505,11 @@ contextBridge.exposeInMainWorld('git', {
   }>,
 });
 
+// The native View menu's checkboxes: which panels the layout shows
+contextBridge.exposeInMainWorld('viewMenu', {
+  setVisiblePanels: (panels: string[]) => ipcRenderer.send('view:visiblePanels', panels),
+});
+
 // MCP Server API for AI agents
 contextBridge.exposeInMainWorld('mcp', {
   // Send JSON-RPC request to MCP server
@@ -450,6 +603,29 @@ contextBridge.exposeInMainWorld('eprom', {
     const handler = (_e: IpcRendererEvent, data: string) => cb(data);
     ipcRenderer.on('eprom://progress', handler);
     return () => ipcRenderer.removeListener('eprom://progress', handler);
+  },
+});
+
+// Integrated terminal (real PTYs, see terminal.ts). Output arrives batched.
+contextBridge.exposeInMainWorld('terminal', {
+  platform: process.platform,
+  create: (opts: { cwd?: string; cols: number; rows: number; command?: string }) =>
+    ipcRenderer.invoke('terminal:create', opts) as Promise<{ id: number; shell: string } | { error: string }>,
+  write: (id: number, data: string) => ipcRenderer.send('terminal:write', id, data),
+  resize: (id: number, cols: number, rows: number) => ipcRenderer.send('terminal:resize', id, cols, rows),
+  kill: (id: number) => ipcRenderer.invoke('terminal:kill', id) as Promise<{ ok: boolean }>,
+  openLink: (url: string) => ipcRenderer.invoke('terminal:openLink', url) as Promise<{ ok: boolean }>,
+  pasteImage: () => ipcRenderer.invoke('terminal:pasteImage') as Promise<{ path: string | null }>,
+  pathForFile: (file: File) => { try { return webUtils.getPathForFile(file) || null; } catch { return null; } },
+  onData: (cb: (id: number, data: string) => void) => {
+    const handler = (_e: IpcRendererEvent, id: number, data: string) => cb(id, data);
+    ipcRenderer.on('terminal://data', handler);
+    return () => ipcRenderer.removeListener('terminal://data', handler);
+  },
+  onExit: (cb: (id: number, code: number) => void) => {
+    const handler = (_e: IpcRendererEvent, id: number, code: number) => cb(id, code);
+    ipcRenderer.on('terminal://exit', handler);
+    return () => ipcRenderer.removeListener('terminal://exit', handler);
   },
 });
 

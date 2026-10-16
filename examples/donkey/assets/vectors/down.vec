@@ -1,0 +1,90 @@
+{
+ "version": "1.0",
+ "name": "down",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "p0",
+     "intensity": 100,
+     "closed": false,
+     "points": [
+      {
+       "x": 0,
+       "y": 2
+      },
+      {
+       "x": 0,
+       "y": 7
+      },
+      {
+       "x": 3,
+       "y": 9
+      },
+      {
+       "x": 12,
+       "y": 9
+      },
+      {
+       "x": 15,
+       "y": 7
+      },
+      {
+       "x": 15,
+       "y": 2
+      },
+      {
+       "x": 12,
+       "y": 0
+      },
+      {
+       "x": 3,
+       "y": 0
+      },
+      {
+       "x": 0,
+       "y": 2
+      }
+     ]
+    },
+    {
+     "name": "p1",
+     "intensity": 100,
+     "closed": false,
+     "points": [
+      {
+       "x": 1,
+       "y": 1
+      },
+      {
+       "x": 1,
+       "y": 8
+      }
+     ]
+    },
+    {
+     "name": "p2",
+     "intensity": 100,
+     "closed": false,
+     "points": [
+      {
+       "x": 14,
+       "y": 1
+      },
+      {
+       "x": 14,
+       "y": 8
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

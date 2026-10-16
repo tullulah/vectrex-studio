@@ -1,0 +1,40 @@
+{
+  "version": "1.0",
+  "name": "music1",
+  "author": "VPy Test",
+  "tempo": 120,
+  "ticksPerBeat": 24,
+  "totalTicks": 384,
+  "notes": [
+    {"id": "m1",  "note": 72, "start": 0,   "duration": 24, "velocity": 13, "channel": 0},
+    {"id": "m2",  "note": 76, "start": 24,  "duration": 24, "velocity": 13, "channel": 0},
+    {"id": "m3",  "note": 79, "start": 48,  "duration": 24, "velocity": 14, "channel": 0},
+    {"id": "m4",  "note": 81, "start": 72,  "duration": 48, "velocity": 15, "channel": 0},
+    {"id": "m5",  "note": 79, "start": 120, "duration": 24, "velocity": 13, "channel": 0},
+    {"id": "m6",  "note": 76, "start": 144, "duration": 24, "velocity": 13, "channel": 0},
+    {"id": "m7",  "note": 72, "start": 168, "duration": 48, "velocity": 14, "channel": 0},
+    {"id": "m8",  "note": 74, "start": 216, "duration": 24, "velocity": 13, "channel": 0},
+    {"id": "m9",  "note": 77, "start": 240, "duration": 24, "velocity": 13, "channel": 0},
+    {"id": "m10", "note": 81, "start": 264, "duration": 24, "velocity": 14, "channel": 0},
+    {"id": "m11", "note": 83, "start": 288, "duration": 48, "velocity": 15, "channel": 0},
+    {"id": "m12", "note": 81, "start": 336, "duration": 24, "velocity": 13, "channel": 0},
+    {"id": "m13", "note": 77, "start": 360, "duration": 24, "velocity": 13, "channel": 0},
+
+    {"id": "b1",  "note": 60, "start": 0,   "duration": 96, "velocity": 10, "channel": 1},
+    {"id": "b2",  "note": 55, "start": 96,  "duration": 96, "velocity": 10, "channel": 1},
+    {"id": "b3",  "note": 62, "start": 192, "duration": 96, "velocity": 10, "channel": 1},
+    {"id": "b4",  "note": 57, "start": 288, "duration": 96, "velocity": 10, "channel": 1}
+  ],
+  "noise": [
+    {"id": "k1", "start":   0, "duration": 10, "period":  4, "channels": 4, "velocity": 14},
+    {"id": "k2", "start":  96, "duration": 10, "period":  4, "channels": 4, "velocity": 14},
+    {"id": "k3", "start": 192, "duration": 10, "period":  4, "channels": 4, "velocity": 14},
+    {"id": "k4", "start": 288, "duration": 10, "period":  4, "channels": 4, "velocity": 14},
+    {"id": "s1", "start":  48, "duration":  8, "period": 14, "channels": 4, "velocity": 11},
+    {"id": "s2", "start": 144, "duration":  8, "period": 14, "channels": 4, "velocity": 11},
+    {"id": "s3", "start": 240, "duration":  8, "period": 14, "channels": 4, "velocity": 11},
+    {"id": "s4", "start": 336, "duration":  8, "period": 14, "channels": 4, "velocity": 11}
+  ],
+  "loopStart": 0,
+  "loopEnd": 384
+}

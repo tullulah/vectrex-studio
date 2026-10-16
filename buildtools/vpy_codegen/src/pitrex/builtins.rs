@@ -54,27 +54,60 @@ pub fn emit_builtins(needed: &std::collections::HashSet<String>) -> String {
     s.push_str(&emit_pitrex_random());
     s.push_str(&emit_pitrex_msg_system());
     s.push_str(&emit_pitrex_debug_print());
-    s.push_str(&emit_pitrex_camera());
+    // BLOCK 8: pitrex_set_camera_x/y own the inline CAMERA_X/Y; suppressed when
+    // the LEVELS group is bridged (state lives in libvpy s_cam_x/y).
+    if !crate::pitrex::libvpy::level_group_bridged() {
+        s.push_str(&emit_pitrex_camera());
+    }
     s.push_str(&emit_pitrex_get_frame_us());
     s.push_str(&emit_pitrex_set_intensity());
-    s.push_str(&emit_pitrex_move());
-    s.push_str(&emit_pitrex_draw_line());
+    // libvpy BLOCK 2: MOVE + DRAW_LINE are bridged to the C runtime as a pair
+    // (they share the beam origin). Suppress both inline bodies when bridged so
+    // only the `bl vpy_move` / `bl vpy_draw_line` calls remain. pitrex_draw_line_rel
+    // is an INTERNAL helper (DRAW_VECTOR/POLYGON) with no VPy-level builtin and is
+    // NOT bridged, so it is always emitted.
+    if !crate::pitrex::libvpy::is_bridged("MOVE") {
+        s.push_str(&emit_pitrex_move());
+    }
+    if !crate::pitrex::libvpy::is_bridged("DRAW_LINE") {
+        s.push_str(&emit_pitrex_draw_line());
+    }
     s.push_str(&emit_pitrex_draw_line_rel());
     s.push_str(&emit_pitrex_draw_vector());
     s.push_str(&emit_pitrex_draw_vector_ex());
-    s.push_str(&emit_pitrex_draw_rect());
-    s.push_str(&emit_pitrex_draw_filled_rect());
+    // libvpy bridge: when a draw is routed to the C runtime, suppress the inline
+    // body so only the `bl vpy_*` remains. pitrex_draw_rect is additionally
+    // depended on by the inline pitrex_draw_filled_rect body, so it must stay
+    // emitted whenever THAT body is emitted — hence the compound guard.
+    let filled_rect_inline = !crate::pitrex::libvpy::is_bridged("DRAW_FILLED_RECT");
+    if !crate::pitrex::libvpy::is_bridged("DRAW_RECT") || filled_rect_inline {
+        s.push_str(&emit_pitrex_draw_rect());
+    }
+    if filled_rect_inline {
+        s.push_str(&emit_pitrex_draw_filled_rect());
+    }
     s.push_str(&emit_pitrex_draw_polygon());
-    s.push_str(&emit_pitrex_draw_circle());
-    s.push_str(&emit_pitrex_draw_ellipse());
+    // No other inline helper calls pitrex_draw_circle, so this is safe.
+    if !crate::pitrex::libvpy::is_bridged("DRAW_CIRCLE") {
+        s.push_str(&emit_pitrex_draw_circle());
+    }
+    if !crate::pitrex::libvpy::is_bridged("DRAW_ELLIPSE") {
+        s.push_str(&emit_pitrex_draw_ellipse());
+    }
     s.push_str(&emit_pitrex_draw_arc());
-    s.push_str(&emit_pitrex_update_buttons());
-    s.push_str(&emit_pitrex_j1_x());
-    s.push_str(&emit_pitrex_j1_y());
-    s.push_str(&emit_pitrex_j1_btn1());
-    s.push_str(&emit_pitrex_j1_btn2());
-    s.push_str(&emit_pitrex_j1_btn3());
-    s.push_str(&emit_pitrex_j1_btn4());
+    // J1 input + UPDATE_BUTTONS are bridged to libvpy (vpy_j1_x/y/button,
+    // vpy_update_buttons). No OTHER inline helper calls these standalone
+    // symbols, so suppress the inline bodies fully when bridged (same pattern
+    // as DRAW_CIRCLE/DRAW_ELLIPSE, not the atan2/rand keep-emitted case).
+    // J2_* stays inline (deferred — sim contract has no J2).
+    use crate::pitrex::libvpy::is_bridged;
+    if !is_bridged("UPDATE_BUTTONS") { s.push_str(&emit_pitrex_update_buttons()); }
+    if !is_bridged("J1_X")       { s.push_str(&emit_pitrex_j1_x()); }
+    if !is_bridged("J1_Y")       { s.push_str(&emit_pitrex_j1_y()); }
+    if !is_bridged("J1_BUTTON_1") { s.push_str(&emit_pitrex_j1_btn1()); }
+    if !is_bridged("J1_BUTTON_2") { s.push_str(&emit_pitrex_j1_btn2()); }
+    if !is_bridged("J1_BUTTON_3") { s.push_str(&emit_pitrex_j1_btn3()); }
+    if !is_bridged("J1_BUTTON_4") { s.push_str(&emit_pitrex_j1_btn4()); }
     s.push_str(&emit_pitrex_j2());
     s.push_str(&emit_pitrex_print_text());
     s.push_str(&emit_pitrex_print_number());
@@ -88,29 +121,48 @@ pub fn emit_builtins(needed: &std::collections::HashSet<String>) -> String {
     s.push_str(&emit_pitrex_draw_anim());
 
     // ── Tree-shaken (clearly optional, larger / riskier helpers) ────────
-    if any(&["SET_TEXT_SIZE", "SET_TEXT_COLOR"]) { s.push_str(&emit_pitrex_text_extras()); }
-    if any(&["LEVEL_COLLISION_X", "LEVEL_COLLISION_Y", "LEVEL_VERTICAL_WALL_HIT"]) {
+    // BLOCK 8: the LEVELS+CAMERA+ENEMIES+collision inline bodies own the old
+    // state (CAMERA_X/Y, LEVEL_DATA_PTR, LEVEL_GP_*, SCROLL_LIMIT_*,
+    // PITREX_ENEMY_POOL/COUNT). When the group is bridged they are fully
+    // suppressed so state lives ONLY in libvpy and the desync-trap grep is clean.
+    let level_bridged = crate::pitrex::libvpy::level_group_bridged();
+    if any(&["SET_TEXT_SIZE"]) { s.push_str(&emit_pitrex_text_extras()); }
+    if any(&["LEVEL_COLLISION_X", "LEVEL_COLLISION_Y", "LEVEL_VERTICAL_WALL_HIT"]) && !level_bridged {
         s.push_str(&emit_pitrex_level_collision());
     }
     if any(&[
         "GET_CAMERA_X", "GET_CAMERA_Y", "GET_LEVEL_FLOOR_Y",
         "GET_SCROLL_LIMIT_LEFT", "GET_SCROLL_LIMIT_RIGHT",
         "GET_SCROLL_LIMIT_TOP", "GET_SCROLL_LIMIT_BOTTOM",
-    ]) {
+    ]) && !level_bridged {
         s.push_str(&emit_pitrex_camera_getters());
     }
-    // emit_pitrex_misc_stubs also provides UPDATE_LEVEL + DRAW_VECTOR_3D.
-    if any(&["UPDATE_LEVEL", "DRAW_VECTOR_3D"]) { s.push_str(&emit_pitrex_misc_stubs()); }
+    // emit_pitrex_misc_stubs provides UPDATE_LEVEL (level state) + DRAW_VECTOR_3D
+    // (unrelated). UPDATE_LEVEL is bridged, so only emit this block for
+    // DRAW_VECTOR_3D, or for UPDATE_LEVEL when the group is NOT bridged.
+    if any(&["DRAW_VECTOR_3D"]) || (any(&["UPDATE_LEVEL"]) && !level_bridged) {
+        s.push_str(&emit_pitrex_misc_stubs());
+    }
     if any(&["PLAY_NOTE", "NOTE_UPDATE"]) { s.push_str(&emit_pitrex_note_engine()); }
-    if any(&["UPDATE_ENEMIES", "SPAWN_ENEMIES", "DRAW_ENEMIES"]) {
+    if any(&["UPDATE_ENEMIES", "SPAWN_ENEMIES", "DRAW_ENEMIES"]) && !level_bridged {
         // wander_set_sprite is reached transitively from UPDATE_ENEMIES.
         s.push_str(&emit_pitrex_wander_set_sprite());
+        // Sloped-walkable-area helpers: surface_y_at interpolates the area
+        // surface at an x; wander_follow_y = surface_y_at + feet_offset -> pool.y.
+        // Called from spawn (area-snap) and update_enemies (WALK/takeoff/land).
+        s.push_str(&emit_pitrex_surface_y_at());
+        s.push_str(&emit_pitrex_wander_follow_y());
     }
-    if any(&["SPAWN_ENEMIES"])     { s.push_str(&emit_pitrex_spawn_enemies()); }
-    if any(&["UPDATE_ENEMIES"])    { s.push_str(&emit_pitrex_update_enemies()); }
-    if any(&["DRAW_ENEMIES"])      { s.push_str(&emit_pitrex_draw_enemies()); }
-    if any(&["KILL_ENEMY"])        { s.push_str(&emit_pitrex_kill_enemy()); }
-    if any(&["ENEMY_FIRE_EVENT"])  { s.push_str(&emit_pitrex_enemy_fire_event()); }
+    // .vrec vector-recording playback ("vector movie" video track). Emitted
+    // only when a DRAW_RECORDING("name", ...) call appears in the AST.
+    if any(&["DRAW_RECORDING"])    { s.push_str(&emit_pitrex_draw_recording()); }
+    if any(&["SAMPLE_POS"])        { s.push_str(&emit_pitrex_sample_pos()); }
+    if any(&["PLAY_SAMPLE"])       { s.push_str(&emit_pitrex_play_sample()); }
+    if any(&["SPAWN_ENEMIES"])  && !level_bridged { s.push_str(&emit_pitrex_spawn_enemies()); }
+    if any(&["UPDATE_ENEMIES"]) && !level_bridged { s.push_str(&emit_pitrex_update_enemies()); }
+    if any(&["DRAW_ENEMIES"])   && !level_bridged { s.push_str(&emit_pitrex_draw_enemies()); }
+    if any(&["KILL_ENEMY"])     && !level_bridged { s.push_str(&emit_pitrex_kill_enemy()); }
+    if any(&["ENEMY_FIRE_EVENT"]) && !level_bridged { s.push_str(&emit_pitrex_enemy_fire_event()); }
 
     s
 }
@@ -144,6 +196,17 @@ fn emit_pitrex_wait_recal() -> String {
     s.push_str("@ pitrex_wait_recal() — frame sync + CPU usage measurement via BCM system timer\n");
     s.push_str(".global pitrex_wait_recal\n.type pitrex_wait_recal, %function\npitrex_wait_recal:\n");
     s.push_str("    push    {r4, r5, r6, lr}\n");
+
+    // Send the frame the game just drew. libvpy accumulates every stroke and
+    // NOTHING reaches v_directDraw32 until this call, so a frame boundary that
+    // does not flush draws nothing at all. This is the only boundary the ARM
+    // backend has — WAIT_RECAL and the generated game loop both land here — so
+    // it is the one place the flush belongs.
+    //
+    // Before the CLO read on purpose: sending the frame IS frame work, and the
+    // work_us figure below is supposed to say how long the frame took.
+    // vpy_flush() clobbers only r0-r3/r12, which are dead here.
+    s.push_str("    bl      vpy_flush           @ libvpy stroke buffer -> the beam\n");
 
     // Read CLO (current µs)
     s.push_str("    ldr     r4, =bcm2835_st\n");
@@ -704,6 +767,200 @@ fn emit_pitrex_draw_vector_ex() -> String {
     s
 }
 
+// ── Draw recording (.vrec "vector movie" playback) ─────────────────────────
+
+fn emit_pitrex_draw_recording() -> String {
+    // pitrex_draw_recording(r0=vrec_ptr, r1=x, r2=y, r3=scale 0-128, [sp]=frame)
+    //
+    // Plays one frame of a POLYLINE-CHAINED .vrec. `frame` is free-running; this
+    // routine takes frame % frame_count internally.
+    //
+    // Data layout (chained, from compile_vrec in assets.rs):
+    //   _<NAME>_VREC: .word frame_count
+    //                 .word off0, off1, ...          @ byte offsets from base
+    //   frame N:      .hword chain_count
+    //     per chain:  .byte start_x, start_y, intensity, seg_count
+    //                 .byte dx,dy × seg_count         @ i8 deltas
+    //
+    // Each chain is walked with a running PEN in VPy units: pen = scaled+centered
+    // start, then every delta advances pen by (delta*scale)>>7 and draws the line
+    // pen→next via v_directDraw32(x0,y0,x1,y1,bright) in ×127 fixed-point (same
+    // convention as pitrex_draw_line). Center is added to the chain START only
+    // (deltas are relative). Pen persists in RAM (DRAW_REC_PEN_X/Y) across the
+    // v_directDraw32 calls.
+    //
+    // NOTE: on pitrex the DRAW win of chaining is small — v_directDraw32 is an
+    // absolute two-endpoint line, so the call count is unchanged. The win here is
+    // DATA size (flash) + consistency; the big hardware-draw win (relative
+    // draw-delta with no per-segment beam reset/reposition) is on rp2350/m6809.
+    // ×127 absolute on-screen size is TBD on real hardware.
+    //
+    // Register map (callee-saved r4-r11 survive v_directDraw32):
+    //   r4 = data cursor          r8  = chains remaining
+    //   r5 = x center (VPy)       r9  = deltas remaining in chain
+    //   r6 = y center (VPy)       r10 = per-chain brightness
+    //   r7 = scale (0-128)        r11 = 127 constant
+    // ARMv6 has no hardware divide → frame % frame_count via __aeabi_idivmod.
+    // ARM32 mul Rd≠Rm honoured (`mul rD, r7|r11, rM`).
+    let mut s = String::new();
+    s.push_str("@ pitrex_draw_recording(r0=vrec_ptr, r1=x, r2=y, r3=scale 0-128, [sp]=frame)\n");
+    s.push_str(".global pitrex_draw_recording\n.type pitrex_draw_recording, %function\npitrex_draw_recording:\n");
+    // push 9 regs = 36 bytes → the frame stack arg is at [sp+36].
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}\n");
+    s.push_str("    mov     r4, r0              @ vrec base\n");
+    s.push_str("    mov     r5, r1              @ x center\n");
+    s.push_str("    mov     r6, r2              @ y center\n");
+    s.push_str("    mov     r7, r3              @ scale (0-128, 128 = 100%)\n");
+    s.push_str("    mov     r11, #127           @ VPy→PiTrex fixed-point factor\n");
+    // frame_idx = frame % frame_count
+    s.push_str("    ldr     r2, [r4]            @ frame_count\n");
+    s.push_str("    cmp     r2, #0\n");
+    s.push_str("    beq     .Ldvrec_done        @ empty recording\n");
+    s.push_str("    ldr     r0, [sp, #36]       @ frame counter (stack arg)\n");
+    s.push_str("    mov     r1, r2              @ denominator = frame_count\n");
+    s.push_str("    bl      __aeabi_idivmod     @ r1 = frame % frame_count\n");
+    s.push_str("    add     r1, r1, #1          @ skip frame_count word\n");
+    s.push_str("    lsl     r1, r1, #2          @ (idx+1)*4 byte index\n");
+    s.push_str("    ldr     r0, [r4, r1]        @ byte offset of frame from base\n");
+    s.push_str("    add     r4, r4, r0          @ r4 = frame ptr (now the cursor)\n");
+    s.push_str("    ldrh    r8, [r4]            @ chain_count\n");
+    s.push_str("    add     r4, r4, #2          @ r4 = first chain header\n");
+
+    // ── per-chain ──
+    s.push_str(".Ldvrec_chain:\n");
+    s.push_str("    cmp     r8, #0\n");
+    s.push_str("    beq     .Ldvrec_done\n");
+    // intensity (recorded, SET_INTENSITY override wins)
+    s.push_str("    ldrb    r10, [r4, #2]       @ recorded chain intensity\n");
+    s.push_str("    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE\n");
+    s.push_str("    ldrb    r0, [r0]\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    movne   r10, r0             @ SET_INTENSITY override wins\n");
+    s.push_str("    ldrb    r9, [r4, #3]        @ seg_count (deltas)\n");
+    // pen_x = (start_x*scale>>7) + center_x   (VPy units)
+    s.push_str("    ldrsb   r12, [r4, #0]       @ start_x (i8)\n");
+    s.push_str("    mul     r12, r7, r12        @ * scale (Rd=r12 != Rm=r7)\n");
+    s.push_str("    asr     r12, r12, #7\n");
+    s.push_str("    add     r12, r12, r5        @ + center_x\n");
+    s.push_str("    ldr     r0, =DRAW_REC_PEN_X\n");
+    s.push_str("    str     r12, [r0]           @ pen_x\n");
+    // pen_y = (start_y*scale>>7) + center_y
+    s.push_str("    ldrsb   r12, [r4, #1]       @ start_y (i8)\n");
+    s.push_str("    mul     r12, r7, r12\n");
+    s.push_str("    asr     r12, r12, #7\n");
+    s.push_str("    add     r12, r12, r6        @ + center_y\n");
+    s.push_str("    str     r12, [r0, #4]       @ pen_y (DRAW_REC_PEN_Y = PEN_X+4)\n");
+    s.push_str("    add     r4, r4, #4          @ cursor → first delta pair\n");
+
+    // ── per-delta: draw pen→next, then pen = next ──
+    s.push_str(".Ldvrec_delta:\n");
+    s.push_str("    cmp     r9, #0\n");
+    s.push_str("    beq     .Ldvrec_chain_next\n");
+    s.push_str("    ldr     r12, =DRAW_REC_PEN_X\n");
+    s.push_str("    ldr     r0, [r12]           @ x0 = pen_x (VPy)\n");
+    s.push_str("    ldr     r1, [r12, #4]       @ y0 = pen_y (VPy)\n");
+    // x1 = x0 + (dx*scale>>7)
+    s.push_str("    ldrsb   r2, [r4, #0]        @ dx (i8)\n");
+    s.push_str("    mul     r2, r7, r2          @ dx*scale (Rd=r2 != Rm=r7)\n");
+    s.push_str("    asr     r2, r2, #7\n");
+    s.push_str("    add     r2, r0, r2          @ x1 = x0 + scaled dx\n");
+    // y1 = y0 + (dy*scale>>7)
+    s.push_str("    ldrsb   r3, [r4, #1]        @ dy (i8)\n");
+    s.push_str("    mul     r3, r7, r3\n");
+    s.push_str("    asr     r3, r3, #7\n");
+    s.push_str("    add     r3, r1, r3          @ y1 = y0 + scaled dy\n");
+    // pen = (x1, y1)
+    s.push_str("    str     r2, [r12]           @ pen_x = x1\n");
+    s.push_str("    str     r3, [r12, #4]       @ pen_y = y1\n");
+    // ×127 → v_directDraw32 args (r0=x0,r1=y0,r2=x1,r3=y1)
+    s.push_str("    mul     r0, r11, r0         @ x0*127 (Rd=r0 != Rm=r11)\n");
+    s.push_str("    mul     r1, r11, r1         @ y0*127\n");
+    s.push_str("    mul     r2, r11, r2         @ x1*127\n");
+    s.push_str("    mul     r3, r11, r3         @ y1*127\n");
+    s.push_str("    push    {r10}              @ brightness as 5th arg\n");
+    s.push_str("    bl      v_directDraw32\n");
+    s.push_str("    add     sp, sp, #4\n");
+    s.push_str("    add     r4, r4, #2          @ next delta pair\n");
+    s.push_str("    sub     r9, r9, #1\n");
+    s.push_str("    b       .Ldvrec_delta\n");
+
+    s.push_str(".Ldvrec_chain_next:\n");
+    // r4 already points at the next chain header (past the last delta pair).
+    s.push_str("    sub     r8, r8, #1\n");
+    s.push_str("    b       .Ldvrec_chain\n");
+
+    s.push_str(".Ldvrec_done:\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
+    s.push_str("    .ltorg\n\n");
+    s
+}
+
+// ── SAMPLE_POS (wall-clock frame index) ───────────────────────────────────
+//
+// pitrex_sample_pos(r0=fps) → r0 = current frame index.
+//
+// On rp2350 SAMPLE_POS returns the AUDIO playback position (frame synced to the
+// voice master clock). PiTrex has no voice track, so here it is a free-running
+// WALL-CLOCK frame counter off the BCM system timer (CLO, 1µs, 32-bit): the
+// video plays at real time and DRAW_RECORDING wraps `frame % frame_count`.
+// The clock latches its start on the FIRST call (SAMPLE_POS_START == 0 sentinel).
+//
+//   elapsed_us  = CLO - start                    (unsigned, 32-bit-wrap safe)
+//   us_per_frame = 1_000_000 / fps               (one divide — avoids the
+//   frame        = elapsed_us / us_per_frame       elapsed*fps overflow that a
+//                                                   direct *fps/1e6 would hit)
+// Uses __aeabi_uidiv (ARMv6 has no hardware divide), same lib as DRAW_RECORDING.
+fn emit_pitrex_sample_pos() -> String {
+    let mut s = String::new();
+    s.push_str("@ pitrex_sample_pos(r0=fps) → r0=frame — wall-clock (no voice on pitrex)\n");
+    s.push_str(".global pitrex_sample_pos\n.type pitrex_sample_pos, %function\npitrex_sample_pos:\n");
+    s.push_str("    push    {r4, r5, r6, lr}\n");
+    s.push_str("    mov     r6, r0              @ r6 = fps (survives idiv calls)\n");
+    // CLO now (µs)
+    s.push_str("    ldr     r4, =bcm2835_st\n");
+    s.push_str("    ldr     r4, [r4]            @ dereference: ST base ptr\n");
+    s.push_str("    ldr     r5, [r4, #4]        @ r5 = CLO now (µs)\n");
+    // Latch start on first call (0 = not started)
+    s.push_str("    ldr     r4, =SAMPLE_POS_START\n");
+    s.push_str("    ldr     r0, [r4]            @ r0 = start\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    bne     .Lsp_started\n");
+    s.push_str("    str     r5, [r4]            @ first call: start = now\n");
+    s.push_str("    mov     r0, r5\n");
+    s.push_str(".Lsp_started:\n");
+    s.push_str("    sub     r5, r5, r0          @ r5 = elapsed_us (32-bit-wrap safe)\n");
+    // us_per_frame = 1_000_000 / fps
+    s.push_str("    ldr     r0, =1000000\n");
+    s.push_str("    mov     r1, r6\n");
+    s.push_str("    bl      __aeabi_uidiv       @ r0 = us_per_frame\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    moveq   r0, #1              @ guard: never divide by 0 (fps out of range)\n");
+    // frame = elapsed_us / us_per_frame
+    s.push_str("    mov     r1, r0              @ divisor = us_per_frame\n");
+    s.push_str("    mov     r0, r5              @ numerator = elapsed_us\n");
+    s.push_str("    bl      __aeabi_uidiv       @ r0 = frame\n");
+    s.push_str("    pop     {r4, r5, r6, pc}\n");
+    s.push_str("    .ltorg\n\n");
+    s
+}
+
+// ── PLAY_SAMPLE (voice track) ─────────────────────────────────────────────
+//
+// pitrex_play_sample(r0 = _<NAME>_SMP asset ptr).
+//
+// On real PiTrex HW this is a NO-OP stub for now — 4-bit-PCM voice streaming to
+// the PSG volume register needs a real-time streamer (the deferred hard part).
+// The IDE emulator TRAPS this symbol (SDK_STUBS in PitrexArm32) and plays the
+// .vsmp via Web Audio, so a vector movie has sound in the IDE. The r0 pointer is
+// kept live so the emulator trap can read the asset header from memory.
+fn emit_pitrex_play_sample() -> String {
+    let mut s = String::new();
+    s.push_str("@ pitrex_play_sample(r0=_NAME_SMP ptr) — HW no-op; emulator traps + plays\n");
+    s.push_str(".global pitrex_play_sample\n.type pitrex_play_sample, %function\npitrex_play_sample:\n");
+    s.push_str("    bx      lr\n\n");
+    s
+}
+
 // ── Joystick / Buttons ────────────────────────────────────────────────────
 
 fn emit_pitrex_j1_x() -> String {
@@ -881,7 +1138,7 @@ fn emit_pitrex_draw_circle() -> String {
     s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}\n");
     s.push_str("    mov     r4, r0          @ cx\n");
     s.push_str("    mov     r5, r1          @ cy\n");
-    s.push_str("    asr     r6, r2, #1      @ radius = diameter/2\n");
+    s.push_str("    mov     r6, r2          @ radius (3rd arg IS the radius, per the API — was diameter/2)\n");
     s.push_str("    mov     r7, r3          @ brightness\n");
     // Scale center and radius by 127
     s.push_str("    mov     r0, #127\n");
@@ -1621,6 +1878,12 @@ fn emit_pitrex_music_helpers() -> String {
     //   [6]: flags u8, [7]: type u8, [8..12]: vector_ptr u32,
     //   [12]: half_w u8, [13]: half_h u8, [14]: vel_x_init i8, [15]: vel_y_init i8
     // LEVEL_GP_BUF layout (8 bytes/entry): x i16, y i16, vx i16, vy i16
+    // BLOCK 8: pitrex_load_level + pitrex_show_level own LEVEL_DATA_PTR /
+    // LEVEL_GP_* / SCROLL_LIMIT_* / CAMERA_X/Y. They are physically emitted here
+    // (inside the always-emitted music-helpers block) but are the level group's
+    // ONLY readers of that state, so suppress both when the group is bridged —
+    // state then lives ONLY in libvpy (s_level/s_gp_buf/s_cam).
+    if !crate::pitrex::libvpy::level_group_bridged() {
     s.push_str("@ pitrex_load_level(r0=level_ptr) — initialise level runtime state\n");
     s.push_str(".global pitrex_load_level\n.type pitrex_load_level, %function\npitrex_load_level:\n");
     s.push_str("    push    {r4, r5, r6, r7, lr}\n");
@@ -1822,6 +2085,7 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("    add     sp, sp, #4          @ pop saved override word\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
     s.push_str("    .ltorg\n\n");
+    } // end BLOCK 8 !level_group_bridged() (load_level + show_level)
 
     s
 }
@@ -2243,6 +2507,10 @@ fn emit_pitrex_system() -> String {
     s.push_str(".global pitrex_wait\n.type pitrex_wait, %function\npitrex_wait:\n");
     s.push_str("    push    {r4, lr}\n");
     s.push_str("    mov     r4, r0\n");
+    // Present whatever is pending before idling, otherwise a WAIT right after
+    // drawing would hold the frame in the buffer and show nothing. Once, not
+    // per iteration: the following frames draw nothing, exactly as before.
+    s.push_str("    bl      vpy_flush           @ libvpy stroke buffer -> the beam\n");
     s.push_str(".Lwait_loop:\n");
     s.push_str("    cmp     r4, #0\n");
     s.push_str("    beq     .Lwait_done\n");
@@ -2262,12 +2530,6 @@ fn emit_pitrex_system() -> String {
     s.push_str("@ pitrex_poke(r0=addr, r1=val) — write byte to ARM address\n");
     s.push_str(".global pitrex_poke\n.type pitrex_poke, %function\npitrex_poke:\n");
     s.push_str("    strb    r1, [r0]\n");
-    s.push_str("    bx      lr\n\n");
-
-    // pitrex_len(r0=array_ptr) → r0 = 0 (stub — length resolved at compile time)
-    s.push_str("@ pitrex_len — stub (array length resolved at compile time via ARRAY_x_LEN)\n");
-    s.push_str(".global pitrex_len\n.type pitrex_len, %function\npitrex_len:\n");
-    s.push_str("    mov     r0, #0\n");
     s.push_str("    bx      lr\n\n");
 
     s
@@ -2330,11 +2592,6 @@ fn emit_pitrex_text_extras() -> String {
     s.push_str("    str     r0, [r1]\n");
     s.push_str("    bx      lr\n");
     s.push_str("    .ltorg\n\n");
-
-    // pitrex_set_text_color(r0=color) — NOP, PiTrex is monochrome (brightness set globally)
-    s.push_str("@ pitrex_set_text_color(r0=color) — NOP on monochrome PiTrex\n");
-    s.push_str(".global pitrex_set_text_color\n.type pitrex_set_text_color, %function\npitrex_set_text_color:\n");
-    s.push_str("    bx      lr\n\n");
 
     s
 }
@@ -2938,7 +3195,7 @@ fn emit_pitrex_note_engine() -> String {
     let mut s = String::new();
 
     // ── NOTE_PERIOD_TABLE in .rodata ────────────────────────────────────────
-    // 84 entries (MIDI 24-107).  period = round(88200 / (440 * 2^((n-69)/12)))
+    // 84 entradas (MIDI 24-107). period = clk / (16 * f), clk = 1,5 MHz. Ver crate::psg.
     s.push_str("@ --- NOTE_PERIOD_TABLE: MIDI 24-107 → AY period (84 hwords) ---\n");
     s.push_str(".section .rodata\n");
     s.push_str(".balign 2\n");
@@ -2946,9 +3203,7 @@ fn emit_pitrex_note_engine() -> String {
     s.push_str("NOTE_PERIOD_TABLE:\n");
     let mut periods: Vec<u16> = Vec::new();
     for n in 24u32..=107 {
-        let freq = 440.0 * 2f64.powf((n as f64 - 69.0) / 12.0);
-        let period = (88200.0 / freq).round() as u16;
-        let period = period.max(1).min(4095);
+        let period = crate::psg::midi_to_period(n as f64);
         periods.push(period);
     }
     // Emit 8 per line for readability
@@ -3154,6 +3409,89 @@ pub(crate) fn emit_pitrex_wander_set_sprite() -> String {
     s.push_str("    ldrb    r3, [r3]            @ frame0.duration_ticks\n");
     s.push_str("    strb    r3, [r0, #17]       @ pool.anim_ticks_left\n");
     s.push_str("    bx      lr\n");
+    s.push_str("    .ltorg\n\n");
+    s
+}
+
+/// surface_y_at(&area, x): interpolate the walkable area's surface height at x.
+///
+/// Area record (8 bytes): +0 i16 y1, +2 i16 x_min, +4 i16 x_max, +6 i16 y2.
+/// FLAT area → y2 == y1 (returns y1 for every x, so callers stay byte-identical
+/// to the old raw `ldrsh ,[area]`). SLOPE → y2 != y1, linearly interpolated.
+///
+/// Matches the ground-truth C exactly:
+///   if (y2==y1 || x_max<=x_min) return y1;
+///   if (x<=x_min) return y1; if (x>=x_max) return y2;
+///   return y1 + (y2-y1)*(x-x_min)/(x_max-x_min);   // signed, truncate toward 0
+///
+/// ARMv6 has NO sdiv. We reuse __aeabi_idiv (already an extern in this backend),
+/// whose signed division truncates toward zero — exactly the C semantics — so no
+/// manual sign-fixup or shift-subtract loop is needed. All flat/clamp early-outs
+/// run BEFORE the multiply/divide. Preserves r1-r12; clobbers only r0 (return).
+pub(crate) fn emit_pitrex_surface_y_at() -> String {
+    let mut s = String::new();
+    s.push_str("@ pitrex_surface_y_at(r0=&area, r1=x) -> r0 = interpolated surface height\n");
+    s.push_str("@ area: +0 i16 y1, +2 i16 x_min, +4 i16 x_max, +6 i16 y2 (y2==y1 => flat)\n");
+    s.push_str("@ Preserves r1-r12; clobbers r0 (return) and lr. No sdiv (ARMv6).\n");
+    s.push_str(".global pitrex_surface_y_at\n");
+    s.push_str(".type pitrex_surface_y_at, %function\n");
+    s.push_str("pitrex_surface_y_at:\n");
+    s.push_str("    push    {r1, r2, r3, r4, r12, lr}\n");
+    s.push_str("    ldrsh   r2, [r0, #0]        @ y1\n");
+    s.push_str("    ldrsh   r3, [r0, #2]        @ x_min\n");
+    s.push_str("    ldrsh   r4, [r0, #4]        @ x_max\n");
+    s.push_str("    ldrsh   r0, [r0, #6]        @ y2 (reuse r0)\n");
+    s.push_str("    cmp     r0, r2\n");
+    s.push_str("    beq     .Lsya_flat          @ y2 == y1 -> flat, return y1\n");
+    s.push_str("    cmp     r4, r3\n");
+    s.push_str("    ble     .Lsya_flat          @ x_max <= x_min -> degenerate, return y1\n");
+    s.push_str("    cmp     r1, r3\n");
+    s.push_str("    ble     .Lsya_flat          @ x <= x_min -> clamp to y1\n");
+    s.push_str("    cmp     r1, r4\n");
+    s.push_str("    bge     .Lsya_ret           @ x >= x_max -> clamp to y2 (already in r0)\n");
+    s.push_str("    sub     r0, r0, r2          @ dy = y2 - y1\n");
+    s.push_str("    sub     r1, r1, r3          @ t  = x - x_min          (>= 0 in range)\n");
+    s.push_str("    mul     r0, r1, r0          @ num = dy * t            (signed 32-bit)\n");
+    s.push_str("    sub     r1, r4, r3          @ w = x_max - x_min       (> 0)\n");
+    s.push_str("    bl      __aeabi_idiv        @ r0 = num / w (signed, truncated toward zero)\n");
+    s.push_str("    add     r0, r0, r2          @ + y1\n");
+    s.push_str("    b       .Lsya_ret\n");
+    s.push_str(".Lsya_flat:\n");
+    s.push_str("    mov     r0, r2              @ return y1\n");
+    s.push_str(".Lsya_ret:\n");
+    s.push_str("    pop     {r1, r2, r3, r4, r12, pc}\n");
+    s.push_str("    .ltorg\n\n");
+    s
+}
+
+/// wander_follow_y(pool, &area): pool.y = surface_y_at(area, pool.x) + feet_offset.
+///
+/// Bundles the "read surface height at the enemy's current x, add the per-type
+/// feet_offset (type_data_ptr+209), store into pool.y" sequence shared by the
+/// spawn area-snap and the WALK incline-follow. feet_offset handling mirrors the
+/// existing spawn/airborne code (skipped when type_data_ptr == 0). For a FLAT
+/// area this writes area.y + feet — bit-identical to the previous behavior.
+/// Preserves r2-r12; clobbers r0, r1 and lr.
+pub(crate) fn emit_pitrex_wander_follow_y() -> String {
+    let mut s = String::new();
+    s.push_str("@ pitrex_wander_follow_y(r0=pool, r1=&area) -> pool.y = surface_y_at(area,pool.x)+feet\n");
+    s.push_str("@ Preserves r2-r12; clobbers r0, r1, lr.\n");
+    s.push_str(".global pitrex_wander_follow_y\n");
+    s.push_str(".type pitrex_wander_follow_y, %function\n");
+    s.push_str("pitrex_wander_follow_y:\n");
+    s.push_str("    push    {r4, lr}\n");
+    s.push_str("    mov     r4, r0              @ pool\n");
+    s.push_str("    mov     r0, r1              @ &area\n");
+    s.push_str("    ldrsh   r1, [r4, #4]        @ pool.x\n");
+    s.push_str("    bl      pitrex_surface_y_at @ r0 = surface height at pool.x\n");
+    s.push_str("    ldr     r1, [r4, #20]       @ type_data_ptr\n");
+    s.push_str("    cmp     r1, #0\n");
+    s.push_str("    beq     .Lwfy_nofeet\n");
+    s.push_str("    ldrsb   r1, [r1, #209]      @ feet_offset (signed byte)\n");
+    s.push_str("    add     r0, r0, r1\n");
+    s.push_str(".Lwfy_nofeet:\n");
+    s.push_str("    strh    r0, [r4, #6]        @ pool.y = surface + feet\n");
+    s.push_str("    pop     {r4, pc}\n");
     s.push_str("    .ltorg\n\n");
     s
 }
@@ -3374,17 +3712,14 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     s.push_str("    add     r10, r10, #8\n");
     s.push_str("    lsl     r12, r2, #3\n");
     s.push_str("    add     r10, r10, r12\n");
-    s.push_str("    ldrsh   r0, [r10]           @ area[best].y\n");
-    // Apply per-enemy-type feet_offset baked into _DATA[209]. area.y is the
-    // platform top; pool.y = area.y + feet_offset places the sprite's lowest
-    // pixel on that top regardless of sprite size or current sm_state.
-    s.push_str("    ldr     r12, [r6, #20]      @ type_data_ptr\n");
-    s.push_str("    cmp     r12, #0\n");
-    s.push_str("    beq     .Lspe_no_feet\n");
-    s.push_str("    ldrsb   r12, [r12, #209]    @ feet_offset (signed byte)\n");
-    s.push_str("    add     r0, r0, r12\n");
-    s.push_str(".Lspe_no_feet:\n");
-    s.push_str("    strh    r0, [r6, #6]        @ snap pool.y = area.y + feet_offset\n");
+    // Snap pool.y onto the area's surface AT the spawn x (r6=pool, r10=&area[best]).
+    // surface_y_at interpolates for a sloped area and adds the per-enemy-type
+    // feet_offset (_DATA[209]); for a FLAT area this is area.y + feet_offset,
+    // byte-identical to the previous raw `ldrsh ,[r10]` + feet code. follow_y
+    // preserves r4-r12 (the snap loop's invariants) and only clobbers r0/r1/lr.
+    s.push_str("    mov     r0, r6              @ pool ptr\n");
+    s.push_str("    mov     r1, r10             @ &area[best]\n");
+    s.push_str("    bl      pitrex_wander_follow_y  @ pool.y = surface_y_at(area, spawn_x) + feet\n");
     s.push_str(".Lspe_no_area_snap:\n");
     // vanim init: set frame_idx=0, anim_ticks_left=frame0.duration
     s.push_str("    ldrb    r0, [r6, #27]   @ is_anim\n");
@@ -3645,7 +3980,7 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    movlt   r11, r9             @ clamp to x_min\n");
     s.push_str("    strh    r11, [r5, #4]\n");
     s.push_str("    cmp     r11, r9\n");
-    s.push_str("    bne     .Lpue_skip\n");
+    s.push_str("    bne     .Lpue_w_walked      @ walked (not at edge): follow incline\n");
     s.push_str("    b       .Lpue_w_edge\n");
     s.push_str(".Lpue_w_right:\n");
     // dir = RIGHT: target = x_max
@@ -3657,10 +3992,16 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    movgt   r11, r10\n");
     s.push_str("    strh    r11, [r5, #4]\n");
     s.push_str("    cmp     r11, r10\n");
-    s.push_str("    bne     .Lpue_skip\n");
+    s.push_str("    bne     .Lpue_w_walked      @ walked (not at edge): follow incline\n");
 
-    // Reached an edge — reverse direction and enter IDLE
+    // Reached an edge — snap Y to the edge surface, reverse direction, enter IDLE.
+    // The Y-follow here keeps a sloped platform's endpoint (y1 at x_min / y2 at
+    // x_max) correct while the enemy pauses in IDLE; for a FLAT area it re-writes
+    // the same area.y+feet the enemy already had (byte-identical, no regression).
     s.push_str(".Lpue_w_edge:\n");
+    s.push_str("    mov     r0, r5              @ pool\n");
+    s.push_str("    mov     r1, r8              @ &area[idx]\n");
+    s.push_str("    bl      pitrex_wander_follow_y  @ pool.y = surface_y_at(area, x) + feet\n");
     s.push_str("    ldrb    r6, [r5, #26]       @ dir\n");
     s.push_str("    eor     r6, r6, #1          @ flip\n");
     s.push_str("    strb    r6, [r5, #26]\n");
@@ -3677,6 +4018,19 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    mov     r0, r5\n");
     s.push_str("    bl      pitrex_wander_set_sprite\n");
     s.push_str("    mov     r12, #1\n");
+    s.push_str("    b       .Lpue_skip\n");
+
+    // ── WALK, mid-platform: follow the incline ──────────────────────────
+    // Reached only when the enemy stepped X this frame but is NOT at an edge.
+    // Set pool.y = surface_y_at(area, new_x) + feet so Y tracks a sloped
+    // platform every walked frame. For a FLAT area surface_y_at == area.y, so
+    // this writes the unchanged area.y+feet (byte-identical to old behavior).
+    // r5=pool, r8=&area[idx] are both still live here; follow_y preserves r5/r8
+    // and r12 (SPEED), only clobbering r0/r1/lr, none of which are needed after.
+    s.push_str(".Lpue_w_walked:\n");
+    s.push_str("    mov     r0, r5              @ pool\n");
+    s.push_str("    mov     r1, r8              @ &area[idx]\n");
+    s.push_str("    bl      pitrex_wander_follow_y\n");
     s.push_str("    b       .Lpue_skip\n");
 
     // ── IDLE ────────────────────────────────────────────────────────────
@@ -3803,7 +4157,13 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    lsl     r6, r6, #3\n");
     s.push_str("    add     r8, r8, r6\n");
     s.push_str("    add     r8, r8, #8          @ &area[target]\n");
-    s.push_str("    ldrsh   r9, [r8]            @ target_y\n");
+    // Target surface height at the landing x (to_x = pool+14). NO feet_offset
+    // here — the original read the raw area.y purely to size the jump impulse
+    // (dy). For a FLAT area surface_y_at == area.y, so this is byte-identical.
+    s.push_str("    mov     r0, r8              @ &area[target]\n");
+    s.push_str("    ldrsh   r1, [r5, #14]       @ to_x (target_x)\n");
+    s.push_str("    bl      pitrex_surface_y_at @ r0 = surface y at to_x (== area.y if flat)\n");
+    s.push_str("    mov     r9, r0              @ target_y\n");
     s.push_str("    ldrsh   r1, [r5, #6]        @ current y\n");
     s.push_str("    sub     r9, r9, r1          @ dy = target_y - y\n");
     s.push_str("    ldrb    r6, [r5, #15]       @ transition type\n");
@@ -3848,94 +4208,82 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    strb    r0, [r5, #26]       @ dir = right\n");
     s.push_str("    b       .Lpue_skip\n");
 
-    // ── AIRBORNE: two phases.
+    // ── AIRBORNE: one clean parabola, matching the m6809 runtime.
     //
-    //   Phase A (X moving): step X toward target by AIR_SPEED=4 and run the
-    //                       parabolic Y arc (y += vy; vy -= 1; vy clamped to
-    //                       >= -3). This is the visible jump.
+    // Each frame: step X toward target_x by AIR_SPEED_X=2 (clamped, never
+    // overshoots) and run the parabolic Y arc (y += vy; vy -= 1; vy clamped
+    // >= -4). LAND the moment the *descending* arc crosses the target
+    // platform's Y. Landing is Y-crossing-driven (not "X reached target_x,
+    // then lerp Y") so the whole motion is a single continuous arc — no
+    // halfway stop + second hop.
     //
-    //   Phase B (X done):   lerp Y toward target_y at AIR_SPEED until reached,
-    //                       then land. Guarantees the AIRBORNE state ends in
-    //                       a bounded number of frames regardless of arc shape
-    //                       — previously, long jump_across with vy capped at
-    //                       -3 made Y diverge past target and the proximity
-    //                       check never fired, leaving enemies floating and
-    //                       the frame budget blown (visible as flicker and
-    //                       brighter beam dwell).
+    // Termination needs no timer: after the peak, gravity pulls Y down without
+    // bound, so `y <= target_y` becomes (and stays) true within a bounded
+    // number of frames for every transition type. drop enters with vy<0 and
+    // lands as soon as it descends onto the target. This is exactly the m6809
+    // AIRBORNE semantics (X 2/frame, gravity clamp -4, descending Y-crossing),
+    // which fixed the old two-phase float/proximity divergence for jump_across.
     s.push_str(".Lpue_w_air:\n");
-    s.push_str("    ldrsh   r10, [r5, #4]       @ current x\n");
-    s.push_str("    ldrsh   r8, [r5, #14]       @ target_x\n");
-    s.push_str("    sub     r6, r8, r10         @ dx\n");
-    s.push_str("    cmp     r6, #0\n");
-    s.push_str("    beq     .Lpue_w_air_y_lerp  @ Phase B: lerp Y, then land\n");
-    // Phase A: X step + parabolic Y.
-    s.push_str("    bgt     .Lpue_w_air_xright\n");
-    s.push_str("    sub     r10, r10, #4        @ x -= AIR_SPEED\n");
-    s.push_str("    cmp     r10, r8\n");
-    s.push_str("    it      lt\n");
-    s.push_str("    movlt   r10, r8\n");
-    s.push_str("    strh    r10, [r5, #4]\n");
-    s.push_str("    b       .Lpue_w_air_y_arc\n");
-    s.push_str(".Lpue_w_air_xright:\n");
-    s.push_str("    add     r10, r10, #4        @ x += AIR_SPEED\n");
-    s.push_str("    cmp     r10, r8\n");
-    s.push_str("    it      gt\n");
-    s.push_str("    movgt   r10, r8\n");
-    s.push_str("    strh    r10, [r5, #4]\n");
-    s.push_str(".Lpue_w_air_y_arc:\n");
-    s.push_str("    ldrsh   r6, [r5, #6]\n");
-    s.push_str("    ldrsh   r7, [r5, #8]        @ vy\n");
-    s.push_str("    add     r6, r6, r7\n");
-    s.push_str("    strh    r6, [r5, #6]        @ y += vy\n");
-    s.push_str("    sub     r7, r7, #1\n");
-    s.push_str("    mvn     r0, #2              @ -3 (terminal)\n");
-    s.push_str("    cmp     r7, r0\n");
-    s.push_str("    it      lt\n");
-    s.push_str("    movlt   r7, r0              @ clamp vy >= -3\n");
-    s.push_str("    strh    r7, [r5, #8]\n");
-    s.push_str("    b       .Lpue_skip\n");
-
-    // Phase B: X is at target_x. Step Y toward target_y at AIR_SPEED, land
-    // when equal. r6 is reused as current y, r9 as target_y.
-    s.push_str(".Lpue_w_air_y_lerp:\n");
+    // target_y = area[current_area_idx].y + feet_offset  (current_area = target).
     s.push_str("    ldr     r8, [r5, #28]       @ areas_ptr\n");
     s.push_str("    ldrb    r2, [r5, #11]       @ current_area_idx (= target)\n");
     s.push_str("    lsl     r2, r2, #3\n");
     s.push_str("    add     r8, r8, r2\n");
     s.push_str("    add     r8, r8, #8          @ &area[target]\n");
-    s.push_str("    ldrsh   r9, [r8]            @ target_y\n");
-    s.push_str("    ldrsh   r6, [r5, #6]\n");
-    s.push_str("    sub     r0, r9, r6          @ target_y - y\n");
-    s.push_str("    cmp     r0, #0\n");
-    s.push_str("    beq     .Lpue_w_air_land\n");
-    s.push_str("    bgt     .Lpue_w_air_ylerp_up\n");
-    // y > target: step down
-    s.push_str("    sub     r6, r6, #4\n");
-    s.push_str("    cmp     r6, r9\n");
-    s.push_str("    it      lt\n");
-    s.push_str("    movlt   r6, r9\n");
-    s.push_str("    strh    r6, [r5, #6]\n");
-    s.push_str("    cmp     r6, r9\n");
-    s.push_str("    bne     .Lpue_skip\n");
-    s.push_str("    b       .Lpue_w_air_land\n");
-    s.push_str(".Lpue_w_air_ylerp_up:\n");
-    s.push_str("    add     r6, r6, #4\n");
-    s.push_str("    cmp     r6, r9\n");
-    s.push_str("    it      gt\n");
-    s.push_str("    movgt   r6, r9\n");
-    s.push_str("    strh    r6, [r5, #6]\n");
-    s.push_str("    cmp     r6, r9\n");
-    s.push_str("    bne     .Lpue_skip\n");
-    s.push_str(".Lpue_w_air_land:\n");
-    // Apply feet_offset (from _DATA[209]) so the sprite lands feet-first on
-    // the target platform, matching the spawn snap convention.
+    // Target surface height at the landing x (to_x = pool+14); the feet_offset
+    // is still added below, exactly as before. FLAT area -> surface_y_at ==
+    // area.y, so the landing plane is byte-identical to the old raw read.
+    s.push_str("    mov     r0, r8              @ &area[target]\n");
+    s.push_str("    ldrsh   r1, [r5, #14]       @ to_x (target_x)\n");
+    s.push_str("    bl      pitrex_surface_y_at @ r0 = surface y at to_x (== area.y if flat)\n");
+    s.push_str("    mov     r9, r0              @ target area surface y\n");
     s.push_str("    ldr     r0, [r5, #20]       @ type_data_ptr\n");
     s.push_str("    cmp     r0, #0\n");
-    s.push_str("    beq     .Lpue_w_air_land_no_off\n");
+    s.push_str("    beq     .Lpue_w_air_nofeet\n");
     s.push_str("    ldrsb   r0, [r0, #209]      @ feet_offset\n");
-    s.push_str("    add     r9, r9, r0\n");
-    s.push_str(".Lpue_w_air_land_no_off:\n");
-    s.push_str("    strh    r9, [r5, #6]        @ snap y = target_y + feet_offset\n");
+    s.push_str("    add     r9, r9, r0          @ target_y = area.y + feet\n");
+    s.push_str(".Lpue_w_air_nofeet:\n");
+    // Step X toward target_x by AIR_SPEED_X = 2, clamped so it never overshoots.
+    s.push_str("    ldrsh   r10, [r5, #4]       @ x\n");
+    s.push_str("    ldrsh   r8, [r5, #14]       @ target_x\n");
+    s.push_str("    cmp     r10, r8\n");
+    s.push_str("    beq     .Lpue_w_air_yarc    @ x already at target_x\n");
+    s.push_str("    bgt     .Lpue_w_air_xleft\n");
+    s.push_str("    add     r10, r10, #2        @ x += AIR_SPEED_X\n");
+    s.push_str("    cmp     r10, r8\n");
+    s.push_str("    it      gt\n");
+    s.push_str("    movgt   r10, r8             @ clamp to target_x\n");
+    s.push_str("    strh    r10, [r5, #4]\n");
+    s.push_str("    b       .Lpue_w_air_yarc\n");
+    s.push_str(".Lpue_w_air_xleft:\n");
+    s.push_str("    sub     r10, r10, #2        @ x -= AIR_SPEED_X\n");
+    s.push_str("    cmp     r10, r8\n");
+    s.push_str("    it      lt\n");
+    s.push_str("    movlt   r10, r8             @ clamp to target_x\n");
+    s.push_str("    strh    r10, [r5, #4]\n");
+    // Parabolic Y: y += vy; vy -= 1; clamp vy >= -4.
+    s.push_str(".Lpue_w_air_yarc:\n");
+    s.push_str("    ldrsh   r6, [r5, #6]        @ y\n");
+    s.push_str("    ldrsh   r7, [r5, #8]        @ vy\n");
+    s.push_str("    add     r6, r6, r7\n");
+    s.push_str("    strh    r6, [r5, #6]        @ y += vy\n");
+    s.push_str("    sub     r7, r7, #1\n");
+    s.push_str("    mvn     r0, #3              @ -4 (terminal velocity)\n");
+    s.push_str("    cmp     r7, r0\n");
+    s.push_str("    it      lt\n");
+    s.push_str("    movlt   r7, r0              @ clamp vy >= -4\n");
+    s.push_str("    strh    r7, [r5, #8]\n");
+    // Land when (type==drop OR descending vy<0) AND y has reached/passed target_y.
+    s.push_str("    ldrb    r0, [r5, #15]       @ transition type\n");
+    s.push_str("    cmp     r0, #2\n");
+    s.push_str("    beq     .Lpue_w_air_chk     @ drop: eligible immediately\n");
+    s.push_str("    cmp     r7, #0\n");
+    s.push_str("    bge     .Lpue_skip          @ ascending (vy>=0): keep flying\n");
+    s.push_str(".Lpue_w_air_chk:\n");
+    s.push_str("    cmp     r6, r9              @ y vs target_y\n");
+    s.push_str("    bgt     .Lpue_skip          @ y > target_y: still above, keep arcing\n");
+    // Land: snap y onto the platform (target_y already includes feet) and WALK.
+    s.push_str("    strh    r9, [r5, #6]        @ y = target_y\n");
     s.push_str("    mov     r0, #0\n");
     s.push_str("    strb    r0, [r5, #10]       @ sub_state = WALK\n");
     s.push_str("    @ fall through to skip\n");

@@ -62,6 +62,10 @@ pub fn is_known_builtin(name: &str) -> bool {
             | "DRAW_ARC"
             | "DRAW_ELLIPSE"
             | "DRAW_VECTOR_3D"
+            | "DRAW_VECTOR_ROT"
+            | "DRAW_RECORDING"
+            | "PLAY_SAMPLE"
+            | "SAMPLE_POS"
             | "DRAW_BEZIER"
             | "DRAW_BEZIER_QUAD"
             | "PLAY_NOTE"
@@ -83,7 +87,7 @@ pub fn builtin_arity(name: &str) -> Option<usize> {
         | "UPDATE_LEVEL" | "GET_LEVEL_BOUNDS" => Some(0),
 
         // 1-argument builtins
-        "DRAW_VECTOR" | "PLAY_MUSIC" | "PLAY_SFX" | "ABS" | "LEN" | "ASM"
+        "DRAW_VECTOR" | "PLAY_MUSIC" | "PLAY_SFX" | "PLAY_SAMPLE" | "ABS" | "LEN" | "ASM"
         | "SET_CAMERA_X" | "SET_CAMERA_Y" => Some(1),
 
         // 2-argument builtins
@@ -97,8 +101,11 @@ pub fn builtin_arity(name: &str) -> Option<usize> {
         "DRAW_VECTOR_LIST" | "DRAW_VL" => None,
         "FRAME_BEGIN" => None,
         "SET_INTENSITY" => Some(1),
+        "SAMPLE_POS" => Some(1),   // fps → current audio-synced frame index
         "DRAW_VECTOR_EX" => Some(4),
         "DRAW_VECTOR_3D" => Some(6),
+        "DRAW_VECTOR_ROT" => None,    // name, x, y, angle [, mirror [, intensity]]: 4-6
+        "DRAW_RECORDING" => Some(5),  // recording_name, x, y, scale (0-128), frame counter
         "DRAW_BEZIER"      => Some(10),
         "DRAW_BEZIER_QUAD" => Some(8),
         "PLAY_NOTE"        => Some(3),  // instrument_name, channel, midi_note

@@ -6,13 +6,13 @@ members = [
     "buildtools/vpy_assembler",
     "buildtools/vpy_bank_allocator",
     "buildtools/vpy_cli",
-    "core",
+    "buildtools/vpy_lsp",
 ]
 resolver = "2"
 
 [workspace.package]
 edition = "2021"
-version = "0.1.0"
+version = "0.4.0"
 authors = ["Daniel Ferrer"]
 
 [workspace.lints]

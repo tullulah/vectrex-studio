@@ -81,7 +81,7 @@ export function activate(context: vscode.ExtensionContext) {
     await doc.save();
     const terminal = vscode.window.createTerminal({ name: 'VPy Build' });
     terminal.show(true);
-    terminal.sendText(`cargo run --quiet --bin vectrex_lang -- build "${doc.fileName}" --bin`);
+    terminal.sendText(`cargo run --quiet --bin vpy_cli -- build "${doc.fileName}"`);
   });
   context.subscriptions.push(compileCmd);
 

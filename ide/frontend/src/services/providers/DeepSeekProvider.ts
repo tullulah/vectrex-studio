@@ -15,7 +15,7 @@ export class DeepSeekProvider extends BaseAiProvider {
 
   public async sendRequest(request: AiRequest): Promise<AiResponse> {
     if (!this.isConfigured()) {
-      throw new Error('DeepSeek API key no configurada');
+      throw new Error('DeepSeek API key not configured');
     }
 
     try {

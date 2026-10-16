@@ -1,22 +1,14 @@
 # BuildTools: Modular Compilation Pipeline for VPy
 
-A from-scratch redesign of the compiler architecture, breaking the monolithic pipeline into 9 independent crates with clear interfaces and comprehensive tests.
+The VPy compiler: a 9-phase pipeline with one Rust crate per phase, clear interfaces between phases, and tests for each. This is the only compiler in Vectrex Studio; the CLI binary is `vpy_cli`, and the language server `vpy_lsp` (`vpy_lsp/`) is built from the same workspace on the same parser. Reference documentation lives in [`docs/COMPILER_STATUS.md`](../docs/COMPILER_STATUS.md).
 
-## Why This Matters
+## Design Principles
 
-The current compiler (in `core/`) has fundamental issues:
-- **No single source of truth**: Addresses calculated in 3 places (fragile)
-- **Not a real linker**: Just divides ASM files (no relocation)
-- **PDB addresses guessed**: Reconstructed from bank files (unreliable)
-- **Multibank broken**: Linker doesn't properly allocate functions
-- **Hard to test**: No clear phase boundaries
-
-**This pipeline fixes all of that** by implementing a real compiler with:
-- ✅ Separate phases with type-safe interfaces
-- ✅ Single source of truth (linker computes all addresses)
-- ✅ Real relocations and symbol table
-- ✅ Comprehensive tests for single + multibank
-- ✅ Correct PDB generation from linker output
+- Separate phases with type-safe interfaces
+- Single source of truth: only the linker (Phase 7) computes final addresses
+- Real relocations and symbol table
+- Tests for single-bank, multibank and error cases in every phase
+- PDB generation derived from linker output
 
 ## Pipeline Architecture
 
@@ -54,10 +46,20 @@ Phase 9: vpy_debug_gen  → .pdb file (from linker data)
 - 24 comprehensive tests passing
 
 ### ✅ Phase 4: vpy_bank_allocator (COMPLETE)
-- **Call graph analysis**: Function dependency tracking
-- **Sequential allocation**: First-fit assignment to banks
-- **Tests**: 12 passing (single-bank, multibank, overflow)
-- **Status**: Ready for Phase 7 linker integration
+- **Call graph analysis**: Function dependency tracking; functions that call each other
+  or share assets are clustered into one bank
+- **Pinned entry code**: `main()`/`loop()` (MAIN, LOOP_BODY) always live in bank #0 and
+  are not clustered with the functions they call
+- **Measured sizes**: multibank m6809 builds generate, assemble each code bank, read every
+  function's size off its labels and regenerate with those sizes
+  (`vpy_linker::sizing::generate_m6809`, used by `vpy_cli build` and `asm`). The AST
+  estimate (`graph::estimate_function_size`) is only the first guess; each code bank keeps
+  a 128-byte margin
+- **Errors**: code that does not fit says how many bytes are short and which
+  `META ROM_TOTAL_SIZE` holds it; a function or an asset bigger than a bank is reported
+  by name; link-time bank overflows give the bytes over and the code/data split
+- **Tests**: allocator unit tests + `vpy_linker/tests/bank_sizing.rs` (single-bank,
+  multibank spread, too-big error, estimate vs assembled sizes)
 
 ### ✅ Phase 5: vpy_codegen - Stack Balance Validation (COMPLETE)
 - **Tree Shaking System**: Automatic detection and elimination of unused runtime helpers
@@ -141,7 +143,7 @@ META ROM_BANK_SIZE = 16384      # 16KB per bank (standard)
 **Implementation**:
 - `vpy_codegen/src/m6809/mod.rs`: Emits ALL bank markers dynamically
 - `vpy_cli/src/main.rs`: Detects multibank and invokes multi_bank_linker
-- `vpy_linker/src/multi_bank_linker.rs`: Ported from core, assembles each bank
+- `vpy_linker/src/multi_bank_linker.rs`: Assembles each bank
 
 **Key Technical Details**:
 - Helpers bank = `(rom_total_size / rom_bank_size) - 1`
@@ -211,6 +213,16 @@ META ROM_BANK_SIZE = 16384      # 16KB per bank (standard)
 - Phase 9: vpy_debug_gen (PDB generation)
 
 ## Getting Started
+
+### Build and Run
+
+```bash
+cargo build --bin vpy_cli --bin vpy_lsp     # from the repo root or from buildtools/
+vpy_cli build <file.vpy|project.vpyproj> -o out.bin [--target m6809|rp2350|pitrex|uvm2] [--debug]
+vpy_cli asm <file.vpy|project.vpyproj> -o out.asm
+```
+
+`run-ide.sh` builds both binaries and copies them into `ide/electron/resources/`.
 
 ### Run Tests
 ```bash
@@ -354,60 +366,6 @@ fn test_load_multibank_project() {
     assert_eq!(info.source_files.len(), 1);
 }
 ```
-
-## Porting from core/ (Next Steps)
-
-1. **vpy_parser** (~1-2 days)
-   - Move core/src/parser.rs → buildtools/vpy_parser/
-   - Define AST types
-   - Add single + multibank tests
-
-2. **vpy_unifier** (~1 day)
-   - Move core/src/unifier.rs → buildtools/vpy_unifier/
-   - Import resolution logic
-   - Multi-module tests
-
-3. **vpy_bank_allocator** (~2 days, NEW)
-   - Graph analysis for function placement
-   - Bank assignment strategy
-   - Single vs multibank logic
-
-4. **vpy_codegen** (~2 days)
-   - Move core/src/backend/m6809/mod.rs
-   - Generate ASM per bank
-   - Metadata emission
-
-5. **vpy_assembler** (~1 day)
-   - Move core/src/backend/asm_to_binary.rs
-   - Produce object files with relocations
-   - Symbol extraction
-
-6. **vpy_linker** (~3 days, CRITICAL)
-   - NEW: Real linker implementation
-   - Address space allocation
-   - Relocation application
-   - Symbol table generation
-
-7. **vpy_binary_writer** (~0.5 days)
-   - Trivial: just write bytes to disk
-
-8. **vpy_debug_gen** (~1 day)
-   - NEW: Derive PDB from linker
-   - Source map generation
-   - JSON output
-
-**Total: ~2 weeks** for complete pipeline with all tests
-
-## Comparison: Old vs New
-
-| Aspect | Old (core/) | New (buildtools/) |
-|--------|---|---|
-| Monolithic | Single binary | 9 independent crates |
-| Address calc | 3 places | 1 place (linker) |
-| Linker | Divides ASM | Real relocation |
-| PDB | Guesses | Derives from linker |
-| Tests | Implicit | Explicit single/multi |
-| Debuggability | Hard | Easy (clear phases) |
 
 ## Contributing
 

@@ -1,0 +1,48 @@
+{
+  "version": "1.0",
+  "name": "Imported MIDI",
+  "author": "",
+  "tempo": 120,
+  "ticksPerBeat": 24,
+  "totalTicks": 384,
+  "notes": [
+    {
+      "id": "bvctjfmyg",
+      "note": 77,
+      "start": 0,
+      "duration": 4,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "caz70q2rr",
+      "note": 75,
+      "start": 8,
+      "duration": 4,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "c9489d7fc",
+      "note": 77,
+      "start": 17,
+      "duration": 4,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "rpq9d3ngj",
+      "note": 75,
+      "start": 26,
+      "duration": 4,
+      "velocity": 13,
+      "channel": 0
+    }
+  ],
+  "noise": [],
+  "loopStart": 0,
+  "loopEnd": 384,
+  "channel_instruments": {
+    "0": "piano"
+  }
+}

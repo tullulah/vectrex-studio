@@ -48,7 +48,7 @@ pub fn emit_ram_layout() -> String {
         ("CAMERA_X",         0x14C, "camera X offset (used by show_level)"),
         ("CAMERA_Y",         0x150, "camera Y offset"),
         ("TEXT_SIZE",        0x154, "text scale factor (1=normal, 2=double, ...)"),
-        ("TEXT_COLOR",       0x158, "text intensity (0-127)"),
+        // 0x158 free — was TEXT_COLOR (removed: monochrome console, use SET_INTENSITY)
         ("LEVEL_DATA_PTR",   0x15C, "pointer to loaded level ROM data"),
         ("DBGVAL",           0x160, "debug_print last written value"),
         ("PRINT_BEAM_X",     0x164, "beam X shadow during print_text"),
@@ -95,6 +95,16 @@ pub fn emit_ram_layout() -> String {
         ("ENEMY_STATE_ARM",     0x41C, "enemy state per slot: 8 × i32"),
         // Per-player animation state (0x43C–0x43D): frame_idx(u8)+ticks_left(u8)
         ("VPY_PLAYER_ANIM_STATE", 0x43C, "player animation state: frame_idx(u8)+ticks_left(u8)"),
+        // Brightness override (0x43E, in the free gap before wander scratch): 0=use
+        // .vec per-path intensity, >0=override from SET_INTENSITY. Written only by the
+        // SET_INTENSITY builtin, read by DRAW_VECTOR/DRAW_VECTOR_3D, reset once per frame.
+        ("VPY_BRIGHTNESS_OVERRIDE", 0x43E, "SET_INTENSITY override: 0=.vec intensity, >0=override (1 byte)"),
+        // Escala del PROXIMO vpy_draw_vector_ex, en treintaydosavos (32 = 1:1).
+        // La pone show_level desde el byte +4 del objeto, y vpy_draw_vector_ex la
+        // CONSUME (la deja a 0) para que no se herede a la llamada siguiente. Va por
+        // aqui y no como sexto argumento porque los seis llamantes montan la pila de
+        // tres formas distintas: un argumento mas habria leido basura en tres de ellos.
+        ("VPY_DRAW_SCALE",      0x43F, "escala del proximo DRAW_VECTOR_EX (x32; 0/32 = 1:1, 1 byte)"),
         // Wander AI per-slot scratch (0x440–0x45F): 8 slots × 4 bytes
         // Each slot: +0..1 idle_timer/from_x/vy (i16), +2..3 target_x (i16)
         ("WANDER_SCRATCH_ARM",  0x440, "wander AI scratch: 8 slots x 4 bytes (scratch_a|target_x)"),
@@ -114,22 +124,70 @@ pub fn emit_ram_layout() -> String {
     s
 }
 
+/// The end of the variables' window: the runtime area and the user's scalars (and each
+/// array's pointer) live in [0x2007F000, USER_RAM_END).
+pub const USER_RAM_END: u32 = 0x2008_0000;
+
+thread_local! {
+    /// Where the arrays' data go on a target that reserves more RAM below the window: uvm2's
+    /// .vpyram is [0x2007C000, 0x20080000), whose first 12 KB nothing else used. None: the
+    /// arrays go in the window too (rp2350, unchecked as it always was).
+    static ARRAY_REGION: std::cell::Cell<Option<(u32, u32)>> = const { std::cell::Cell::new(None) };
+}
+
+/// Set (uvm2) or clear (rp2350) the array region for this compile.
+pub fn set_array_region(region: Option<(u32, u32)>) {
+    ARRAY_REGION.with(|r| r.set(region));
+}
+
 /// Allocate a user variable and return its address.
 /// Called by the functions module while processing GlobalLet items.
 pub struct RamAllocator {
     next: u32,
+    arr_start: u32,
+    arr_next: u32,
+    arr_end: u32,
+    checked: bool,
 }
 
 impl RamAllocator {
     pub fn new() -> Self {
-        Self { next: 0x2007_F460 } // USER_RAM_START (after wander scratch at 0x440–0x45F)
+        let region = ARRAY_REGION.with(|r| r.get());
+        let (arr_next, arr_end) = region.unwrap_or((0, 0));
+        // USER_RAM_START (after wander scratch at 0x440–0x45F)
+        Self { next: 0x2007_F460, arr_start: arr_next, arr_next, arr_end, checked: region.is_some() }
     }
 
-    /// Allocate `bytes` bytes, return base address.
-    pub fn alloc(&mut self, bytes: u32) -> u32 {
+    /// Allocate `bytes` bytes in the window, return base address. Past its end is an error
+    /// where the RAM around is known (uvm2: the cores' stacks are there).
+    pub fn alloc(&mut self, bytes: u32) -> Result<u32, String> {
         // Align to 4 bytes
         let addr = (self.next + 3) & !3;
         self.next = addr + bytes;
-        addr
+        if self.checked && self.next > USER_RAM_END {
+            return Err(format!(
+                "the program's variables do not fit: {} bytes of scalars and array pointers, over the {} the runtime leaves",
+                self.next - 0x2007_F460,
+                USER_RAM_END - 0x2007_F460
+            ));
+        }
+        Ok(addr)
+    }
+
+    /// Allocate an array's data: in the array region if the target has one, else the window.
+    pub fn alloc_data(&mut self, bytes: u32) -> Result<u32, String> {
+        if !self.checked {
+            return self.alloc(bytes);
+        }
+        let addr = (self.arr_next + 3) & !3;
+        self.arr_next = addr + bytes;
+        if self.arr_next > self.arr_end {
+            return Err(format!(
+                "the program's arrays do not fit: {} bytes of array data, over the {} reserved for them",
+                self.arr_next - self.arr_start,
+                self.arr_end - self.arr_start
+            ));
+        }
+        Ok(addr)
     }
 }

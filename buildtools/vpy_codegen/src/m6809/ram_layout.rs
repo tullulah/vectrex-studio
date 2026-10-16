@@ -17,6 +17,9 @@ pub struct RamLayout {
     offsets: HashMap<String, usize>,
     // Fixed-address variables (absolute address, not relative to base)
     fixed_vars: Vec<(String, u16, usize, String)>,
+    // Names for bytes inside an already allocated block (frame slots inside the
+    // frame pool): (name, offset from base, size, comment). They reserve nothing.
+    aliases: Vec<(String, usize, usize, String)>,
 }
 
 impl RamLayout {
@@ -27,6 +30,7 @@ impl RamLayout {
             vars: Vec::new(),
             offsets: HashMap::new(),
             fixed_vars: Vec::new(),
+            aliases: Vec::new(),
         }
     }
     
@@ -38,6 +42,7 @@ impl RamLayout {
             vars: Vec::new(),
             offsets: HashMap::new(),
             fixed_vars: Vec::new(),
+            aliases: Vec::new(),
         }
     }
     
@@ -66,6 +71,14 @@ impl RamLayout {
         self.fixed_vars.push((name, address, size, comment));
     }
     
+    /// Name `size` bytes at `offset` (from base) inside a block that is already
+    /// allocated. Several aliases may name the same bytes (overlaid frames).
+    pub fn alias(&mut self, name: impl Into<String>, offset: usize, size: usize, comment: impl Into<String>) {
+        let name = name.into();
+        self.offsets.insert(name.clone(), offset);
+        self.aliases.push((name, offset, size, comment.into()));
+    }
+
     /// Get the offset of a variable (if already allocated)
     pub fn get_offset(&self, name: &str) -> Option<usize> {
         self.offsets.get(name).copied()
@@ -93,6 +106,12 @@ impl RamLayout {
                 offset_hex,
                 var.comment,
                 var.size
+            ));
+        }
+        for (name, offset, size, comment) in &self.aliases {
+            out.push_str(&format!(
+                "{:<20} EQU ${:04X}+${:02X}   ; {} ({} bytes)\n",
+                name, self.base_address, offset, comment, size
             ));
         }
         // Emit fixed-address EQUs after compact region
@@ -171,6 +190,23 @@ mod tests {
         assert_eq!(layout.get_address("FLAG"), Some(0xC886));
     }
     
+    #[test]
+    fn test_alias_names_bytes_inside_a_block() {
+        let mut layout = RamLayout::new(0xC880);
+        layout.allocate("A", 2, "a");
+        let pool = layout.allocate("POOL", 6, "pool");
+        layout.allocate("B", 1, "b");
+        layout.alias("P0", pool, 2, "slot 0");
+        layout.alias("P1", pool + 2, 2, "slot 1");
+        layout.alias("Q0", pool, 2, "overlaid slot");
+        assert_eq!(layout.total_size(), 9, "aliases reserve nothing");
+        assert_eq!(layout.get_address("P1"), Some(0xC884));
+        assert_eq!(layout.get_address("Q0"), layout.get_address("P0"));
+        let equ = layout.emit_equ_definitions();
+        assert!(equ.contains("P1                   EQU $C880+$04"), "{equ}");
+        assert!(!layout.emit_storage_allocations().contains("P1"));
+    }
+
     #[test]
     fn test_no_collision() {
         let mut layout = RamLayout::new(0xC880);

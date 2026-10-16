@@ -1,0 +1,78 @@
+name: Windows C/uvm2 builds
+
+# The IDE's C and uvm2 builds on a clean Windows (ide/electron/scripts/win-build-smoke.js):
+# every tool downloaded the way the IDE does it, nothing from the runner's own installs.
+on:
+  workflow_dispatch:
+    inputs:
+      sdk:
+        description: 'SDK tag, or a branch of tullulah/uvmc2-sdk as ref:<branch>'
+        default: 'v1.4.4'
+  # A branch named win-* runs it on every push (workflow_dispatch only works once the
+  # workflow is on the default branch).
+  push:
+    branches: ['win-*']
+  pull_request:
+    branches: [master]
+    paths:
+      - 'ide/electron/src/sdkManager.ts'
+      - 'ide/electron/src/winBuildTools.ts'
+      - 'ide/electron/src/projectTemplates.ts'
+      - 'ide/electron/scripts/win-build-smoke.js'
+      - 'buildtools/vpy_cli/**'
+      - '.github/workflows/windows-builds.yml'
+
+env:
+  # A tag is downloaded as the IDE does; ref:<branch> tests an SDK branch before its release.
+  SDK: ${{ inputs.sdk || 'v1.4.4' }}
+
+jobs:
+  smoke:
+    # windows-11-arm: an ARM64 PC runs the IDE and its x64 tools under emulation
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-11-arm]
+    runs-on: ${{ matrix.os }}
+    steps:
+      # The SDK as its release tarball has it: LF line endings.
+      - run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v4
+
+      - name: SDK branch name
+        if: startsWith(env.SDK, 'ref:')
+        shell: bash
+        run: echo "SDK_REF=${SDK#ref:}" >> "$GITHUB_ENV"
+
+      - name: SDK branch
+        if: startsWith(env.SDK, 'ref:')
+        uses: actions/checkout@v4
+        with:
+          repository: tullulah/uvmc2-sdk
+          ref: ${{ env.SDK_REF }}
+          path: uvmc2-sdk
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ide/electron/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build vpy_cli
+        run: cargo build --release --bin vpy_cli
+
+      - name: Build the IDE's main-process code
+        working-directory: ide/electron
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+
+      - name: C (make uvm2, rp2350, sim) and VPy (uvm2) builds
+        working-directory: ide/electron
+        shell: bash
+        run: |
+          if [[ "$SDK" == ref:* ]]; then sdk="$GITHUB_WORKSPACE/uvmc2-sdk"; else sdk="$SDK"; fi
+          node scripts/win-build-smoke.js "$sdk" ../../target/release/vpy_cli.exe "$RUNNER_TEMP/smoke"

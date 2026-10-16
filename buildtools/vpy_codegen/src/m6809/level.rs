@@ -1,9 +1,9 @@
 // Level System Builtins for VPy
 // vplay-aware level loading, rendering, and physics
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use vpy_parser::{Expr, Module, Stmt};
+use vpy_parser::{Expr, Module};
 use super::expressions;
 use crate::AssetInfo;
 
@@ -11,31 +11,11 @@ static GLFY_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 /// Returns true if the module uses any level system builtins
 pub fn needs_level_runtime(module: &Module) -> bool {
-    fn check_expr(expr: &Expr) -> bool {
-        if let Expr::Call(c) = expr {
-            // GET_LEVEL_FLOOR_Y must also pull in the runtime block — its multibank
-            // path is a JSR to a helper emitted alongside the other LEVEL_*_RUNTIMEs.
-            matches!(c.name.as_str(),
-                "LOAD_LEVEL" | "SHOW_LEVEL" | "UPDATE_LEVEL" | "LEVEL_COLLISION_Y" | "LEVEL_COLLISION_X" | "GET_LEVEL_FLOOR_Y")
-        } else { false }
-    }
-    fn check_stmt(stmt: &Stmt) -> bool {
-        match stmt {
-            Stmt::Expr(e, _) => check_expr(e),
-            Stmt::If { cond, body, elifs, else_body, .. } =>
-                check_expr(cond) || body.iter().any(check_stmt) ||
-                elifs.iter().any(|(e,b)| check_expr(e) || b.iter().any(check_stmt)) ||
-                else_body.as_ref().map_or(false, |b| b.iter().any(check_stmt)),
-            Stmt::While { cond, body, .. } => check_expr(cond) || body.iter().any(check_stmt),
-            Stmt::Assign { value, .. } => check_expr(value),
-            _ => false,
-        }
-    }
-    module.items.iter().any(|item| {
-        if let vpy_parser::Item::Function(func) = item {
-            func.body.iter().any(check_stmt)
-        } else { false }
-    })
+    // GET_LEVEL_FLOOR_Y must also pull in the runtime block — its multibank
+    // path is a JSR to a helper emitted alongside the other LEVEL_*_RUNTIMEs.
+    super::ast_walk::calls_any(module, &[
+        "LOAD_LEVEL", "SHOW_LEVEL", "UPDATE_LEVEL", "LEVEL_COLLISION_Y", "LEVEL_COLLISION_X", "GET_LEVEL_FLOOR_Y",
+    ])
 }
 
 /// Emit LOAD_LEVEL(level_name) - Load level data from ROM
@@ -337,7 +317,7 @@ pub fn emit_level_collision_x(args: &[Expr], out: &mut String, assets: &[crate::
 
 /// Emit runtime helpers for level system.
 /// Only emits helpers that are actually used in the code (tree shaking).
-pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
+pub fn emit_runtime_helpers(out: &mut String, needed: &BTreeSet<String>) {
 
     // =========================================================================
     // GET_LEVEL_FLOOR_Y_RUNTIME — multibank only

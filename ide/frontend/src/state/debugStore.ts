@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import type { DebugState as LegacyDebugState } from '../types/models.js';
 import { useEditorStore } from './editorStore.js';
+import { ensureComponent } from './dockBus';
+import { syncEmulatorBreakpoints } from '../debug/breakpointSync';
 
 export type ExecutionState = 'stopped' | 'running' | 'paused';
 
@@ -40,6 +42,7 @@ export interface PdbData {
 
 export interface CallFrame {
   function: string;
+  file?: string | null;
   line: number | null;
   address: string;
   type: 'vpy' | 'native' | 'bios';
@@ -62,6 +65,16 @@ interface DebugStore extends LegacyDebugState {
   pdbData: PdbData | null;
   callStack: CallFrame[];
   currentFps: number;
+  /* EL REFRESCO QUE PERMITE EL DIBUJO, aparte del que consigue el emulador.
+   *
+   * Son dos cosas distintas y confundirlas manda a optimizar el sitio equivocado:
+   * `currentFps` es lo que el navegador logra emular por segundo de reloj de pared, y
+   * `drawFps` es a cuanto podria refrescar el juego EN LA CONSOLA si el dibujo fuese el
+   * unico coste — 1,5 MHz de bus entre los ciclos que costo el frame. El segundo es fiel
+   * porque la lista de comandos se reproduce igual aqui que alli; el primero solo dice si
+   * el emulador va comodo. Un fps absoluto de consola NO se puede dar: el modelo de CPU no
+   * tiene esperas de memoria y sale unas veinte veces optimista. */
+  drawFps: number;
   loadingForDebug: boolean; // Flag to indicate loading binary for debug session (don't auto-start)
   
   // New actions
@@ -72,7 +85,7 @@ interface DebugStore extends LegacyDebugState {
   loadPdbData: (pdb: PdbData) => void;
   clearPdbData: () => void;
   updateCallStack: (stack: CallFrame[]) => void;
-  updateStats: (cycles: number, fps: number) => void;
+  updateStats: (cycles: number, fps: number, drawFps?: number) => void;
   setLoadingForDebug: (loading: boolean) => void;
   
   // Debug controls
@@ -97,6 +110,9 @@ const initial: LegacyDebugState = {
   constants: [],
 };
 
+/** Has the Call Stack panel been opened for a stop this session? */
+let callStackShown = false;
+
 export const useDebugStore = create<DebugStore>((set, get) => ({
   ...initial,
   
@@ -116,10 +132,12 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
   pdbData: null,
   callStack: [],
   currentFps: 0,
+  drawFps: 0,
   loadingForDebug: false,
   
   // New actions
-  setState: (state) => set({ state }),
+  // The call stack is the paused program's: running or stopped, it is stale
+  setState: (state) => set(state === 'paused' ? { state } : { state, callStack: [] }),
   setCurrentVpyLine: (line) => set({ currentVpyLine: line }),
   setCurrentVpyLineWithFile: (line, file) => set({ currentVpyLine: line, currentVpyFile: file }),
   setCurrentAsmAddress: (address) => set({ currentAsmAddress: address }),
@@ -128,69 +146,25 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
   
   loadPdbData: (pdb) => {
     console.log('[DebugStore] 📋 Loaded .pdb:', pdb);
-    set({ pdbData: pdb });
-    
-    // Re-synchronize existing breakpoints from editorStore
-    const allBreakpoints = useEditorStore.getState().breakpoints;
-    console.log('[DebugStore] 🔄 Re-synchronizing breakpoints from editorStore:', allBreakpoints);
-    
-    // Convert Set<number> to number[] for each file
-    const breakpointsArray: Record<string, number[]> = {};
-    Object.entries(allBreakpoints).forEach(([uri, lineSet]) => {
-      breakpointsArray[uri] = Array.from(lineSet);
-    });
-    
-    // Sync breakpoints to WASM emulator
-    get().syncBreakpointsToWasm(pdb, breakpointsArray);
+    set({ pdbData: pdb }); // the breakpoint sync (debug/breakpointSync.ts) follows the store
+  },
+
+  // Breakpoints reach the emulator through ONE path, debug/breakpointSync.ts, which
+  // maps every file's lines with the .pdb's per-file maps (debug/pdbSource.ts).
+  syncBreakpointsToWasm: (_pdb: PdbData, _breakpoints: Record<string, number[]>) => {
+    syncEmulatorBreakpoints();
   },
   
-  // Synchronize breakpoints from editor to WASM emulator
-  syncBreakpointsToWasm: (pdb: PdbData, breakpoints: Record<string, number[]>) => {
-    console.log('[DebugStore] 🎯 Syncing breakpoints to WASM...');
-    
-    // Send message to clear all breakpoints first
-    window.postMessage({ type: 'debug-clear-breakpoints' }, '*');
-    
-    // For each file's breakpoints, convert line → address and send to WASM
-    Object.entries(breakpoints).forEach(([uri, lines]) => {
-      lines.forEach((line) => {
-        let addressHex: string | undefined = undefined;
-        
-        // Check if this is an ASM file breakpoint
-        const isAsmFile = uri.endsWith('.asm');
-        console.log(`[DebugStore] 🔍 Checking breakpoint: ${uri}:${line} (isAsmFile: ${isAsmFile})`);
-        
-        if (isAsmFile) {
-          // Search asmLineMap for this line number
-          const asmEntry = Object.values(pdb.asmLineMap || {}).find(
-            (entry: any) => entry.line === line
-          );
-          if (asmEntry) {
-            addressHex = asmEntry.address;
-          }
-        } else {
-          // VPy file - use lineMap (VPy line → address)
-          addressHex = pdb.lineMap[line.toString()];
-        }
-        
-        if (addressHex) {
-          const address = parseInt(addressHex, 16);
-          console.log(`[DebugStore] 📍 Breakpoint: ${uri}:${line} → ${addressHex} (${address})`);
-          window.postMessage({
-            type: 'debug-add-breakpoint',
-            address,
-            line,
-            uri
-          }, '*');
-        } else {
-          console.warn(`[DebugStore] ⚠️  No address mapping for ${isAsmFile ? 'ASM' : 'VPy'} line ${line} (file: ${uri})`);
-        }
-      });
-    });
+  updateCallStack: (stack) => {
+    // The first stop with a stack opens the Call Stack panel (once a session: closed
+    // again, it stays closed)
+    if (stack.length && !callStackShown) {
+      callStackShown = true;
+      try { ensureComponent('callstack'); } catch { /* no dock (tests) */ }
+    }
+    set({ callStack: stack });
   },
-  
-  updateCallStack: (stack) => set({ callStack: stack }),
-  updateStats: (cycles, fps) => set({ cycles, currentFps: fps }),
+  updateStats: (cycles, fps, drawFps) => set({ cycles, currentFps: fps, ...(drawFps === undefined ? {} : { drawFps }) }),
   
   // Debug controls
   run: () => {
@@ -255,80 +229,12 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
     window.postMessage({ type: 'debug-step-out' }, '*');
   },
   
-  // Breakpoint synchronization
-  onBreakpointAdded: (uri, line) => {
-    const { pdbData } = get();
-    
-    // Always allow adding breakpoint (will be persisted to SQLite by editorStore)
-    // Only sync to WASM emulator if PDB is loaded
-    if (!pdbData) {
-      console.log(`[DebugStore] 📍 Breakpoint added (not yet synced to emulator, waiting for PDB): ${uri}:${line}`);
-      return;
-    }
-    
-    let addressHex: string | undefined = undefined;
-    
-    // Check if this is an ASM file breakpoint
-    if (uri.endsWith('.asm')) {
-      // Search asmLineMap for this line number
-      const asmEntry = Object.values(pdbData.asmLineMap || {}).find(
-        (entry: any) => entry.line === line
-      );
-      if (asmEntry) {
-        addressHex = asmEntry.address;
-      }
-    } else {
-      // VPy file - use lineMap (VPy line → address)
-      addressHex = pdbData.lineMap[line.toString()];
-    }
-    
-    if (addressHex) {
-      const address = parseInt(addressHex, 16); // Parse hex string to decimal
-      console.log(`[DebugStore] ➕ Breakpoint added and synced to emulator: ${uri}:${line} → ${addressHex} (${address})`);
-      window.postMessage({
-        type: 'debug-add-breakpoint',
-        address,
-        line,
-        uri
-      }, '*');
-    } else {
-      const fileType = uri.endsWith('.asm') ? 'ASM' : 'VPy';
-      console.warn(`[DebugStore] ⚠️ No address mapping for ${fileType} line ${line} (file: ${uri})`);
-    }
+  // Breakpoint synchronization (the editor store changes first; this is a nudge)
+  onBreakpointAdded: (_uri, _line) => {
+    syncEmulatorBreakpoints();
   },
-  
-  onBreakpointRemoved: (uri, line) => {
-    const { pdbData } = get();
-    
-    if (!pdbData) return;
-    
-    let addressHex: string | undefined = undefined;
-    
-    // Check if this is an ASM file breakpoint
-    if (uri.endsWith('.asm')) {
-      // Search asmLineMap for this line number
-      const asmEntry = Object.values(pdbData.asmLineMap || {}).find(
-        (entry: any) => entry.line === line
-      );
-      if (asmEntry) {
-        addressHex = asmEntry.address;
-      }
-    } else {
-      // VPy file - use lineMap (VPy line → address)
-      addressHex = pdbData.lineMap[line.toString()];
-    }
-    
-    if (addressHex) {
-      const address = parseInt(addressHex, 16); // Parse hex string to decimal
-      console.log(`[DebugStore] ➖ Breakpoint removed: ${uri}:${line} → ${addressHex} (${address})`);
-      window.postMessage({
-        type: 'debug-remove-breakpoint',
-        address,
-        line,
-        uri
-      }, '*');
-    } else {
-      console.warn(`[DebugStore] ⚠️  Cannot remove - no address found for line ${line} (file: ${uri})`);
-    }
+
+  onBreakpointRemoved: (_uri, _line) => {
+    syncEmulatorBreakpoints();
   }
 }));

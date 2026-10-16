@@ -19,6 +19,110 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v0.4.0] — 2026-10-06
+
+Everything since v0.3.0. The theme of this release is new hardware: the RP2350
+debug cartridge runs on a real console, and the Ultimate Vectrex Multicart 2
+(UVM2) becomes a full target with its own SDK, emulator and calibration.
+
+### Added — Targets and runtimes
+
+- **RP2350 debug cartridge**: ARM Thumb2 backend, BIOS `svc` syscall ABI shared
+  by the firmware and the IDE emulator, SD game loading, and a beam-draw pipeline
+  (simplify, cull, proportional split, per-path re-zero) stable at 50 Hz on real
+  hardware.
+- **UVM2 (Ultimate Vectrex Multicart 2) target**: halt-mode runtime that stops the
+  6809 and drives the VIA directly over a clock-locked bus, answering the same
+  `svc` ABI so the ARM codegen is not forked. The SDK is the separate
+  [`uvmc2-sdk`](https://github.com/tullulah/uvmc2-sdk) repository.
+- **C/C++ project import (`.cvproj`)**: external C/C++ games build for PiTrex,
+  RP2350, UVM2 and the in-IDE WASM simulator. A shared `uvm2.mk` / `rp2350-cart`
+  recipe adds the target to any C project in a few lines.
+- **`libvpy`, one C runtime**: VPy builtins implemented once on top of the `v_*`
+  SDK contract and linked by both VPy and imported C games on ARM targets.
+- **Shared draw layer (`vectrex-draw`)**: one geometry path in sub-units used by
+  VPy and the C ports alike; gapped lines drawn as a single ramp; one ramp per
+  collinear run; 3D layer in C with the `.vmesh` format.
+- **UVM2 SDK**: PIO+DMA bus stream (one frame's command list as a single DMA),
+  dual core mandatory, per-game refresh rate (50, 60 or unlimited), games linked
+  in PSRAM, romsets read from the SD by the game itself, FAT file writing,
+  `.vsmp` sample streaming through the PSG volume register, 16-bit audio jack,
+  90° display rotation, text swept with the shift register.
+- **Per-console calibration**: calibration wizard (wheel screen, buttons 2+3),
+  console calibration and per-game settings kept in two separate files
+  (`UVM2.CFG`), per-channel sample-and-hold timing, asymmetric DAC rates
+  (`TASA_NEG_X/Y`).
+- **`CALIBRATE()` builtin** (`svc 30`) and the cartridge menu driven by the stick.
+- **`[uvm2]` defs in `.vpyproj`** for per-game measured constants.
+- **Per-project SDK versions**: `.vpyproj` and `.cvproj` pin a uvmc2-sdk release
+  in an `[sdk]` table; the IDE downloads it on demand into
+  `~/VectrexStudio/sdk/<tag>/`. Unpinned projects are pinned to the latest tag on
+  first build. See [SDK_VERSIONS.md](SDK_VERSIONS.md).
+- **pico-sdk on demand** for uvm2 builds: the version the SDK release asks for
+  (2.2.0) is downloaded into `~/VectrexStudio/pico-sdk/<version>/`; the Arm toolchain
+  is found in its standard install locations instead of a fixed version path.
+
+### Added — Emulator and IDE
+
+- **UVM2 in the emulator**: the second core, the PIO+DMA stream, simulated SD,
+  PSRAM window, the cartridge BIOS running in `Uvm2System`, out-of-map access
+  reporting, garbage-filled RAM and a visible HardFault. Diagnostic hooks:
+  scripted stick (`JOY`), RAM read-back (`LEER`), written SD image (`SDOUT`),
+  command-list dumps (`VOLCAR_LISTA`), core 1 PC profile (`PERFIL1`).
+- **RP2350 simulator** boots the pico-sdk path: bootrom model, RESETS/XOSC/PLL/
+  CLOCKS, boot locks, MRS/MSR, LDREX/STREX, VTOR, single-precision VFP.
+- **Simulator mounts the romset** from `~/VectrexStudio/sd/roms` before starting
+  the game.
+- **Vector editor**: per-segment intensity (in the editor and the SDK), segment
+  list in the panel, "playfield" background fit, "game" units (arcade grid), one
+  button per view, orbit with middle button + Shift.
+- **Project Settings panel**: shows the project's pinned SDK version, lists
+  installed and GitHub releases, changes the pin and downloads with progress.
+- **Video recorder** captures what is on screen and every live audio context,
+  including the jack.
+- **Ports**: Donkey Kong boots in the UVM2 emulator; SnowBros gets platforms from
+  the level `.vec` files, floor scrolling, and music/SFX ripped from its own
+  Z80 + YM3812 ROM; CrazyStones runs on PiTrex/RP2350/WASM unmodified.
+
+### Fixed
+
+- **Audio**: the PSG clock is 1,500,000 Hz, not the emulator's buffer rate; the
+  SFX editor now sounds like the game.
+- **Ramp math**: a systematic −0.79 unit bias per vector (truncating division);
+  caller units are rounded, not truncated; the t1 ceiling is computed per vector;
+  the ramp runs in 32 bits without software 64-bit division (789 → 556 cycles).
+- **UVM2**: the command list filled up silently at 8192 entries; moves over 127
+  units were clipped silently; no VPy game linked (two strong `game_header`
+  symbols); dual-core and PIO flags did nothing from VPy; empty frames are no
+  longer published; calibration was saved but never loaded.
+- **Emulator**: SUBW was not executed; wrong SBC flags; the multicore FIFO and
+  PSM never answered; zero-width vectors; both views now share one intensity
+  curve; the emulator draws what the cartridge sends, not what was intended;
+  VLDR with PC read the wrong literal.
+- **IDE**: stale `.um2`/`.elf` from a previous build no longer load; F5/F7 behave
+  the same in every project and depend on the target, not the language; C projects
+  for UVM2 reach the emulator; recent-projects list; fps counter.
+
+### Changed
+
+- Dual core + PIO + DMA are required for UVM2 builds.
+- Short-stroke trimming and budget-based re-zero were removed (they broke on
+  real hardware).
+
+### Removed
+
+- **Legacy `core/` compiler** (crate `vectrex_lang`, binary `vectrexc`).
+  Buildtools (`buildtools/`, binary `vpy_cli`) is now the only compiler.
+- **IDE compiler selector**: the Settings panel no longer has a
+  Buildtools/Core choice; every build goes through `vpy_cli`.
+- The language server `vpy_lsp` is now built from `buildtools/vpy_lsp`, on the
+  same parser as the compiler, so editor diagnostics match build errors.
+- **Bundled uvmc2-sdk**: the `ide/electron/resources/uvmc2-sdk` submodule is
+  gone; the SDK is downloaded per version. Command-line builds take it from
+  `UVMC2_SDK` or from a release already installed by the IDE.
+
+---
+
 ## [v0.2.0] — 2026-03-10
 
 ### Added — IDE: EPROM Programmer

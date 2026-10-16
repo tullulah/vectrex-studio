@@ -97,10 +97,10 @@ if (!noCompile) {
     process.exit(1);
   }
 
-  const compilerBin = path.join(WORKSPACE_ROOT, 'target', 'debug', 'vectrexc');
+  const compilerBin = path.join(WORKSPACE_ROOT, 'target', 'debug', process.platform === 'win32' ? 'vpy_cli.exe' : 'vpy_cli');
   if (!fs.existsSync(compilerBin)) {
-    console.log('[COMPILE] Building vectrexc compiler...');
-    cp.execSync('cargo build --bin vectrexc 2>&1', {
+    console.log('[COMPILE] Building vpy_cli compiler...');
+    cp.execSync('cargo build --bin vpy_cli 2>&1', {
       cwd: WORKSPACE_ROOT,
       stdio: 'inherit',
     });

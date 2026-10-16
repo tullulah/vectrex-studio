@@ -75,31 +75,38 @@ DRAW_VEC_Y           EQU $C880+$11   ; Vector draw Y offset (1 bytes)
 MIRROR_PAD           EQU $C880+$12   ; Safety padding to prevent MIRROR flag corruption (16 bytes)
 MIRROR_X             EQU $C880+$22   ; X mirror flag (0=normal, 1=flip) (1 bytes)
 MIRROR_Y             EQU $C880+$23   ; Y mirror flag (0=normal, 1=flip) (1 bytes)
-DRAW_LINE_ARGS       EQU $C880+$24   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$2E   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$30   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$32   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$33   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$34   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$36   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-DRAW_SCALE           EQU $C880+$38   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
-VAR_STATE            EQU $C880+$39   ; User variable: STATE (2 bytes)
-VAR_BTN1             EQU $C880+$3B   ; User variable: BTN1 (2 bytes)
-PSG_MUSIC_PTR        EQU $C880+$3D   ; PSG music data pointer (2 bytes)
-PSG_MUSIC_START      EQU $C880+$3F   ; PSG music start pointer (for loops) (2 bytes)
-PSG_MUSIC_ACTIVE     EQU $C880+$41   ; PSG music active flag (1 bytes)
-PSG_IS_PLAYING       EQU $C880+$42   ; PSG playing flag (1 bytes)
-PSG_DELAY_FRAMES     EQU $C880+$43   ; PSG frame delay counter (1 bytes)
-PSG_MUSIC_BANK       EQU $C880+$44   ; PSG music bank ID (for multibank) (1 bytes)
-SFX_PTR              EQU $C880+$45   ; SFX data pointer (2 bytes)
-SFX_ACTIVE           EQU $C880+$47   ; SFX active flag (1 bytes)
-SFX_BANK             EQU $C880+$48   ; SFX bank ID (for multibank) (1 bytes)
-VAR_ARG0             EQU $C880+$49   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $C880+$4B   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $C880+$4D   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $C880+$4F   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $C880+$51   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $C880+$53   ; Current ROM bank ID (multibank tracking) (1 bytes)
+SLR_CUR_X            EQU $C880+$24   ; DRAW_VECTOR: clamped (visible) beam X for clipping (1 bytes)
+SLR_TRUE_X           EQU $C880+$25   ; DRAW_VECTOR: 16-bit unclamped abs_x for line clipping (2 bytes)
+DRAW_T1_SCALED       EQU $C880+$27   ; DRAW_VECTOR: T1 scale ($7F default for non-SHOW_LEVEL) (1 bytes)
+SDCP_ABS_Y           EQU $C880+$28   ; DRAW_VECTOR: abs_y temporary for SDCP (cannot share TMPVAL — would corrupt SHOW_LEVEL's top_screen between layers) (1 bytes)
+DRAW_LINE_ARGS       EQU $C880+$29   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$33   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$35   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$37   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$38   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$39   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$3B   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+DRAW_SCALE           EQU $C880+$3D   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
+VAR_ARG0             EQU $C880+$3E   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$40   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$42   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$44   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$46   ; Function argument 4 (16-bit) (2 bytes)
+VAR_ARG5             EQU $C880+$48   ; Function argument 5 (16-bit) (2 bytes)
+VAR_ARG6             EQU $C880+$4A   ; Function argument 6 (16-bit) (2 bytes)
+VAR_ARG7             EQU $C880+$4C   ; Function argument 7 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$4E   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_STATE            EQU $C880+$4F   ; User variable: STATE (2 bytes)
+VAR_BTN1             EQU $C880+$51   ; User variable: BTN1 (2 bytes)
+PSG_MUSIC_PTR        EQU $C880+$53   ; PSG music data pointer (2 bytes)
+PSG_MUSIC_START      EQU $C880+$55   ; PSG music start pointer (for loops) (2 bytes)
+PSG_MUSIC_ACTIVE     EQU $C880+$57   ; PSG music active flag (1 bytes)
+PSG_IS_PLAYING       EQU $C880+$58   ; PSG playing flag (1 bytes)
+PSG_DELAY_FRAMES     EQU $C880+$59   ; PSG frame delay counter (1 bytes)
+PSG_MUSIC_BANK       EQU $C880+$5A   ; PSG music bank ID (for multibank) (1 bytes)
+SFX_PTR              EQU $C880+$5B   ; SFX data pointer (2 bytes)
+SFX_ACTIVE           EQU $C880+$5D   ; SFX active flag (1 bytes)
+SFX_BANK             EQU $C880+$5E   ; SFX bank ID (for multibank) (1 bytes)
 
 ;***************************************************************************
 ; MAIN PROGRAM (Bank #0)
@@ -109,6 +116,7 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    CLR DRAW_VEC_INTENSITY ; 0 = use recorded/vector intensity (no override)
     LDA #$7F
     STA DRAW_SCALE        ; Default T1 scale = $7F (127 = full BIOS scale)
     LDD #0
@@ -128,6 +136,8 @@ MAIN:
     ; Mux configured - J1_X()/J1_Y() can now be called
 
     ; Call main() for initialization
+; VPy_LINE:8
+; NATIVE_CALL: SET_INTENSITY at line 8
     ; SET_INTENSITY: Set drawing intensity
     LDD #127
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
@@ -142,6 +152,8 @@ MAIN:
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
     JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
+; VPy_LINE:11
+; NATIVE_CALL: J1_BUTTON_1 at line 11
     LDA >$C80F   ; Vec_Btns_1: bit0=1 means btn1 pressed
     BITA #$01
     BNE .J1B1_0_ON
@@ -152,93 +164,105 @@ LOOP_BODY:
 .J1B1_0_END:
     STD RESULT
     STD VAR_BTN1
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+; VPy_LINE:12
     LDD >VAR_BTN1
-    CMPD TMPVAL
-    LBEQ .CMP_0_TRUE
-    LDD #0
-    LBRA .CMP_0_END
-.CMP_0_TRUE:
-    LDD #1
-.CMP_0_END:
-    LBEQ IF_NEXT_1
+    CMPD #1
+    LBNE IF_NEXT_1
+; VPy_LINE:13
     LDD #1
     STD VAR_STATE
     LBRA IF_END_0
 IF_NEXT_1:
 IF_END_0:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+; VPy_LINE:15
     LDD >VAR_STATE
-    CMPD TMPVAL
-    LBEQ .CMP_1_TRUE
-    LDD #0
-    LBRA .CMP_1_END
-.CMP_1_TRUE:
-    LDD #1
-.CMP_1_END:
-    LBEQ IF_NEXT_3
+    CMPD #0
+    LBNE IF_NEXT_3
+; VPy_LINE:16
+; NATIVE_CALL: PLAY_MUSIC at line 16
     ; PLAY_MUSIC("intro") - play music asset (index=1)
     LDX #1        ; Music asset index for lookup
     JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
     LDD #0
     STD RESULT
+; VPy_LINE:17
+; NATIVE_CALL: DRAW_VECTOR at line 17
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: crypt_logo (index=0, 40 paths)
     LDD #0
-    TFR B,A       ; X position (low byte) — B already holds it
-    STA TMPPTR    ; Save X to temporary storage
+    STA TMPPTR2      ; save high byte of 16-bit screen_x
+    TFR B,A
+    SEX              ; A = sign-extend of B (0x00 or 0xFF)
+    CMPA TMPPTR2     ; vs actual high byte
+    LBNE DRVEC_SKIP_1          ; out of 8-bit range — skip draw
+    TFR B,A
+    STA TMPPTR       ; save 8-bit x
     LDD #10
-    TFR B,A       ; Y position (low byte) — B already holds it
-    STA TMPPTR+1  ; Save Y to temporary storage
-    LDA TMPPTR    ; X position
+    TFR B,A          ; Y position (8-bit signed in A)
+    STA TMPPTR+1     ; Save Y to temporary storage
+    LDA TMPPTR       ; X position (8-bit signed, was cull-checked)
     STA DRAW_VEC_X
-    LDA TMPPTR+1  ; Y position
+    LDB #0
+    TSTA
+    BPL .sx_pos_1
+    LDB #$FF
+.sx_pos_1:
+    STB DRAW_VEC_X_HI
+    LDA TMPPTR+1     ; Y position
     STA DRAW_VEC_Y
     CLR MIRROR_X
     CLR MIRROR_Y
     CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities
     LDX #0        ; Asset index for lookup
     JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
+DRVEC_SKIP_1:
     LDD #0
     STD RESULT
     LBRA IF_END_2
 IF_NEXT_3:
 IF_END_2:
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+; VPy_LINE:18
     LDD >VAR_STATE
-    CMPD TMPVAL
-    LBEQ .CMP_2_TRUE
-    LDD #0
-    LBRA .CMP_2_END
-.CMP_2_TRUE:
-    LDD #1
-.CMP_2_END:
-    LBEQ IF_NEXT_5
+    CMPD #1
+    LBNE IF_NEXT_5
+; VPy_LINE:19
+; NATIVE_CALL: PLAY_MUSIC at line 19
     ; PLAY_MUSIC("exploration") - play music asset (index=0)
     LDX #0        ; Music asset index for lookup
     JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
     LDD #0
     STD RESULT
+; VPy_LINE:20
+; NATIVE_CALL: DRAW_VECTOR at line 20
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: crypt_logo (index=0, 40 paths)
     LDD #0
-    TFR B,A       ; X position (low byte) — B already holds it
-    STA TMPPTR    ; Save X to temporary storage
+    STA TMPPTR2      ; save high byte of 16-bit screen_x
+    TFR B,A
+    SEX              ; A = sign-extend of B (0x00 or 0xFF)
+    CMPA TMPPTR2     ; vs actual high byte
+    LBNE DRVEC_SKIP_2          ; out of 8-bit range — skip draw
+    TFR B,A
+    STA TMPPTR       ; save 8-bit x
     LDD #10
-    TFR B,A       ; Y position (low byte) — B already holds it
-    STA TMPPTR+1  ; Save Y to temporary storage
-    LDA TMPPTR    ; X position
+    TFR B,A          ; Y position (8-bit signed in A)
+    STA TMPPTR+1     ; Save Y to temporary storage
+    LDA TMPPTR       ; X position (8-bit signed, was cull-checked)
     STA DRAW_VEC_X
-    LDA TMPPTR+1  ; Y position
+    LDB #0
+    TSTA
+    BPL .sx_pos_2
+    LDB #$FF
+.sx_pos_2:
+    STB DRAW_VEC_X_HI
+    LDA TMPPTR+1     ; Y position
     STA DRAW_VEC_Y
     CLR MIRROR_X
     CLR MIRROR_Y
     CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities
     LDX #0        ; Asset index for lookup
     JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
+DRVEC_SKIP_2:
     LDD #0
     STD RESULT
     LBRA IF_END_4
@@ -502,8 +526,7 @@ _CRYPT_LOGO_PATH21:    ; Path 21
     FCB 70              ; path21: intensity
     FCB $0A,$24,0,0        ; path21: header (y=10, x=36)
     FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
-    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
-    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
     FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
     FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
     FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
@@ -657,13 +680,13 @@ _EXPLORATION_MUSIC:
     FCB     0              ; Delay 0 frames (maintain previous state)
     FCB     9              ; Frame 0 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
+    FCB     $A0             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $58             ; Reg 2 value
+    FCB     $7E             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -677,13 +700,13 @@ _EXPLORATION_MUSIC:
     FCB     5              ; Delay 5 frames (maintain previous state)
     FCB     8              ; Frame 5 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
+    FCB     $A0             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $58             ; Reg 2 value
+    FCB     $7E             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -695,13 +718,13 @@ _EXPLORATION_MUSIC:
     FCB     11              ; Delay 11 frames (maintain previous state)
     FCB     8              ; Frame 16 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $C8             ; Reg 0 value
+    FCB     $D5             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $58             ; Reg 2 value
+    FCB     $7E             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -713,15 +736,15 @@ _EXPLORATION_MUSIC:
     FCB     17              ; Delay 17 frames (maintain previous state)
     FCB     9              ; Frame 33 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $FC             ; Reg 0 value
+    FCB     $0C             ; Reg 0 value
     FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
+    FCB     $01             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F9             ; Reg 2 value
+    FCB     $19             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
+    FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $08             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -733,15 +756,15 @@ _EXPLORATION_MUSIC:
     FCB     5              ; Delay 5 frames (maintain previous state)
     FCB     8              ; Frame 38 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $FC             ; Reg 0 value
+    FCB     $0C             ; Reg 0 value
     FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
+    FCB     $01             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F9             ; Reg 2 value
+    FCB     $19             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
+    FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $08             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -751,15 +774,15 @@ _EXPLORATION_MUSIC:
     FCB     12              ; Delay 12 frames (maintain previous state)
     FCB     8              ; Frame 50 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $C8             ; Reg 0 value
+    FCB     $D5             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F9             ; Reg 2 value
+    FCB     $19             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
+    FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $08             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -769,13 +792,13 @@ _EXPLORATION_MUSIC:
     FCB     16              ; Delay 16 frames (maintain previous state)
     FCB     9              ; Frame 66 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
+    FCB     $A0             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $90             ; Reg 2 value
+    FCB     $AA             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -789,13 +812,13 @@ _EXPLORATION_MUSIC:
     FCB     6              ; Delay 6 frames (maintain previous state)
     FCB     8              ; Frame 72 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
+    FCB     $A0             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $90             ; Reg 2 value
+    FCB     $AA             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -807,13 +830,13 @@ _EXPLORATION_MUSIC:
     FCB     11              ; Delay 11 frames (maintain previous state)
     FCB     8              ; Frame 83 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
+    FCB     $B3             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $90             ; Reg 2 value
+    FCB     $AA             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -825,13 +848,13 @@ _EXPLORATION_MUSIC:
     FCB     17              ; Delay 17 frames (maintain previous state)
     FCB     9              ; Frame 100 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $BD             ; Reg 0 value
+    FCB     $C9             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $51             ; Reg 2 value
+    FCB     $66             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -845,13 +868,13 @@ _EXPLORATION_MUSIC:
     FCB     5              ; Delay 5 frames (maintain previous state)
     FCB     8              ; Frame 105 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $BD             ; Reg 0 value
+    FCB     $C9             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $51             ; Reg 2 value
+    FCB     $66             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -863,13 +886,13 @@ _EXPLORATION_MUSIC:
     FCB     11              ; Delay 11 frames (maintain previous state)
     FCB     8              ; Frame 116 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $C8             ; Reg 0 value
+    FCB     $D5             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $51             ; Reg 2 value
+    FCB     $66             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -881,13 +904,13 @@ _EXPLORATION_MUSIC:
     FCB     17              ; Delay 17 frames (maintain previous state)
     FCB     9              ; Frame 133 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $E1             ; Reg 0 value
+    FCB     $EF             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0B             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $58             ; Reg 2 value
+    FCB     $7E             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -901,13 +924,13 @@ _EXPLORATION_MUSIC:
     FCB     5              ; Delay 5 frames (maintain previous state)
     FCB     8              ; Frame 138 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $E1             ; Reg 0 value
+    FCB     $EF             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0B             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $58             ; Reg 2 value
+    FCB     $7E             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -919,13 +942,13 @@ _EXPLORATION_MUSIC:
     FCB     12              ; Delay 12 frames (maintain previous state)
     FCB     8              ; Frame 150 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $FC             ; Reg 0 value
+    FCB     $0C             ; Reg 0 value
     FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
+    FCB     $01             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0B             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $58             ; Reg 2 value
+    FCB     $7E             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -937,13 +960,13 @@ _EXPLORATION_MUSIC:
     FCB     16              ; Delay 16 frames (maintain previous state)
     FCB     9              ; Frame 166 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $0B             ; Reg 0 value
+    FCB     $1C             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $01             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $A2             ; Reg 2 value
+    FCB     $CD             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -957,13 +980,13 @@ _EXPLORATION_MUSIC:
     FCB     6              ; Delay 6 frames (maintain previous state)
     FCB     8              ; Frame 172 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $0B             ; Reg 0 value
+    FCB     $1C             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $01             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $A2             ; Reg 2 value
+    FCB     $CD             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -975,15 +998,15 @@ _EXPLORATION_MUSIC:
     FCB     28              ; Delay 28 frames (maintain previous state)
     FCB     9              ; Frame 200 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $FC             ; Reg 0 value
+    FCB     $0C             ; Reg 0 value
     FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
+    FCB     $01             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0B             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F4             ; Reg 2 value
+    FCB     $24             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
+    FCB     $03             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $08             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -995,15 +1018,15 @@ _EXPLORATION_MUSIC:
     FCB     5              ; Delay 5 frames (maintain previous state)
     FCB     8              ; Frame 205 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $FC             ; Reg 0 value
+    FCB     $0C             ; Reg 0 value
     FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
+    FCB     $01             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0B             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F4             ; Reg 2 value
+    FCB     $24             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
+    FCB     $03             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $08             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -1013,15 +1036,15 @@ _EXPLORATION_MUSIC:
     FCB     11              ; Delay 11 frames (maintain previous state)
     FCB     8              ; Frame 216 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $E1             ; Reg 0 value
+    FCB     $EF             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0B             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F4             ; Reg 2 value
+    FCB     $24             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
+    FCB     $03             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $08             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -1031,13 +1054,13 @@ _EXPLORATION_MUSIC:
     FCB     17              ; Delay 17 frames (maintain previous state)
     FCB     9              ; Frame 233 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $C8             ; Reg 0 value
+    FCB     $D5             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $21             ; Reg 2 value
+    FCB     $54             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $03             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1051,13 +1074,13 @@ _EXPLORATION_MUSIC:
     FCB     5              ; Delay 5 frames (maintain previous state)
     FCB     8              ; Frame 238 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $C8             ; Reg 0 value
+    FCB     $D5             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $21             ; Reg 2 value
+    FCB     $54             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $03             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1069,13 +1092,13 @@ _EXPLORATION_MUSIC:
     FCB     28              ; Delay 28 frames (maintain previous state)
     FCB     9              ; Frame 266 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $BD             ; Reg 0 value
+    FCB     $C9             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $84             ; Reg 2 value
+    FCB     $BD             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $03             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1089,13 +1112,13 @@ _EXPLORATION_MUSIC:
     FCB     6              ; Delay 6 frames (maintain previous state)
     FCB     8              ; Frame 272 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $BD             ; Reg 0 value
+    FCB     $C9             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $84             ; Reg 2 value
+    FCB     $BD             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $03             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1107,13 +1130,13 @@ _EXPLORATION_MUSIC:
     FCB     11              ; Delay 11 frames (maintain previous state)
     FCB     8              ; Frame 283 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $C8             ; Reg 0 value
+    FCB     $D5             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0B             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $84             ; Reg 2 value
+    FCB     $BD             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $03             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1125,15 +1148,15 @@ _EXPLORATION_MUSIC:
     FCB     17              ; Delay 17 frames (maintain previous state)
     FCB     9              ; Frame 300 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $E1             ; Reg 0 value
+    FCB     $EF             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0B             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F4             ; Reg 2 value
+    FCB     $24             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
+    FCB     $03             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $08             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -1145,15 +1168,15 @@ _EXPLORATION_MUSIC:
     FCB     5              ; Delay 5 frames (maintain previous state)
     FCB     8              ; Frame 305 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $E1             ; Reg 0 value
+    FCB     $EF             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0B             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F4             ; Reg 2 value
+    FCB     $24             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
+    FCB     $03             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $08             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -1163,15 +1186,15 @@ _EXPLORATION_MUSIC:
     FCB     11              ; Delay 11 frames (maintain previous state)
     FCB     8              ; Frame 316 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $FC             ; Reg 0 value
+    FCB     $0C             ; Reg 0 value
     FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
+    FCB     $01             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0B             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F4             ; Reg 2 value
+    FCB     $24             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
+    FCB     $03             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $08             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -1181,13 +1204,13 @@ _EXPLORATION_MUSIC:
     FCB     17              ; Delay 17 frames (maintain previous state)
     FCB     9              ; Frame 333 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $0B             ; Reg 0 value
+    FCB     $1C             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $01             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0B             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $58             ; Reg 2 value
+    FCB     $7E             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1201,13 +1224,13 @@ _EXPLORATION_MUSIC:
     FCB     5              ; Delay 5 frames (maintain previous state)
     FCB     8              ; Frame 338 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $0B             ; Reg 0 value
+    FCB     $1C             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $01             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0B             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $58             ; Reg 2 value
+    FCB     $7E             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1219,13 +1242,13 @@ _EXPLORATION_MUSIC:
     FCB     12              ; Delay 12 frames (maintain previous state)
     FCB     8              ; Frame 350 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $2C             ; Reg 0 value
+    FCB     $3F             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $01             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0A             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $58             ; Reg 2 value
+    FCB     $7E             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1237,15 +1260,15 @@ _EXPLORATION_MUSIC:
     FCB     16              ; Delay 16 frames (maintain previous state)
     FCB     9              ; Frame 366 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $0B             ; Reg 0 value
+    FCB     $1C             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $01             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0B             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F9             ; Reg 2 value
+    FCB     $19             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
+    FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $08             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -1257,15 +1280,15 @@ _EXPLORATION_MUSIC:
     FCB     6              ; Delay 6 frames (maintain previous state)
     FCB     8              ; Frame 372 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $0B             ; Reg 0 value
+    FCB     $1C             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $01             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0B             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F9             ; Reg 2 value
+    FCB     $19             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
+    FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $08             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -1275,15 +1298,15 @@ _EXPLORATION_MUSIC:
     FCB     11              ; Delay 11 frames (maintain previous state)
     FCB     8              ; Frame 383 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $FC             ; Reg 0 value
+    FCB     $0C             ; Reg 0 value
     FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
+    FCB     $01             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0B             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F9             ; Reg 2 value
+    FCB     $19             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
+    FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $08             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -1293,13 +1316,13 @@ _EXPLORATION_MUSIC:
     FCB     17              ; Delay 17 frames (maintain previous state)
     FCB     9              ; Frame 400 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
+    FCB     $A0             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $90             ; Reg 2 value
+    FCB     $AA             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1313,13 +1336,13 @@ _EXPLORATION_MUSIC:
     FCB     5              ; Delay 5 frames (maintain previous state)
     FCB     8              ; Frame 405 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
+    FCB     $A0             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $90             ; Reg 2 value
+    FCB     $AA             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1331,13 +1354,13 @@ _EXPLORATION_MUSIC:
     FCB     28              ; Delay 28 frames (maintain previous state)
     FCB     9              ; Frame 433 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
+    FCB     $B3             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $C2             ; Reg 2 value
+    FCB     $DE             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1351,13 +1374,13 @@ _EXPLORATION_MUSIC:
     FCB     5              ; Delay 5 frames (maintain previous state)
     FCB     8              ; Frame 438 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
+    FCB     $B3             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $C2             ; Reg 2 value
+    FCB     $DE             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1369,13 +1392,13 @@ _EXPLORATION_MUSIC:
     FCB     11              ; Delay 11 frames (maintain previous state)
     FCB     8              ; Frame 449 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $BD             ; Reg 0 value
+    FCB     $C9             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $C2             ; Reg 2 value
+    FCB     $DE             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1387,15 +1410,15 @@ _EXPLORATION_MUSIC:
     FCB     17              ; Delay 17 frames (maintain previous state)
     FCB     9              ; Frame 466 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $C8             ; Reg 0 value
+    FCB     $D5             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F9             ; Reg 2 value
+    FCB     $19             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
+    FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $08             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -1407,15 +1430,15 @@ _EXPLORATION_MUSIC:
     FCB     6              ; Delay 6 frames (maintain previous state)
     FCB     8              ; Frame 472 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $C8             ; Reg 0 value
+    FCB     $D5             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F9             ; Reg 2 value
+    FCB     $19             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
+    FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $08             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -1425,15 +1448,15 @@ _EXPLORATION_MUSIC:
     FCB     11              ; Delay 11 frames (maintain previous state)
     FCB     8              ; Frame 483 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $E1             ; Reg 0 value
+    FCB     $EF             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0B             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F9             ; Reg 2 value
+    FCB     $19             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
+    FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $08             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -1443,13 +1466,13 @@ _EXPLORATION_MUSIC:
     FCB     16              ; Delay 16 frames (maintain previous state)
     FCB     9              ; Frame 499 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $2C             ; Reg 0 value
+    FCB     $3F             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $01             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $58             ; Reg 2 value
+    FCB     $7E             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1463,13 +1486,13 @@ _EXPLORATION_MUSIC:
     FCB     6              ; Delay 6 frames (maintain previous state)
     FCB     8              ; Frame 505 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $2C             ; Reg 0 value
+    FCB     $3F             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $01             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $58             ; Reg 2 value
+    FCB     $7E             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1478,7 +1501,17 @@ _EXPLORATION_MUSIC:
     FCB     $00             ; Reg 10 value
     FCB     7               ; Reg 7 number
     FCB     $3C             ; Reg 7 value
-    FCB     28              ; Delay 28 frames before loop
+    FCB     4               ; Tail delay before force-silence (preserve last note release)
+    FCB     4               ; silence event (4 regs)
+    FCB     8               ; Reg 8 number
+    FCB     $00             ; Reg 8 value
+    FCB     9               ; Reg 9 number
+    FCB     $00             ; Reg 9 value
+    FCB     10               ; Reg 10 number
+    FCB     $00             ; Reg 10 value
+    FCB     7               ; Reg 7 number
+    FCB     $3F             ; Reg 7 value
+    FCB     24              ; Delay 24 frames before loop
     FCB     $FF             ; Loop command ($FF never valid as count)
     FDB     _EXPLORATION_MUSIC       ; Jump to start (absolute address)
 
@@ -1492,13 +1525,13 @@ _INTRO_MUSIC:
     FCB     0              ; Delay 0 frames (maintain previous state)
     FCB     9              ; Frame 0 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
+    FCB     $A0             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0E             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $58             ; Reg 2 value
+    FCB     $7E             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1512,13 +1545,13 @@ _INTRO_MUSIC:
     FCB     7              ; Delay 7 frames (maintain previous state)
     FCB     8              ; Frame 7 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
+    FCB     $A0             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0E             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $58             ; Reg 2 value
+    FCB     $7E             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1530,15 +1563,15 @@ _INTRO_MUSIC:
     FCB     16              ; Delay 16 frames (maintain previous state)
     FCB     9              ; Frame 23 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
+    FCB     $A0             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F9             ; Reg 2 value
+    FCB     $19             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
+    FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $09             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -1550,15 +1583,15 @@ _INTRO_MUSIC:
     FCB     2              ; Delay 2 frames (maintain previous state)
     FCB     8              ; Frame 25 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
+    FCB     $A0             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F9             ; Reg 2 value
+    FCB     $19             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
+    FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $09             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -1568,15 +1601,15 @@ _INTRO_MUSIC:
     FCB     9              ; Delay 9 frames (maintain previous state)
     FCB     8              ; Frame 34 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $85             ; Reg 0 value
+    FCB     $8E             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F9             ; Reg 2 value
+    FCB     $19             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
+    FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $09             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -1586,13 +1619,13 @@ _INTRO_MUSIC:
     FCB     12              ; Delay 12 frames (maintain previous state)
     FCB     9              ; Frame 46 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $7E             ; Reg 0 value
+    FCB     $86             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0E             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $90             ; Reg 2 value
+    FCB     $AA             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1606,13 +1639,13 @@ _INTRO_MUSIC:
     FCB     5              ; Delay 5 frames (maintain previous state)
     FCB     8              ; Frame 51 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $7E             ; Reg 0 value
+    FCB     $86             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0E             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $90             ; Reg 2 value
+    FCB     $AA             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1624,13 +1657,13 @@ _INTRO_MUSIC:
     FCB     18              ; Delay 18 frames (maintain previous state)
     FCB     9              ; Frame 69 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $85             ; Reg 0 value
+    FCB     $8E             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $A2             ; Reg 2 value
+    FCB     $CD             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1644,13 +1677,13 @@ _INTRO_MUSIC:
     FCB     3              ; Delay 3 frames (maintain previous state)
     FCB     8              ; Frame 72 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $85             ; Reg 0 value
+    FCB     $8E             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $A2             ; Reg 2 value
+    FCB     $CD             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1662,13 +1695,13 @@ _INTRO_MUSIC:
     FCB     8              ; Delay 8 frames (maintain previous state)
     FCB     8              ; Frame 80 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
+    FCB     $A0             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $A2             ; Reg 2 value
+    FCB     $CD             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1680,13 +1713,13 @@ _INTRO_MUSIC:
     FCB     12              ; Delay 12 frames (maintain previous state)
     FCB     9              ; Frame 92 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
+    FCB     $B3             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $21             ; Reg 2 value
+    FCB     $54             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $03             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1700,13 +1733,13 @@ _INTRO_MUSIC:
     FCB     8              ; Delay 8 frames (maintain previous state)
     FCB     8              ; Frame 100 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
+    FCB     $B3             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $21             ; Reg 2 value
+    FCB     $54             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $03             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1718,13 +1751,13 @@ _INTRO_MUSIC:
     FCB     15              ; Delay 15 frames (maintain previous state)
     FCB     9              ; Frame 115 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $BD             ; Reg 0 value
+    FCB     $C9             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $A2             ; Reg 2 value
+    FCB     $CD             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1738,13 +1771,13 @@ _INTRO_MUSIC:
     FCB     3              ; Delay 3 frames (maintain previous state)
     FCB     8              ; Frame 118 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $BD             ; Reg 0 value
+    FCB     $C9             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $A2             ; Reg 2 value
+    FCB     $CD             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1756,13 +1789,13 @@ _INTRO_MUSIC:
     FCB     8              ; Delay 8 frames (maintain previous state)
     FCB     8              ; Frame 126 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $C8             ; Reg 0 value
+    FCB     $D5             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $A2             ; Reg 2 value
+    FCB     $CD             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1774,13 +1807,13 @@ _INTRO_MUSIC:
     FCB     12              ; Delay 12 frames (maintain previous state)
     FCB     9              ; Frame 138 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $E1             ; Reg 0 value
+    FCB     $EF             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $17             ; Reg 2 value
+    FCB     $39             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1794,13 +1827,13 @@ _INTRO_MUSIC:
     FCB     6              ; Delay 6 frames (maintain previous state)
     FCB     8              ; Frame 144 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $E1             ; Reg 0 value
+    FCB     $EF             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $17             ; Reg 2 value
+    FCB     $39             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1812,13 +1845,13 @@ _INTRO_MUSIC:
     FCB     17              ; Delay 17 frames (maintain previous state)
     FCB     9              ; Frame 161 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $C8             ; Reg 0 value
+    FCB     $D5             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $21             ; Reg 2 value
+    FCB     $54             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $03             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1832,13 +1865,13 @@ _INTRO_MUSIC:
     FCB     3              ; Delay 3 frames (maintain previous state)
     FCB     8              ; Frame 164 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $C8             ; Reg 0 value
+    FCB     $D5             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $21             ; Reg 2 value
+    FCB     $54             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $03             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1850,15 +1883,15 @@ _INTRO_MUSIC:
     FCB     20              ; Delay 20 frames (maintain previous state)
     FCB     9              ; Frame 184 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $BD             ; Reg 0 value
+    FCB     $C9             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F4             ; Reg 2 value
+    FCB     $24             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
+    FCB     $03             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -1870,15 +1903,15 @@ _INTRO_MUSIC:
     FCB     8              ; Delay 8 frames (maintain previous state)
     FCB     8              ; Frame 192 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $BD             ; Reg 0 value
+    FCB     $C9             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F4             ; Reg 2 value
+    FCB     $24             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
+    FCB     $03             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -1888,15 +1921,15 @@ _INTRO_MUSIC:
     FCB     4              ; Delay 4 frames (maintain previous state)
     FCB     8              ; Frame 196 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
+    FCB     $B3             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F4             ; Reg 2 value
+    FCB     $24             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
+    FCB     $03             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -1906,13 +1939,13 @@ _INTRO_MUSIC:
     FCB     11              ; Delay 11 frames (maintain previous state)
     FCB     9              ; Frame 207 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
+    FCB     $A0             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0E             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $58             ; Reg 2 value
+    FCB     $7E             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1926,13 +1959,13 @@ _INTRO_MUSIC:
     FCB     3              ; Delay 3 frames (maintain previous state)
     FCB     8              ; Frame 210 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
+    FCB     $A0             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0E             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $58             ; Reg 2 value
+    FCB     $7E             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -1944,15 +1977,15 @@ _INTRO_MUSIC:
     FCB     20              ; Delay 20 frames (maintain previous state)
     FCB     9              ; Frame 230 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $BD             ; Reg 0 value
+    FCB     $C9             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F9             ; Reg 2 value
+    FCB     $19             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
+    FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $09             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -1964,15 +1997,15 @@ _INTRO_MUSIC:
     FCB     6              ; Delay 6 frames (maintain previous state)
     FCB     8              ; Frame 236 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $BD             ; Reg 0 value
+    FCB     $C9             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F9             ; Reg 2 value
+    FCB     $19             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
+    FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $09             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -1982,15 +2015,15 @@ _INTRO_MUSIC:
     FCB     6              ; Delay 6 frames (maintain previous state)
     FCB     8              ; Frame 242 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
+    FCB     $B3             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F9             ; Reg 2 value
+    FCB     $19             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
+    FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $09             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -2000,13 +2033,13 @@ _INTRO_MUSIC:
     FCB     11              ; Delay 11 frames (maintain previous state)
     FCB     9              ; Frame 253 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
+    FCB     $A0             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0E             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $A2             ; Reg 2 value
+    FCB     $CD             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -2020,13 +2053,13 @@ _INTRO_MUSIC:
     FCB     3              ; Delay 3 frames (maintain previous state)
     FCB     8              ; Frame 256 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
+    FCB     $A0             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0E             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $A2             ; Reg 2 value
+    FCB     $CD             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -2038,13 +2071,13 @@ _INTRO_MUSIC:
     FCB     9              ; Delay 9 frames (maintain previous state)
     FCB     8              ; Frame 265 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $85             ; Reg 0 value
+    FCB     $8E             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0E             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $A2             ; Reg 2 value
+    FCB     $CD             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -2056,13 +2089,13 @@ _INTRO_MUSIC:
     FCB     11              ; Delay 11 frames (maintain previous state)
     FCB     9              ; Frame 276 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $7E             ; Reg 0 value
+    FCB     $86             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0F             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $58             ; Reg 2 value
+    FCB     $7E             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -2076,13 +2109,13 @@ _INTRO_MUSIC:
     FCB     8              ; Delay 8 frames (maintain previous state)
     FCB     8              ; Frame 284 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $7E             ; Reg 0 value
+    FCB     $86             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0F             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $58             ; Reg 2 value
+    FCB     $7E             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -2094,13 +2127,13 @@ _INTRO_MUSIC:
     FCB     16              ; Delay 16 frames (maintain previous state)
     FCB     9              ; Frame 300 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $85             ; Reg 0 value
+    FCB     $8E             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0E             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $21             ; Reg 2 value
+    FCB     $54             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $03             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -2114,13 +2147,13 @@ _INTRO_MUSIC:
     FCB     2              ; Delay 2 frames (maintain previous state)
     FCB     8              ; Frame 302 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $85             ; Reg 0 value
+    FCB     $8E             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0E             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $21             ; Reg 2 value
+    FCB     $54             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $03             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -2132,13 +2165,13 @@ _INTRO_MUSIC:
     FCB     9              ; Delay 9 frames (maintain previous state)
     FCB     8              ; Frame 311 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
+    FCB     $A0             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0E             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $21             ; Reg 2 value
+    FCB     $54             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $03             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -2150,15 +2183,15 @@ _INTRO_MUSIC:
     FCB     12              ; Delay 12 frames (maintain previous state)
     FCB     9              ; Frame 323 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
+    FCB     $B3             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F9             ; Reg 2 value
+    FCB     $19             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
+    FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $09             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -2170,15 +2203,15 @@ _INTRO_MUSIC:
     FCB     5              ; Delay 5 frames (maintain previous state)
     FCB     8              ; Frame 328 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
+    FCB     $B3             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F9             ; Reg 2 value
+    FCB     $19             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
+    FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $09             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -2188,15 +2221,15 @@ _INTRO_MUSIC:
     FCB     6              ; Delay 6 frames (maintain previous state)
     FCB     8              ; Frame 334 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $BD             ; Reg 0 value
+    FCB     $C9             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $F9             ; Reg 2 value
+    FCB     $19             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
+    FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $09             ; Reg 9 value
     FCB     10               ; Reg 10 number
@@ -2206,13 +2239,13 @@ _INTRO_MUSIC:
     FCB     12              ; Delay 12 frames (maintain previous state)
     FCB     9              ; Frame 346 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $C8             ; Reg 0 value
+    FCB     $D5             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $58             ; Reg 2 value
+    FCB     $7E             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -2226,13 +2259,13 @@ _INTRO_MUSIC:
     FCB     3              ; Delay 3 frames (maintain previous state)
     FCB     8              ; Frame 349 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $C8             ; Reg 0 value
+    FCB     $D5             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $58             ; Reg 2 value
+    FCB     $7E             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
@@ -2241,7 +2274,17 @@ _INTRO_MUSIC:
     FCB     $00             ; Reg 10 value
     FCB     7               ; Reg 7 number
     FCB     $3C             ; Reg 7 value
-    FCB     20              ; Delay 20 frames before loop
+    FCB     4               ; Tail delay before force-silence (preserve last note release)
+    FCB     4               ; silence event (4 regs)
+    FCB     8               ; Reg 8 number
+    FCB     $00             ; Reg 8 value
+    FCB     9               ; Reg 9 number
+    FCB     $00             ; Reg 9 value
+    FCB     10               ; Reg 10 number
+    FCB     $00             ; Reg 10 value
+    FCB     7               ; Reg 7 number
+    FCB     $3F             ; Reg 7 value
+    FCB     16              ; Delay 16 frames before loop
     FCB     $FF             ; Loop command ($FF never valid as count)
     FDB     _INTRO_MUSIC       ; Jump to start (absolute address)
 
@@ -2330,6 +2373,10 @@ DRAW_VECTOR_BANKED:
     ; Set DP=$D0 for DSWM / VIA access (caller set MIRROR_X/Y/INTENSITY)
     JSR $F1AA            ; DP_to_D0
 
+    ; Set DRAW_T1_SCALED to BIOS default ($7F) — SLR_DRAW_CLIPPED_PATH reads it
+    ; when the fallback path is taken.
+    LDA #$7F
+    STA >DRAW_T1_SCALED
     ; Loop over all paths (header: FDB path_count, then FDB table)
     LDD ,X               ; D = path_count (16-bit FDB at header start)
     CMPD #0
@@ -2338,7 +2385,25 @@ DRAW_VECTOR_BANKED:
 DVB_PATH_LOOP:
     PSHS D               ; Save remaining path count (2 bytes)
     LDX ,Y               ; X = path data address (FDB entry)
+    ; Hybrid clip decision: fast DSWM if screen_x deep inside, slow SDCP near edges.
+    LDA >DRAW_VEC_X_HI
+    BEQ DVB_CHECK_POS
+    INCA
+    BNE DVB_USE_SDCP
+    LDA >DRAW_VEC_X
+    CMPA #$B0            ; -80
+    BHS DVB_USE_DSWM
+    BRA DVB_USE_SDCP
+DVB_CHECK_POS:
+    LDA >DRAW_VEC_X
+    CMPA #80
+    BLS DVB_USE_DSWM
+DVB_USE_SDCP:
+    JSR SLR_DRAW_CLIPPED_PATH
+    BRA DVB_PATH_AFTER
+DVB_USE_DSWM:
     JSR Draw_Sync_List_At_With_Mirrors
+DVB_PATH_AFTER:
     LEAY 2,Y             ; Advance to next FDB entry
     PULS D               ; Restore count
     SUBD #1
@@ -2621,6 +2686,180 @@ BEQ DSWM_W3
 LBRA DSWM_LOOP          ; Long branch
 DSWM_DONE:
 RTS
+; === SLR_DRAW_CLIPPED_PATH ===
+SLR_DRAW_CLIPPED_PATH:
+    LDA >DRAW_VEC_INTENSITY ; check override
+    BNE SDCP_USE_OVERRIDE
+    LDA ,X+                 ; read intensity from path data
+    BRA SDCP_SET_INTENS
+SDCP_USE_OVERRIDE:
+    LEAX 1,X                ; skip intensity byte
+SDCP_SET_INTENS:
+    STA >$C832              ; Vec_Misc_Count (DDRB-safe, no JSR)
+    LDB ,X+                 ; B = y_start (relative to center)
+    LDA ,X+                 ; A = x_start (relative to center)
+    ADDB >DRAW_VEC_Y        ; B = abs_y
+    STB >SDCP_ABS_Y         ; save abs_y for moveto (NOT TMPVAL — SHOW_LEVEL's top_screen lives there)
+    TFR A,B                 ; B = x_start (SEX extends B, not A)
+    SEX                      ; sign-extend B→D (A=sign, B=x_start)
+    ADDD >DRAW_VEC_X_HI     ; D = abs_x_16 = SEX(x_start) + screen_x_16
+    ; D = abs_x_16. Save it in 16-bit tracker SLR_TRUE_X (unclamped).
+    STD >SLR_TRUE_X
+    ; Compute clamped beam position for hardware Moveto.
+    TSTA
+    BEQ SDCP_INIT_POS
+    INCA
+    BEQ SDCP_INIT_NEG_OK    ; A was $FF (small negative)
+    ; Way off — clamp to nearest edge by sign of original A (now in INCA result)
+    LDB #$80                ; default to left edge
+    LDA >SLR_TRUE_X         ; original hi byte
+    BMI SDCP_USE_CLAMPED    ; negative → -128 (left)
+    LDB #$7F                ; positive way off → +127 (right)
+    BRA SDCP_USE_CLAMPED
+SDCP_INIT_NEG_OK:
+    CMPB #$80
+    BHS SDCP_USE_CLAMPED    ; -128..-1, valid
+    LDB #$80                ; clamp
+    BRA SDCP_USE_CLAMPED
+SDCP_INIT_POS:
+    CMPB #$7F
+    BLS SDCP_USE_CLAMPED
+    LDB #$7F                ; clamp positive
+SDCP_USE_CLAMPED:
+    TFR B,A                  ; A = clamped beam x
+    STA >SLR_CUR_X          ; clamped value goes to integrator
+    CLR VIA_shift_reg
+    LDA #$CC
+    STA VIA_cntl
+    CLR VIA_port_a
+    LDA #$03
+    STA VIA_port_b
+    LDA #$02
+    STA VIA_port_b
+    LDA #$02
+    STA VIA_port_b
+    LDA #$01
+    STA VIA_port_b
+    LDB >SDCP_ABS_Y         ; B = abs_y
+    STB VIA_port_a          ; DY → DAC (PB=1: hold)
+    CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
+    LDA >SLR_CUR_X          ; abs_x (load = settling for Y)
+    PSHS A                  ; ~4 more settling cycles
+    LDA #$CE
+    STA VIA_cntl            ; PCR=$CE: /ZERO high
+    CLR VIA_shift_reg       ; SR=0: beam off
+    INC VIA_port_b          ; PB=1: lock Y direction
+    PULS A                  ; restore abs_x
+    STA VIA_port_a          ; DX → DAC
+    LDA >DRAW_T1_SCALED     ; effective T1 for this object (scale * 127)
+    STA VIA_t1_cnt_lo       ; load T1 latch
+    LEAX 2,X                ; skip next_y, next_x (the 0,0)
+    CLR VIA_t1_cnt_hi       ; start T1 → ramp
+SDCP_MOVETO_W:
+    LDA VIA_int_flags
+    ANDA #$40
+    BEQ SDCP_MOVETO_W
+    ; PB=1 on exit — draw loop ready
+SDCP_SEG_LOOP:
+    LDA ,X+                 ; flags
+    CMPA #2
+    LBEQ SDCP_DONE
+    LDB ,X+                 ; B = dy
+    STB >TMPPTR2            ; save dy
+    LDA ,X+                 ; A = dx (8-bit signed)
+    ; --- 16-bit add: true_new_x_16 = SLR_TRUE_X + SEX(dx) ---
+    TFR A,B                 ; B = dx
+    SEX                      ; D = sign-extended dx (A=sign, B=dx)
+    ADDD >SLR_TRUE_X        ; D = new true_x_16
+    STD >SLR_TRUE_X         ; update 16-bit tracker
+    ; --- Clamp D to [-128, +127] → 8-bit clamped_new_x in B ---
+    TSTA
+    BEQ SDCP_SEG_POS
+    INCA
+    BEQ SDCP_SEG_NEG_OK     ; A was $FF
+    ; Way off — clamp by sign of original D
+    LDA >SLR_TRUE_X         ; reload hi byte
+    BMI SDCP_SEG_CLAMP_LEFT
+    LDB #$7F                ; positive way off → +127
+    BRA SDCP_SEG_CLAMPED
+SDCP_SEG_CLAMP_LEFT:
+    LDB #$80                ; negative way off → -128
+    BRA SDCP_SEG_CLAMPED
+SDCP_SEG_NEG_OK:
+    CMPB #$80
+    BHS SDCP_SEG_CLAMPED
+    LDB #$80
+    BRA SDCP_SEG_CLAMPED
+SDCP_SEG_POS:
+    CMPB #$7F
+    BLS SDCP_SEG_CLAMPED
+    LDB #$7F
+SDCP_SEG_CLAMPED:
+    ; B = clamped_new_x. Compute beam_dx = B - SLR_CUR_X (8-bit signed).
+    LDA >SLR_CUR_X
+    PSHS B                  ; save clamped_new_x
+    NEGA                    ; A = -cur_x
+    ADDA ,S                 ; A = clamped_new_x - cur_x = beam_dx
+    PULS B                  ; B = clamped_new_x
+    ; Update SLR_CUR_X to new clamped position
+    STB >SLR_CUR_X
+    ; Decide beam ON/OFF/skip:
+    ; - beam_dx != 0                       → beam ON,  ramp(beam_dx, dy)
+    ; - beam_dx == 0 AND cur at edge AND dy==0 → skip (zero motion)
+    ; - beam_dx == 0 AND cur at edge AND dy!=0 → beam OFF ramp(0, dy)
+    ;   (Y must track logical position so subsequent segments draw at correct Y)
+    ; - beam_dx == 0 AND not at edge       → beam ON,  ramp(0, dy) — vertical
+    TSTA
+    BNE SDCP_SEG_DRAW       ; non-zero beam_dx → draw
+    CMPB #$80               ; at left edge?
+    BEQ SDCP_SEG_OFF_X      ; yes → fully off-screen left
+    CMPB #$7F               ; at right edge?
+    BEQ SDCP_SEG_OFF_X      ; yes → fully off-screen right
+SDCP_SEG_DRAW:
+    LDB >TMPPTR2            ; restore dy
+    ; A = beam_dx (visible X delta), B = dy. Beam ON ramp.
+    STB VIA_port_a          ; DY → DAC (PB=1: hold)
+    CLR VIA_port_b          ; PB=0: mux for DY
+    NOP
+    NOP
+    NOP
+    INC VIA_port_b          ; PB=1: lock DY
+    STA VIA_port_a          ; DX → DAC
+    LDA #$FF
+    STA VIA_shift_reg       ; beam ON
+    CLR VIA_t1_cnt_hi       ; start T1
+SDCP_W_DRAW:
+    LDA VIA_int_flags
+    ANDA #$40
+    BEQ SDCP_W_DRAW
+    CLR VIA_shift_reg       ; beam OFF
+    LBRA SDCP_SEG_LOOP
+
+    ; --- Off-screen-X path: dx contribution is invisible, but Y must track ---
+SDCP_SEG_OFF_X:
+    LDB >TMPPTR2            ; B = dy
+    TSTB                     ; dy == 0?
+    LBEQ SDCP_SEG_LOOP      ; no Y motion either → skip entire segment
+    ; Ramp(0, dy) with beam OFF. A is already 0 (beam_dx).
+    CLRA                     ; defensive: ensure dx=0
+    STB VIA_port_a          ; DY → DAC
+    CLR VIA_port_b
+    NOP
+    NOP
+    NOP
+    INC VIA_port_b
+    STA VIA_port_a          ; DX = 0
+    ; beam stays OFF (no STA VIA_shift_reg)
+    CLR VIA_t1_cnt_hi       ; start T1 (ramp, beam off)
+SDCP_W_OFF_X:
+    LDA VIA_int_flags
+    ANDA #$40
+    BEQ SDCP_W_OFF_X
+    LBRA SDCP_SEG_LOOP
+
+SDCP_DONE:
+    RTS
+
 ; ============================================================================
 ; PSG DIRECT MUSIC PLAYER (inspired by Christman2024/malbanGit)
 ; ============================================================================
@@ -2754,6 +2993,17 @@ LBRA PSG_update_done
 
 PSG_music_ended:
 CLR >PSG_IS_PLAYING
+; Silence all 3 PSG channels so the last note doesn't keep ringing
+; until the next PLAY_MUSIC. DP is already $D0 (set by AUDIO_UPDATE).
+LDA #8                  ; PSG reg 8 = Volume Channel A
+LDB #0
+JSR Sound_Byte
+LDA #9                  ; PSG reg 9 = Volume Channel B
+LDB #0
+JSR Sound_Byte
+LDA #10                 ; PSG reg 10 = Volume Channel C
+LDB #0
+JSR Sound_Byte
 LBRA PSG_update_done
 
 PSG_music_loop:
@@ -2862,19 +3112,36 @@ STX >PSG_MUSIC_PTR      ; Save pointer (X points to count byte)
 BRA AU_UPDATE_SFX       ; Skip reading data this frame
 
 AU_MUSIC_PROCESS_WRITES:
-PSHS B                  ; Save count
-
+; Per-event write loop. Inlined PSG protocol instead of JSR Sound_Byte
+; (~35 cycles vs ~92 incl JSR/RTS overhead — saves ~57 cycles per
+; register write). For theme-style music with 8-10 writes per event,
+; saves ~500-600 cycles per event frame → frees enough budget that the
+; music event no longer pushes the frame over vsync. Mirrors the BIOS
+; Sound_Byte protocol exactly (Vectrex VIA bits: BC1=bit3, BDIR=bit4).
+PSHS B                  ; save register-write count on stack for in-place DEC
 AU_MUSIC_WRITE_LOOP:
-LDA ,X+                 ; Load register number
-LDB ,X+                 ; Load register value
-PSHS X                  ; Save pointer
-JSR Sound_Byte          ; Write to PSG using BIOS (DP=$D0)
-PULS X                  ; Restore pointer
-PULS B                  ; Get counter
-DECB                    ; Decrement
-BEQ AU_MUSIC_DONE       ; Done if count=0
-PSHS B                  ; Save counter
-BRA AU_MUSIC_WRITE_LOOP ; Continue
+LDA ,X+                 ; A = register number
+LDB ,X+                 ; B = register value
+STA VIA_port_a          ; data bus = reg num
+LDA #$19                ; BC1=1, BDIR=1 → LATCH ADDR
+STA VIA_port_b
+LDA #$01                ; back to INACTIVE (BC1=0, BDIR=0)
+STA VIA_port_b
+LDA VIA_port_a          ; READ STATUS — settling delay so PSG finishes
+; latching the register address before we drive
+; the value. Without this, the PSG occasionally
+; writes the new value into the PREVIOUS register
+; (audible as glitchy pitch / 'noisy' music,
+; especially when other CPU activity perturbs
+; the timing between this loop and adjacent code).
+STB VIA_port_a          ; data bus = value
+LDA #$11                ; BC1=0, BDIR=1 → WRITE DATA
+STA VIA_port_b
+LDA #$01                ; back to INACTIVE
+STA VIA_port_b
+DEC ,S                  ; decrement count on stack (in-place; no PSHS/PULS per iter)
+BNE AU_MUSIC_WRITE_LOOP
+LEAS 1,S                ; discard saved count
 
 AU_MUSIC_DONE:
 STX >PSG_MUSIC_PTR      ; Update music pointer

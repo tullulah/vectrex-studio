@@ -15,6 +15,7 @@ pub mod functions;
 pub mod expressions;
 pub mod builtins;
 pub mod helpers;
+pub mod diagnostics;
 pub mod math;
 pub mod joystick;
 pub mod debug;
@@ -25,8 +26,14 @@ pub mod utilities;
 pub mod ram_layout;
 pub mod assets;
 pub mod context;  // Thread-local context for mutable array tracking
+pub mod ast_walk; // Exhaustive AST visitor shared by every "uses X?" scan
+pub mod array_params; // Element type of arrays passed to functions
+pub mod frames;   // Static, call-graph-overlaid frames for parameters and locals
+pub mod consts;   // Compile-time folding of `const` values
+#[cfg(test)]
+mod regression_tests;
 
-use vpy_parser::{Item, Expr, Stmt, CallInfo};
+use vpy_parser::{Item, Expr};
 
 /// Extract vector names referenced by a level asset
 /// Scans level JSON for vectorName fields in all layers
@@ -72,175 +79,31 @@ fn extract_level_vectors(level_name: &str, assets: &[crate::AssetInfo]) -> Vec<S
 fn analyze_used_assets(module: &Module, assets: &[crate::AssetInfo]) -> std::collections::HashSet<String> {
     use std::collections::HashSet;
     let mut used = HashSet::new();
-    
-    fn scan_expr(expr: &Expr, used: &mut HashSet<String>, assets: &[crate::AssetInfo], depth: usize) {
-        const MAX_DEPTH: usize = 500;
-        if depth > MAX_DEPTH {
-            panic!("Maximum expression nesting depth ({}) exceeded during asset analysis.", MAX_DEPTH);
+    ast_walk::for_each_call(module, |call_info| {
+        let name_upper = call_info.name.to_uppercase();
+        // DRAW_VECTOR("asset_name", x, y), DRAW_VECTOR_EX("asset_name", x, y, mirror, intensity),
+        // PLAY_MUSIC("asset_name"), PLAY_SFX("asset_name"), or LOAD_LEVEL("level_name")
+        if (name_upper == "DRAW_VECTOR" && call_info.args.len() == 3) ||
+           (name_upper == "DRAW_VECTOR_EX" && call_info.args.len() == 5) ||
+           (name_upper == "PLAY_MUSIC" && call_info.args.len() == 1) ||
+           (name_upper == "PLAY_SFX" && call_info.args.len() == 1) ||
+           (name_upper == "LOAD_LEVEL" && call_info.args.len() == 1) {
+            if let Expr::StringLit(asset_name) = &call_info.args[0] {
+                used.insert(asset_name.clone());
+                // If loading a level, also mark vectors it references as used
+                if name_upper == "LOAD_LEVEL" {
+                    used.extend(extract_level_vectors(asset_name, assets));
+                }
+            }
         }
-        match expr {
-            Expr::Call(call_info) => {
-                let name_upper = call_info.name.to_uppercase();
-                // Check for DRAW_VECTOR("asset_name", x, y), DRAW_VECTOR_EX("asset_name", x, y, mirror, intensity), 
-                // PLAY_MUSIC("asset_name"), PLAY_SFX("asset_name"), or LOAD_LEVEL("level_name")
-                if (name_upper == "DRAW_VECTOR" && call_info.args.len() == 3) || 
-                   (name_upper == "DRAW_VECTOR_EX" && call_info.args.len() == 5) ||
-                   (name_upper == "PLAY_MUSIC" && call_info.args.len() == 1) ||
-                   (name_upper == "PLAY_SFX" && call_info.args.len() == 1) ||
-                   (name_upper == "LOAD_LEVEL" && call_info.args.len() == 1) {
-                    if let Expr::StringLit(asset_name) = &call_info.args[0] {
-                        used.insert(asset_name.clone());
-
-                        // If loading a level, also mark vectors it references as used
-                        if name_upper == "LOAD_LEVEL" {
-                            let level_vectors = extract_level_vectors(asset_name, assets);
-                            for vec_name in level_vectors {
-                                used.insert(vec_name);
-                            }
-                        }
-                    }
-                }
-                // Recursively scan arguments
-                for arg in &call_info.args {
-                    scan_expr(arg, used, assets, depth + 1);
-                }
-            },
-            Expr::MethodCall(mc) => {
-                // Scan target and arguments for nested asset usages
-                scan_expr(&mc.target, used, assets, depth + 1);
-                for arg in &mc.args {
-                    scan_expr(arg, used, assets, depth + 1);
-                }
-            },
-            Expr::Binary { left, right, .. } | Expr::Compare { left, right, .. } | Expr::Logic { left, right, .. } => {
-                scan_expr(left, used, assets, depth + 1);
-                scan_expr(right, used, assets, depth + 1);
-            },
-            Expr::Not(inner) | Expr::BitNot(inner) => scan_expr(inner, used, assets, depth + 1),
-            Expr::List(elements) => {
-                for elem in elements {
-                    scan_expr(elem, used, assets, depth + 1);
-                }
-            },
-            Expr::Index { target, index } => {
-                scan_expr(target, used, assets, depth + 1);
-                scan_expr(index, used, assets, depth + 1);
-            },
-            _ => {}
-        }
-    }
-    
-    fn scan_stmt(stmt: &Stmt, used: &mut HashSet<String>, assets: &[crate::AssetInfo], depth: usize) {
-        const MAX_DEPTH: usize = 500;
-        if depth > MAX_DEPTH {
-            panic!("Maximum statement nesting depth ({}) exceeded during asset analysis.", MAX_DEPTH);
-        }
-        match stmt {
-            Stmt::Assign { value, .. } => scan_expr(value, used, assets, depth + 1),
-            Stmt::Let { value, .. } => scan_expr(value, used, assets, depth + 1),
-            Stmt::CompoundAssign { value, .. } => scan_expr(value, used, assets, depth + 1),
-            Stmt::Expr(expr, _line) => scan_expr(expr, used, assets, depth + 1),
-            Stmt::If { cond, body, elifs, else_body, .. } => {
-                scan_expr(cond, used, assets, depth + 1);
-                for s in body { scan_stmt(s, used, assets, depth + 1); }
-                for (elif_cond, elif_body) in elifs {
-                    scan_expr(elif_cond, used, assets, depth + 1);
-                    for s in elif_body { scan_stmt(s, used, assets, depth + 1); }
-                }
-                if let Some(els) = else_body {
-                    for s in els { scan_stmt(s, used, assets, depth + 1); }
-                }
-            },
-            Stmt::While { cond, body, .. } => {
-                scan_expr(cond, used, assets, depth + 1);
-                for s in body { scan_stmt(s, used, assets, depth + 1); }
-            },
-            Stmt::For { start, end, step, body, .. } => {
-                scan_expr(start, used, assets, depth + 1);
-                scan_expr(end, used, assets, depth + 1);
-                if let Some(step_expr) = step {
-                    scan_expr(step_expr, used, assets, depth + 1);
-                }
-                for s in body { scan_stmt(s, used, assets, depth + 1); }
-            },
-            Stmt::ForIn { iterable, body, .. } => {
-                scan_expr(iterable, used, assets, depth + 1);
-                for s in body { scan_stmt(s, used, assets, depth + 1); }
-            },
-            Stmt::Switch { expr, cases, default, .. } => {
-                scan_expr(expr, used, assets, depth + 1);
-                for (case_expr, case_body) in cases {
-                    scan_expr(case_expr, used, assets, depth + 1);
-                    for s in case_body { scan_stmt(s, used, assets, depth + 1); }
-                }
-                if let Some(default_body) = default {
-                    for s in default_body { scan_stmt(s, used, assets, depth + 1); }
-                }
-            },
-            Stmt::Return(Some(expr), _line) => scan_expr(expr, used, assets, depth + 1),
-            _ => {}
-        }
-    }
-    
-    // Scan all functions and top-level items in module
-    for item in &module.items {
-        match item {
-            Item::Function(func) => {
-                for stmt in &func.body {
-                    scan_stmt(stmt, &mut used, assets, 0);
-                }
-            },
-            Item::Const { value, .. } | Item::GlobalLet { value, .. } => {
-                scan_expr(value, &mut used, assets, 0);
-            },
-            Item::ExprStatement(expr) => {
-                scan_expr(expr, &mut used, assets, 0);
-            },
-            _ => {}
-        }
-    }
-    
+    });
     used
 }
 
-/// Check if trigonometric functions (SIN, COS, TAN) are used in statements
-fn check_trig_usage(stmts: &[Stmt]) -> bool {
-    for stmt in stmts {
-        if check_stmt_trig(stmt) {
-            return true;
-        }
-    }
-    false
-}
-
-fn check_stmt_trig(stmt: &Stmt) -> bool {
-    match stmt {
-        Stmt::Expr(expr, _) => check_expr_trig(expr),
-        Stmt::Assign { value, .. } => check_expr_trig(value),
-        Stmt::If { cond, body, elifs, else_body, .. } => {
-            check_expr_trig(cond)
-                || check_trig_usage(body)
-                || elifs.iter().any(|(c, b)| check_expr_trig(c) || check_trig_usage(b))
-                || else_body.as_ref().map_or(false, |b| check_trig_usage(b))
-        }
-        Stmt::While { cond, body, .. } => check_expr_trig(cond) || check_trig_usage(body),
-        _ => false,
-    }
-}
-
-fn check_expr_trig(expr: &Expr) -> bool {
-    match expr {
-        Expr::Call(CallInfo { name, args, .. }) => {
-            let upper = name.to_uppercase();
-            upper == "SIN" || upper == "COS" || upper == "TAN" || upper == "DRAW_VECTOR_3D"
-                || args.iter().any(check_expr_trig)
-        }
-        Expr::Binary { left, right, .. } => check_expr_trig(left) || check_expr_trig(right),
-        Expr::Not(operand) | Expr::BitNot(operand) => check_expr_trig(operand),
-        Expr::Index { target, index, .. } => check_expr_trig(target) || check_expr_trig(index),
-        Expr::List(elements) => elements.iter().any(check_expr_trig),
-        _ => false,
-    }
+/// True if SIN / COS / TAN / DRAW_VECTOR_3D / DRAW_VECTOR_ROT is used anywhere
+/// (needs the trig LUTs).
+fn uses_trig(module: &Module) -> bool {
+    ast_walk::calls_any(module, &["SIN", "COS", "TAN", "DRAW_VECTOR_3D", "DRAW_VECTOR_ROT"])
 }
 
 use vpy_parser::Module;
@@ -253,32 +116,85 @@ pub fn generate_m6809_asm(
     bank_size_meta: usize,
     assets: &[crate::AssetInfo],
 ) -> Result<String, String> {
+    generate_m6809_asm_with_hints(module, title, rom_size, bank_size_meta, assets, &crate::CodeSizeHints::default())
+}
+
+/// M6809 code generation with measured code sizes for the bank allocator
+/// (see [`crate::CodeSizeHints`]). With measured sizes, code that does not fit the
+/// configured ROM is an error here instead of a bank overflow at link time.
+pub fn generate_m6809_asm_with_hints(
+    module: &Module,
+    title: &str,
+    rom_size: usize,
+    bank_size_meta: usize,
+    assets: &[crate::AssetInfo],
+    size_hints: &crate::CodeSizeHints,
+) -> Result<String, String> {
     let mut asm = String::new();
-    
+
+    // VALIDATE recording names BEFORE filtering (so the "available" list is the
+    // full set on disk). DRAW_RECORDING("name") resolves by the .vrec FILE stem
+    // (e.g. badapple.vrec -> "badapple"), NOT the .vmov manifest name. A mismatch
+    // used to fail late with a cryptic "Undefined symbol: _NAME_VREC".
+    let used_recordings = functions::collect_draw_recording_names(module);
+    if !used_recordings.is_empty() {
+        let available: Vec<String> = assets.iter()
+            .filter(|a| matches!(a.asset_type, crate::AssetType::Recording))
+            .map(|a| a.name.clone())
+            .collect();
+        for rec in &used_recordings {
+            if !available.iter().any(|a| a.eq_ignore_ascii_case(rec)) {
+                return Err(format!(
+                    "DRAW_RECORDING(\"{rec}\"): no recording named '{rec}' found. \
+                     The name must match a .vrec FILE in assets/recordings/ (the file \
+                     stem — e.g. badapple.vrec -> \"badapple\"), NOT the .vmov manifest name. \
+                     Available recordings: {}.",
+                    if available.is_empty() { "(none — add a .vrec to assets/recordings/)".to_string() }
+                    else { available.join(", ") }
+                ));
+            }
+        }
+    }
+
+    // len() is a compile-time constant on m6809; reject arguments whose length
+    // is unknown instead of silently evaluating to 0.
+    utilities::validate_len_calls(module)?;
+    crate::validate::check_vector_asset_calls(module, assets, "m6809")?;
+
     // FILTER ASSETS: Only embed assets actually used in code (2026-01-20)
     let assets = assets::filter_used_assets(assets, module);
     
     // CRITICAL FIX (2026-01-19): Populate context with mutable arrays
     // This allows emit_index() to know whether to use RAM or ROM labels
+    // Start from a clean slate: the context is thread-local and must not leak
+    // consts/arrays/sizes from a previous compilation on the same thread.
+    context::clear_context();
+    diagnostics::begin(module);
     let mut mutable_arrays = std::collections::HashSet::new();
+    let mut const_arrays = std::collections::HashSet::new();
     for item in &module.items {
-        if let Item::GlobalLet { name, value, .. } = item {
-            if matches!(value, Expr::List(_)) {
-                mutable_arrays.insert(name.clone());
-            }
+        match item {
+            Item::GlobalLet { name, value: Expr::List(_), .. } => { mutable_arrays.insert(name.clone()); }
+            Item::Const { name, value: Expr::List(_), .. } => { const_arrays.insert(name.clone()); }
+            _ => {}
         }
     }
     context::set_mutable_arrays(mutable_arrays);
+    context::set_const_arrays(const_arrays);
 
     // Register compile-time const values so emit_simple_expr emits LDD #n (immediate)
-    // instead of LDD >VAR_name (RAM load), which would read uninitialized garbage.
-    for item in &module.items {
-        if let Item::Const { name, value, .. } = item {
-            if let Expr::Number(n) = value {
-                context::set_const_value(name, *n as i64);
-            }
-        }
+    // instead of LDD >VAR_name (RAM load). A scalar const has no RAM slot, so every
+    // one must fold to a number here (`const B = A * 2` included) or the build fails.
+    for (name, value) in consts::fold_consts(module)? {
+        context::set_const_value(&name, value);
     }
+
+    // Arrays passed to functions: element type of every indexed parameter.
+    context::set_param_array_elems(array_params::analyze(module)?);
+
+    // Parameters and locals: one static frame per function, overlaid by call
+    // graph. Rejects recursion and names that are not declared anywhere.
+    context::set_frames(frames::analyze(module)?);
 
     // Calculate bank configuration dynamically
     // Use META ROM_BANK_SIZE if provided; default to 16KB for single-bank ROMs
@@ -289,6 +205,18 @@ pub fn generate_m6809_asm(
     // cross-bank symbol resolution for the helpers bank is not yet implemented.
     let num_banks = rom_size / bank_size.max(1);
     let is_multibank = rom_size > 32768 && num_banks > 2;
+
+    // SCOPE GUARD: DRAW_RECORDING (.vrec playback) is single-bank only for now.
+    // The banked variant (cross-bank asset access + bank-switched runtime) is a
+    // later task. Fail loudly rather than silently drop the recording.
+    if is_multibank && helpers::analyze_module_helpers(module).contains("DRAW_RECORDING_RUNTIME") {
+        return Err(format!(
+            "DRAW_RECORDING on m6809 is single-bank only for now \
+             (this build is multibank: {} banks). Remove the multibank META \
+             directives or the DRAW_RECORDING call.",
+            num_banks
+        ));
+    }
 
     // Set multibank mode for builtins (affects asset reference generation)
     builtins::set_multibank_mode(is_multibank);
@@ -475,22 +403,57 @@ pub fn generate_m6809_asm(
             std::collections::HashMap::new()
         };
         
+        // An asset is emitted whole into one bank: one bigger than a bank can never be
+        // placed (the distributor used to panic on it).
+        let mut too_big: Vec<(&String, &usize)> = asset_sizes.iter()
+            .filter(|(_, &size)| size > bank_size)
+            .collect();
+        too_big.sort();
+        if let Some((name, size)) = too_big.first() {
+            return Err(format!(
+                "Asset '{}' is {} bytes, {} over one {}-byte ROM bank. An asset cannot span \
+                 banks, so no ROM_TOTAL_SIZE makes it fit: shorten or split the asset.",
+                name, size, *size - bank_size, bank_size
+            ));
+        }
+
         // Run allocator
         let mut allocator = vpy_bank_allocator::allocator::BankAllocator::new(config, graph);
         allocator.set_asset_sizes(asset_sizes);
+        let measured = !size_hints.is_empty();
+        if measured {
+            let sizes: std::collections::HashMap<String, usize> = size_hints.function_sizes
+                .iter()
+                .map(|(label, size)| (label.clone(), *size))
+                .collect();
+            allocator.set_measured_sizes(&sizes, &size_hints.bank_fixed_bytes);
+        }
         
         match allocator.assign_banks() {
             Ok(assignments) => {
-                // Compute per-bank function code bytes (for asset distribution coordination)
+                // Bytes each bank's code already takes (for asset distribution
+                // coordination). Pinned MAIN/LOOP are part of bank #0's fixed bytes when
+                // measured.
                 let func_sizes = allocator.get_function_sizes();
                 for (func_name, &bank_id) in &assignments {
+                    if measured && vpy_bank_allocator::allocator::is_pinned_to_bank0(func_name) {
+                        continue;
+                    }
                     let size = func_sizes.get(func_name).copied().unwrap_or(100);
                     *_per_bank_func_bytes.entry(bank_id).or_insert(0) += size;
+                }
+                if measured {
+                    for bank_id in 0..code_banks_count {
+                        *_per_bank_func_bytes.entry(bank_id as u8).or_insert(0) +=
+                            allocator.bank_fixed_bytes(bank_id);
+                    }
                 }
                 // Generate functions distributed by bank
                 functions_by_bank = functions::generate_functions_by_bank(module, &assets, &assignments)?;
                 _bank_assignments = assignments;
             }
+            // Sizes measured from assembled code: not fitting is a real, precise error.
+            Err(e) if measured => return Err(e.to_string()),
             Err(e) => {
                 eprintln!("[CODEGEN] Warning: BankAllocator failed: {:?}", e);
                 eprintln!("[CODEGEN] Falling back to single-bank function generation");
@@ -510,6 +473,8 @@ pub fn generate_m6809_asm(
         if let Some(bank0_funcs) = functions_by_bank.get(&0) {
             asm.push_str(bank0_funcs);
         }
+        asm.push_str(crate::FUNCTIONS_END_MARKER);
+        asm.push_str(" (Bank #0)\n");
     } else {
         // Single-bank: all functions in Bank #0 (existing behavior)
         let mut fb = std::collections::HashMap::new();
@@ -596,6 +561,7 @@ pub fn generate_m6809_asm(
                 if let Some(funcs) = functions_by_bank.get(&(bank_id as u8)) {
                     asm.push_str(funcs);
                 }
+                asm.push_str(&format!("{} (Bank #{})\n", crate::FUNCTIONS_END_MARKER, bank_id));
                 
                 // Then emit assets
                 if let Some(bank_assets) = bank_asm_map.get(&(bank_id as u8)) {
@@ -637,13 +603,7 @@ pub fn generate_m6809_asm(
     
     // Emit trigonometry lookup tables (SIN, COS, TAN) - CONDITIONAL
     // Only emit if SIN, COS, or TAN functions are actually used
-    if module.items.iter().any(|item| {
-        if let Item::Function(f) = item {
-            check_trig_usage(&f.body)
-        } else {
-            false
-        }
-    }) {
+    if uses_trig(module) {
         asm.push_str(&math_extended::generate_trig_tables());
     }
     
@@ -658,16 +618,16 @@ pub fn generate_m6809_asm(
         builtins::emit_msg_table(&msg_entries, &mut asm);
     }
 
+    // Simulated SD game list (m6809 preview): emit the name table only when the
+    // program queries it. Real SD lives on rp2350; here it's a home folder.
+    if builtins::module_uses_sd(module) {
+        builtins::emit_sd_tables(&mut asm);
+    }
+
     // Emit compact 3D data tables in bank_00 for DRAW_VECTOR_3D.
     // Must be in the same bank as user code so the fixed helpers bank runtime
     // can read them (the calling bank stays mapped at $0000-$3FFF during the JSR).
-    let uses_draw_vector_3d = module.items.iter().any(|item| {
-        if let Item::Function(f) = item {
-            check_trig_usage(&f.body) // already returns true for DRAW_VECTOR_3D
-        } else {
-            false
-        }
-    });
+    let uses_draw_vector_3d = ast_walk::calls_any(module, &["DRAW_VECTOR_3D"]);
     if uses_draw_vector_3d && !assets.is_empty() {
         asm.push_str(&assets::generate_3d_data_asm(&assets));
     }
@@ -679,6 +639,9 @@ pub fn generate_m6809_asm(
     // Hardware vectors ($FFF0-$FFFF) are in BIOS ROM
     // BIOS vectors point to RAM vectors ($CBF2-$CBFB) as defined in VECTREX.I
     // Cartridge starts at $0000 and BIOS jumps there after verification
-    
+
+    // Anything an emitter could not translate is a compile error, not a comment.
+    diagnostics::finish()?;
+
     Ok(asm)
 }

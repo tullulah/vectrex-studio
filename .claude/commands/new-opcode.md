@@ -1,13 +1,10 @@
-Add a new MC6809 opcode to the VPy assembler.
+Add a new MC6809 opcode (or addressing mode) to the VPy assembler (`buildtools/vpy_assembler`).
 
 Usage: /new-opcode [OPCODE_NAME]
 
-Steps to implement a new opcode (from docs/INDEX.md workflow):
-
-1. Check `docs/COMPILER_STATUS.md` for the list of pending opcodes and verify $ARGUMENTS is there
-2. Read `buildtools/vpy_assembler/src/m6809/asm_to_binary.rs` — add dispatch in the opcode match
-3. Read `buildtools/vpy_assembler/src/m6809/binary_emitter.rs` — implement the emit_xxx methods for each addressing mode (immediate, direct, extended, indexed, inherent)
-4. Add a test in `buildtools/vpy_assembler/src/m6809/asm_to_binary.rs` that assembles the opcode and checks the byte output
-5. Run `cargo test -p vpy_assembler` to confirm
-
-Reference the MC6809 opcode table at `docs/6809_opcodes.md` for the correct byte values and addressing modes.
+1. Check whether $ARGUMENTS is already handled: search the dispatch in `buildtools/vpy_assembler/src/m6809/asm_to_binary.rs` and the emitters in `binary_emitter.rs`. Note which addressing modes are missing.
+2. Get the opcode bytes, cycle counts and valid addressing modes from the 6809 instruction table in `docs/vec_prog_docs/other/TOOLS/6809/TEXT/6809.TXT` (it also covers indexed and push/pull post-bytes and page-2/page-3 prefixes `$10`/`$11`).
+3. Add the mnemonic to the dispatch in `asm_to_binary.rs`.
+4. Implement the encoding in `binary_emitter.rs` for each valid mode: inherent, immediate, direct, extended, indexed (relative for branches).
+5. Add tests in a `#[cfg(test)]` module in `vpy_assembler` that call `vpy_assembler::assemble_m6809(source, 0x0000, false, false)` and check the bytes, one per addressing mode, plus an invalid-operand case. Tests run from the crate directory, so the assembler finds `VECTREX.I` through its `../../ide/frontend/public/include/VECTREX.I` fallback.
+6. Run `cd buildtools && cargo test -p vpy_assembler` (the workspace denies warnings).

@@ -118,25 +118,25 @@ export class ProjectContextPersistence {
     const context = this.loadProjectContext();
     if (!context) return '';
 
-    let contextStr = `\n## Proyecto Actual:
-- **Nombre**: ${context.projectName}
-- **Ruta**: ${context.projectPath}
+    let contextStr = `\n## Current Project:
+- **Name**: ${context.projectName}
+- **Path**: ${context.projectPath}
 
-## Archivos Creados:
+## Created Files:
 ${context.createdFiles.length > 0 
   ? context.createdFiles.map(f => `- ${f}`).join('\n')
-  : 'Ninguno'}
+  : 'None'}
 
 ## Assets:
-### Vectores:
+### Vectors:
 ${context.assets.vectors.length > 0
   ? context.assets.vectors.map(v => `- ${v}`).join('\n')
-  : 'Ninguno'}
+  : 'None'}
 
-### Música:
+### Music:
 ${context.assets.music.length > 0
   ? context.assets.music.map(m => `- ${m}`).join('\n')
-  : 'Ninguno'}
+  : 'None'}
 `;
 
     return contextStr;

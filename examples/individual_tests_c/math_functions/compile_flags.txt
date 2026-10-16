@@ -1,0 +1,3 @@
+-I/Users/daniel/VectrexStudio/sdk/v1.3.2/vpy-c/include
+-I/Users/daniel/VectrexStudio/sdk/v1.3.2/pitrex-sim/include
+-Isrc

@@ -37,6 +37,7 @@ pub mod expressions;
 pub mod builtins;
 pub mod assets;
 pub mod analysis;
+pub mod libvpy;
 
 use vpy_parser::Module;
 use crate::AssetInfo;
@@ -51,6 +52,12 @@ pub fn generate_pitrex_asm(
     title: &str,
     assets: &[AssetInfo],
 ) -> Result<String, String> {
+    // len() must name a global array (compile-time length), as on m6809.
+    crate::validate::check_len_calls(module, "pitrex")?;
+    crate::validate::check_vector_asset_calls(module, assets, "pitrex")?;
+    // Element type of every array (shared with the Thumb2 backends).
+    crate::arm::arrays::setup(module)?;
+
     let mut asm = String::new();
 
     // ── File header ──────────────────────────────────────────────────────────
@@ -105,6 +112,9 @@ pub fn generate_pitrex_asm(
     asm.push_str("UART_TRACE_FRAMES_LEFT: .space 4\n");
     asm.push_str("UART_FRAME_NUM: .space 4\n");
     asm.push_str("FRAME_WORK_START: .space 4\n");    // µs timestamp after v_WaitRecal
+    asm.push_str("SAMPLE_POS_START: .space 4\n");    // µs timestamp latched on first SAMPLE_POS call (0 = not started)
+    asm.push_str("DRAW_REC_PEN_X: .space 4\n");      // DRAW_RECORDING chained running pen X (VPy units); PEN_Y must follow
+    asm.push_str("DRAW_REC_PEN_Y: .space 4\n");      // running pen Y (consecutive after PEN_X)
     asm.push_str("CPU_PRINT_CTR: .space 4\n");       // countdown: print every 50 frames
     asm.push_str("_DV3D_BUF: .space 256\n");           // static buffer for pitrex_draw_vector_3d
     asm.push_str("_DV3D_TRIG: .space 8\n");            // sin/cos cache: sin_x, cos_x, sin_y, cos_y, sin_z, cos_z (1 byte each, +2 pad)

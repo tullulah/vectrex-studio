@@ -50,6 +50,59 @@ impl ProjectMetadata {
     }
 }
 
+/// `[sdk]` section of a .vpyproj: which uvmc2-sdk release this project is built against.
+///
+/// ```toml
+/// [sdk]
+/// version = "v1.3.1"
+/// ```
+///
+/// The SDK is NOT bundled with the compiler or the IDE: Vectrex Studio downloads the pinned
+/// version into `~/VectrexStudio/sdk/<version>/` (root overridable with
+/// `VECTREX_STUDIO_SDK_DIR`). The loader only reports what the project pins; it does not
+/// validate or resolve it (see [`is_valid_sdk_version`] and vpy_cli's SDK resolver).
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct SdkConfig {
+    pub version: Option<String>,
+}
+
+/// True if `v` is a well-formed SDK release tag: `^v\d+(\.\d+){0,3}$` (e.g. `v1`, `v1.3.1`).
+///
+/// The version becomes a path component (`<sdk_root>/<version>`), so anything else
+/// (separators, `..`, empty, pre-release suffixes) is rejected before touching the filesystem.
+pub fn is_valid_sdk_version(v: &str) -> bool {
+    let Some(rest) = v.strip_prefix('v') else { return false };
+    let parts: Vec<&str> = rest.split('.').collect();
+    !parts.is_empty()
+        && parts.len() <= 4
+        && parts.iter().all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// Read only the `[sdk]` section of a .vpyproj (no entry-point / source discovery).
+///
+/// Returns `Ok(None)` when the project has no `[sdk]` table.
+pub fn read_sdk_config(vpyproj_path: &Path) -> Result<Option<SdkConfig>, LoadError> {
+    let content = std::fs::read_to_string(vpyproj_path)
+        .map_err(|e| LoadError::Io(e.to_string()))?;
+    parse_sdk_config(&content)
+}
+
+/// Parse the `[sdk]` section out of .vpyproj TOML text.
+pub fn parse_sdk_config(content: &str) -> Result<Option<SdkConfig>, LoadError> {
+    let table: toml::Table = toml::from_str(content)
+        .map_err(|e| LoadError::TomlError(e.to_string()))?;
+    sdk_from_table(&table)
+}
+
+fn sdk_from_table(table: &toml::Table) -> Result<Option<SdkConfig>, LoadError> {
+    match table.get("sdk") {
+        None => Ok(None),
+        Some(v) => v.clone().try_into::<SdkConfig>()
+            .map(Some)
+            .map_err(|e| LoadError::InvalidProject(format!("invalid [sdk] section: {}", e))),
+    }
+}
+
 /// Discovered source file
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct SourceFile {
@@ -57,11 +110,15 @@ pub struct SourceFile {
     pub is_entry: bool, // Is this the main entry point?
 }
 
-/// Asset file (vector or music)
+/// Asset file (vector, music, recording, or audio sample)
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum AssetFile {
     Vector(PathBuf),
     Music(PathBuf),
+    /// .vrec — multi-frame vector recording (game-preview / attract playback)
+    Recording(PathBuf),
+    /// .vsmp — 4-bit PCM audio sample (voice/vector-movie audio track, PSG volume DAC)
+    Sample(PathBuf),
 }
 
 /// Complete project information
@@ -72,6 +129,8 @@ pub struct ProjectInfo {
     pub source_files: Vec<SourceFile>,
     pub asset_files: Vec<AssetFile>,
     pub entry_point: PathBuf, // Path to main.vpy
+    /// `[sdk]` section, if the project pins an SDK version.
+    pub sdk: Option<SdkConfig>,
 }
 
 impl ProjectInfo {
@@ -130,6 +189,11 @@ pub fn load_project(vpyproj_path: &Path) -> Result<ProjectInfo, LoadError> {
         toml::from_str::<ProjectMetadata>(&content)
             .unwrap_or_default()
     };
+
+    // Lenient here (like the metadata above): a malformed [sdk] must not break targets
+    // that need no SDK (m6809). The SDK resolver re-reads it with `read_sdk_config` and
+    // reports the error where it matters.
+    let sdk = sdk_from_table(&table).unwrap_or(None);
 
     let root_dir = vpyproj_path
         .parent()
@@ -253,6 +317,56 @@ pub fn load_project(vpyproj_path: &Path) -> Result<ProjectInfo, LoadError> {
                 }
             }
         }
+        // Read recording assets (.vrec — multi-frame segment captures)
+        if let Some(rec_array) = resources_val.get("recordings").and_then(|v| v.as_array()) {
+            for item in rec_array {
+                if let Some(path_str) = item.as_str() {
+                    // Handle glob patterns
+                    if path_str.contains('*') || path_str.contains('?') {
+                        match expand_glob_pattern(path_str, &root_dir) {
+                            Ok(files) => {
+                                for file_path in files {
+                                    if file_path.extension().map_or(false, |ext| ext == "vrec") {
+                                        asset_files.push(AssetFile::Recording(file_path));
+                                    }
+                                }
+                            }
+                            Err(_) => {}
+                        }
+                    } else {
+                        let full_path = root_dir.join(path_str);
+                        if full_path.exists() && full_path.extension().map_or(false, |ext| ext == "vrec") {
+                            asset_files.push(AssetFile::Recording(full_path));
+                        }
+                    }
+                }
+            }
+        }
+        // Read audio-sample assets (.vsmp — 4-bit PCM voice/vector-movie audio)
+        if let Some(smp_array) = resources_val.get("samples").and_then(|v| v.as_array()) {
+            for item in smp_array {
+                if let Some(path_str) = item.as_str() {
+                    // Handle glob patterns
+                    if path_str.contains('*') || path_str.contains('?') {
+                        match expand_glob_pattern(path_str, &root_dir) {
+                            Ok(files) => {
+                                for file_path in files {
+                                    if file_path.extension().map_or(false, |ext| ext == "vsmp") {
+                                        asset_files.push(AssetFile::Sample(file_path));
+                                    }
+                                }
+                            }
+                            Err(_) => {}
+                        }
+                    } else {
+                        let full_path = root_dir.join(path_str);
+                        if full_path.exists() && full_path.extension().map_or(false, |ext| ext == "vsmp") {
+                            asset_files.push(AssetFile::Sample(full_path));
+                        }
+                    }
+                }
+            }
+        }
         // Read music assets
         if let Some(music_array) = resources_val.get("music").and_then(|v| v.as_array()) {
             for item in music_array {
@@ -286,6 +400,8 @@ pub fn load_project(vpyproj_path: &Path) -> Result<ProjectInfo, LoadError> {
         if assets_dir.exists() {
             discover_vector_assets(&assets_dir.join("vectors"), &mut asset_files)?;
             discover_music_assets(&assets_dir.join("music"), &mut asset_files)?;
+            discover_recording_assets(&assets_dir.join("recordings"), &mut asset_files)?;
+            discover_sample_assets(&assets_dir.join("samples"), &mut asset_files)?;
         }
     }
 
@@ -295,6 +411,7 @@ pub fn load_project(vpyproj_path: &Path) -> Result<ProjectInfo, LoadError> {
         source_files,
         asset_files,
         entry_point,
+        sdk,
     })
 }
 
@@ -371,6 +488,52 @@ fn discover_music_assets(dir: &Path, assets: &mut Vec<AssetFile>) -> Result<(), 
     Ok(())
 }
 
+/// Discover .vrec files in recordings directory
+fn discover_recording_assets(dir: &Path, assets: &mut Vec<AssetFile>) -> Result<(), LoadError> {
+    if !dir.exists() {
+        return Ok(());
+    }
+
+    let entries = std::fs::read_dir(dir)
+        .map_err(|e| LoadError::Io(e.to_string()))?;
+
+    // Collect and sort for deterministic ordering across platforms/filesystems
+    let mut paths: Vec<_> = entries
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().map_or(false, |ext| ext == "vrec"))
+        .collect();
+    paths.sort();
+
+    for path in paths {
+        assets.push(AssetFile::Recording(path));
+    }
+
+    Ok(())
+}
+
+/// Discover .vsmp files in samples directory
+fn discover_sample_assets(dir: &Path, assets: &mut Vec<AssetFile>) -> Result<(), LoadError> {
+    if !dir.exists() {
+        return Ok(());
+    }
+
+    let entries = std::fs::read_dir(dir)
+        .map_err(|e| LoadError::Io(e.to_string()))?;
+
+    // Collect and sort for deterministic ordering across platforms/filesystems
+    let mut paths: Vec<_> = entries
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().map_or(false, |ext| ext == "vsmp"))
+        .collect();
+    paths.sort();
+
+    for path in paths {
+        assets.push(AssetFile::Sample(path));
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -397,8 +560,10 @@ mod tests {
         // Create assets
         fs::create_dir_all(root.join("assets/vectors")).unwrap();
         fs::create_dir_all(root.join("assets/music")).unwrap();
+        fs::create_dir_all(root.join("assets/recordings")).unwrap();
         fs::write(root.join("assets/vectors/player.vec"), "{}").unwrap();
         fs::write(root.join("assets/music/theme.vmus"), "{}").unwrap();
+        fs::write(root.join("assets/recordings/preview.vrec"), "{}").unwrap();
 
         // Create .vpyproj
         let toml = if multibank {
@@ -424,7 +589,8 @@ mod tests {
         assert_eq!(info.num_banks(), 1);
         assert_eq!(info.source_files.len(), 1);
         assert!(info.source_files[0].is_entry);
-        assert_eq!(info.asset_files.len(), 2);
+        assert_eq!(info.asset_files.len(), 3);
+        assert!(info.asset_files.iter().any(|a| matches!(a, AssetFile::Recording(p) if p.ends_with("preview.vrec"))));
     }
 
     #[test]
@@ -438,7 +604,7 @@ mod tests {
         assert!(info.is_multibank());
         assert_eq!(info.num_banks(), 32);
         assert_eq!(info.source_files.len(), 1);
-        assert_eq!(info.asset_files.len(), 2);
+        assert_eq!(info.asset_files.len(), 3);
     }
 
     #[test]
@@ -497,5 +663,54 @@ mod tests {
         assert!(names.contains(&"main.vpy"));
         assert!(names.contains(&"input.vpy"));
         assert!(names.contains(&"graphics.vpy"));
+    }
+
+    #[test]
+    fn test_sdk_version_parsed_from_vpyproj() {
+        let (_temp, root) = create_test_project(false);
+        let proj_path = root.join("test.vpyproj");
+        fs::write(
+            &proj_path,
+            "[project]\nname = \"x\"\nversion = \"0.1.0\"\n\n[sdk]\nversion = \"v1.3.1\"\n",
+        )
+        .unwrap();
+
+        let info = load_project(&proj_path).unwrap();
+        assert_eq!(info.sdk, Some(SdkConfig { version: Some("v1.3.1".into()) }));
+        // The project's own version must not leak into the SDK pin.
+        assert_eq!(info.metadata.version, Some("0.1.0".into()));
+
+        let direct = read_sdk_config(&proj_path).unwrap();
+        assert_eq!(direct, info.sdk);
+    }
+
+    #[test]
+    fn test_sdk_absent_is_none() {
+        let (_temp, root) = create_test_project(false);
+        let info = load_project(&root.join("test.vpyproj")).unwrap();
+        assert_eq!(info.sdk, None);
+        assert_eq!(read_sdk_config(&root.join("test.vpyproj")).unwrap(), None);
+    }
+
+    #[test]
+    fn test_sdk_malformed_section() {
+        // read_sdk_config reports it; load_project stays usable for SDK-less targets.
+        assert!(parse_sdk_config("[sdk]\nversion = 1\n").is_err());
+        let (_temp, root) = create_test_project(false);
+        let proj_path = root.join("test.vpyproj");
+        fs::write(&proj_path, "[sdk]\nversion = 1\n").unwrap();
+        assert!(load_project(&proj_path).unwrap().sdk.is_none());
+        assert!(read_sdk_config(&proj_path).is_err());
+    }
+
+    #[test]
+    fn test_sdk_version_validation() {
+        for ok in ["v1", "v1.3", "v1.3.1", "v10.0.0.2", "v0.0.0"] {
+            assert!(is_valid_sdk_version(ok), "{ok} should be valid");
+        }
+        for bad in ["", "v", "1.3.1", "v1.", "v.1", "v1..2", "v1.2.3.4.5", "v1.3.1-rc1",
+                    "v1/../..", "../v1", "v1.3.1 ", "V1.3.1", "v1.a"] {
+            assert!(!is_valid_sdk_version(bad), "{bad:?} should be rejected");
+        }
     }
 }

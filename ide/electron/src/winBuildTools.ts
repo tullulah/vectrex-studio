@@ -1,0 +1,418 @@
+// Windows: the build tools a Mac or a Linux machine already has.
+//
+// A C project builds with `make` (its Makefile and the SDK's uvm2.mk, whose recipes are POSIX
+// shell: mkdir -p, rm -rf, grep, sed, test), and a uvm2 image goes through CMake and the
+// pico-sdk, which needs picotool, plus cargo for the SDK's Rust drawing layer. None of that
+// ships with Windows, so the first C or uvm2 build downloads it, like the Arm toolchain:
+//
+//   make + busybox   xPack Windows Build Tools: GNU make, and busybox-w32 as its sh (the
+//                    recipes' grep, sed, head... are busybox applets)
+//   CMake, Ninja     Kitware's and ninja-build's own zips. Ninja is the generator: the
+//                    "Unix Makefiles" one refuses a PATH with sh.exe on it, and Visual Studio's
+//                    may not exist
+//   picotool         Raspberry Pi's prebuilt one (pico-sdk-tools), found by the pico-sdk
+//                    through PICOTOOL_FETCH_FROM_GIT_PATH; otherwise it builds picotool from
+//                    source and needs a PC C++ compiler
+//   Rust             rustup with the x86_64-pc-windows-gnu host. The SDK's Rust has
+//                    proc-macro dependencies, which are compiled and linked FOR THE PC; the
+//                    msvc host links with Visual Studio's link.exe, the gnu host brings its
+//                    own linker. The channel is the SDK's rust-toolchain.toml.
+//                    On ARM64 Windows the x64 busybox crashes as a shell under emulation:
+//                    there make's folder is copied with the ARM64 busybox-w32 build instead
+//   Python           the one emsdk ships for Windows. The pico-sdk's CMake needs a Python 3
+//                    (boot_stage2's checksum script), and Windows has none.
+//
+// Each archive is pinned by version and SHA-256 and lives in
+// ~/VectrexStudio/toolchains/windows/<name>-<version>.
+
+import { promises as fs } from 'fs';
+import { basename, delimiter, join } from 'path';
+import * as os from 'os';
+import { spawn } from 'child_process';
+import { armToolchainRootDir, compareTagsDesc, downloadFile, installTarball, isValidSdkTag, toolPath, UVM2_RUST_TARGET } from './sdkManager.js';
+
+type WinTool = {
+  name: string; version: string; url: string; sha256: string;
+  /** Leading folders of the zip to drop. */
+  strip: number;
+  /** A file that must be there once extracted. */
+  mustContain: string;
+  /** The folder (inside the install) that goes on PATH, or null. */
+  bin: string | null;
+};
+
+const WIN_TOOLS: WinTool[] = [
+  {
+    name: 'make', version: '4.4.1-3',
+    url: 'https://github.com/xpack-dev-tools/windows-build-tools-xpack/releases/download/v4.4.1-3/xpack-windows-build-tools-4.4.1-3-win32-x64.zip',
+    sha256: '113d4dfdbbc56dc9b865c9f75d38cd0da82f0d7094187e6f7a803fe6eef1d218',
+    strip: 1, mustContain: join('bin', 'make.exe'), bin: 'bin',
+  },
+  {
+    name: 'cmake', version: '4.2.8',
+    url: 'https://github.com/Kitware/CMake/releases/download/v4.2.8/cmake-4.2.8-windows-x86_64.zip',
+    sha256: 'd33720a4e03114ae7c964c184e88f68a640be419f973bf4fb685f0900d1864ee',
+    strip: 1, mustContain: join('bin', 'cmake.exe'), bin: 'bin',
+  },
+  {
+    name: 'ninja', version: '1.13.2',
+    url: 'https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-win.zip',
+    sha256: '07fc8261b42b20e71d1720b39068c2e14ffcee6396b76fb7a795fb460b78dc65',
+    strip: 0, mustContain: 'ninja.exe', bin: '',
+  },
+  {
+    // picotool/picotool.exe + picotoolConfig.cmake: PICOTOOL_FETCH_FROM_GIT_PATH is the
+    // folder that holds picotool/.
+    name: 'picotool', version: '2.2.0-a4',
+    url: 'https://github.com/raspberrypi/pico-sdk-tools/releases/download/v2.2.0-4/picotool-2.2.0-a4-x64-win.zip',
+    sha256: '42cd263ed17dd3987d0830fa239424b3958ec0407afd6985bfbf83a5fc5a55f2',
+    strip: 0, mustContain: join('picotool', 'picotool.exe'), bin: 'picotool',
+  },
+];
+
+const RUSTUP_VERSION = '1.29.1';
+const RUSTUP_INIT = {
+  url: `https://static.rust-lang.org/rustup/archive/${RUSTUP_VERSION}/x86_64-pc-windows-msvc/rustup-init.exe`,
+  sha256: '6f4bef66261261fcb43131be8720bab817d403a09edec7455c371974b90bdb7e',
+};
+const RUST_HOST = 'x86_64-pc-windows-gnu';
+/** The first SDK whose Rust build tools link on Windows without MinGW. */
+const MIN_WINDOWS_SDK = 'v1.4.4';
+
+export function winToolsRootDir(): string {
+  return join(armToolchainRootDir(), 'windows');
+}
+
+/** `env`'s PATH with `dirs` in front. Windows spells the key `Path`: reuse the one there is,
+ *  or the child gets two and which one wins is undefined. */
+export function prependPath(env: NodeJS.ProcessEnv, dirs: string[]): void {
+  const key = Object.keys(env).find((k) => k.toUpperCase() === 'PATH') ?? 'PATH';
+  const rest = env[key] ? [env[key] as string] : [];
+  env[key] = [...dirs, ...rest].join(delimiter);
+}
+
+const inFlight = new Map<string, Promise<string>>();
+
+/** The same busybox-w32 release xPack's make ships, built for ARM64 (frippery.org). */
+const BUSYBOX_ARM64 = {
+  version: 'FRP-5398-g89ae34445',
+  url: 'https://frippery.org/files/busybox/busybox-w64a-FRP-5398-g89ae34445.exe',
+  sha256: '489f95ae78073cd398a42ebce42469f6bccf55f9a5511a7d57438869f1a71dc8',
+};
+
+let arm64Windows: Promise<boolean> | null = null;
+
+/** Windows on Arm. The IDE is an x64 program there, emulated, so process.arch says x64: the
+ *  machine's own PROCESSOR_ARCHITECTURE is in the registry. */
+export function isArm64Windows(): Promise<boolean> {
+  if (process.platform !== 'win32') return Promise.resolve(false);
+  if (process.arch === 'arm64') return Promise.resolve(true);
+  arm64Windows ??= run('reg', ['query', 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment', '/v', 'PROCESSOR_ARCHITECTURE'],
+    process.env, () => {}).then((r) => /ARM64/i.test(r.out));
+  return arm64Windows;
+}
+
+/** make's bin folder for ARM64 Windows: xPack's make.exe with the ARM64 busybox as its sh and
+ *  as the applets xPack ships (echo, mkdir, rm, cp). */
+async function ensureArm64MakeBin(makeDir: string, log: (line: string) => void): Promise<string> {
+  const id = `make-arm64-busybox-${BUSYBOX_ARM64.version}`;
+  const running = inFlight.get(id);
+  if (running) return running;
+  const p = (async () => {
+    const dir = join(winToolsRootDir(), id);
+    const ready = join(dir, '.ready');
+    try { await fs.access(ready); return dir; } catch { /* not yet */ }
+    log(`[tools] ARM64 Windows: busybox ${BUSYBOX_ARM64.version} for ARM64, downloading (once)...\n`);
+    await fs.mkdir(dir, { recursive: true });
+    const exe = join(dir, 'busybox.exe');
+    await downloadFile(BUSYBOX_ARM64.url, exe, `busybox ${BUSYBOX_ARM64.version}`, BUSYBOX_ARM64.sha256);
+    for (const applet of ['sh', 'echo', 'mkdir', 'rm', 'cp']) await fs.copyFile(exe, join(dir, `${applet}.exe`));
+    await fs.copyFile(join(makeDir, 'bin', 'make.exe'), join(dir, 'make.exe'));
+    await fs.writeFile(ready, `${BUSYBOX_ARM64.version}\n`);
+    return dir;
+  })().finally(() => inFlight.delete(id));
+  inFlight.set(id, p);
+  return p;
+}
+
+/** The Python emsdk ships for Windows: CMake's for the pico-sdk, and the one that runs emsdk.py. */
+const WIN_PYTHON = {
+  version: '3.13.3',
+  /** The folder name emsdk gives it, which the simulator's install has used already. */
+  dir: '3.13.3_64bit',
+  url: 'https://storage.googleapis.com/webassembly/emscripten-releases-builds/deps/python-3.13.3-0-win-amd64.zip',
+  sha256: '6fe7a540c6b8b185780467cf7495e884ee62316ec4abb19e1c735b8a77c62465',
+};
+
+/** The folder holding python.exe (downloaded once). */
+function ensureWindowsPython(log: (line: string) => void): Promise<string> {
+  const id = `emsdk-python-${WIN_PYTHON.dir}`;
+  const running = inFlight.get(id);
+  if (running) return running;
+  const p = (async () => {
+    const dir = join(winToolsRootDir(), id);
+    try { await fs.access(join(dir, 'python.exe')); return dir; } catch { /* not yet */ }
+    log(`[tools] Python ${WIN_PYTHON.version}: downloading (once)...\n`);
+    const out = await installTarball({
+      what: `Python ${WIN_PYTHON.version}`, url: WIN_PYTHON.url, root: winToolsRootDir(), name: id,
+      mustContain: 'python.exe', marker: { url: WIN_PYTHON.url }, progressTag: 'emsdk-python',
+      ext: 'zip', sha256: WIN_PYTHON.sha256, strip: 0,
+    });
+    log(`[tools] Python ${WIN_PYTHON.version} installed: ${out}\n`);
+    return out;
+  })().finally(() => inFlight.delete(id));
+  inFlight.set(id, p);
+  return p;
+}
+
+function ensureTool(t: WinTool, log: (line: string) => void): Promise<string> {
+  const id = `${t.name}-${t.version}`;
+  const running = inFlight.get(id);
+  if (running) return running;
+  const p = (async () => {
+    const dir = join(winToolsRootDir(), id);
+    try { await fs.access(join(dir, t.mustContain)); return dir; } catch { /* not yet */ }
+    log(`[tools] ${t.name} ${t.version}: downloading (once)...\n`);
+    const out = await installTarball({
+      what: `${t.name} ${t.version}`, url: t.url, root: winToolsRootDir(), name: id,
+      mustContain: t.mustContain, marker: { name: t.name, version: t.version, url: t.url },
+      progressTag: id, ext: 'zip', sha256: t.sha256, strip: t.strip,
+    });
+    log(`[tools] ${t.name} ${t.version} installed: ${out}\n`);
+    return out;
+  })().finally(() => inFlight.delete(id));
+  inFlight.set(id, p);
+  return p;
+}
+
+function run(cmd: string, args: string[], env: NodeJS.ProcessEnv, onLine: (l: string) => void): Promise<{ code: number | null; out: string; missing: boolean }> {
+  return new Promise((resolve) => {
+    let out = '';
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'], env });
+    } catch {
+      resolve({ code: null, out: '', missing: true });
+      return;
+    }
+    const take = (c: Buffer) => {
+      const s = c.toString();
+      out += s;
+      for (const l of s.split(/\r?\n|\r/)) if (l.trim()) onLine(l.trim());
+    };
+    child.stdout?.on('data', take);
+    child.stderr?.on('data', take);
+    child.on('error', (e: NodeJS.ErrnoException) => resolve({ code: null, out, missing: e.code === 'ENOENT' }));
+    child.on('close', (code) => resolve({ code, out, missing: false }));
+  });
+}
+
+/** Raspberry Pi's picotool for Upload to Cartridge (downloaded once), or null. The RP2350's
+ *  bootrom and the pico-sdk's reset interface describe themselves to Windows as WinUSB devices,
+ *  so it needs no driver install. */
+export async function windowsPicotool(log: (line: string) => void): Promise<string | null> {
+  const t = WIN_TOOLS.find((x) => x.name === 'picotool')!;
+  try {
+    return join(await ensureTool(t, log), t.mustContain);
+  } catch (e: any) {
+    log(`[tools] Could not install ${t.name} ${t.version}: ${e?.message || e}\n`);
+    return null;
+  }
+}
+
+/** The Rust channel an SDK pins (its rust-toolchain.toml), or null. */
+async function sdkRustChannel(sdkDir: string): Promise<string | null> {
+  try {
+    const text = await fs.readFile(join(sdkDir, 'rust-toolchain.toml'), 'utf-8');
+    return /^\s*channel\s*=\s*"([^"]+)"/m.exec(text)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Rust for a uvm2 build on Windows: rustup (installed for this user if missing), and the SDK's
+ * channel on the gnu host with the Cortex-M33 target. Returns what the build's environment
+ * needs: RUSTUP_TOOLCHAIN (it outranks rust-toolchain.toml, whose channel alone would mean the
+ * default host) and ~/.cargo/bin, which a fresh install has not put on this process's PATH.
+ */
+async function windowsRust(sdkDir: string | null, base: NodeJS.ProcessEnv, log: (line: string) => void): Promise<NodeJS.ProcessEnv> {
+  const cargoHome = process.env.CARGO_HOME || join(os.homedir(), '.cargo');
+  const cargoBin = join(cargoHome, 'bin');
+  const env: NodeJS.ProcessEnv = { ...base };
+  prependPath(env, [cargoBin]);
+
+  let have = await run('rustup', ['--version'], env, () => {});
+  if (have.missing) {
+    log(`[Rust] No rustup: installing it (rustup ${RUSTUP_VERSION}, host ${RUST_HOST}) into ${cargoHome}, a one-time download of a few minutes...\n`);
+    const exe = join(winToolsRootDir(), `rustup-init-${RUSTUP_VERSION}.exe`);
+    await fs.mkdir(winToolsRootDir(), { recursive: true });
+    await downloadFile(RUSTUP_INIT.url, exe, `rustup-init ${RUSTUP_VERSION}`, RUSTUP_INIT.sha256);
+    const inst = await run(exe, ['-y', '--profile', 'minimal', '--default-host', RUST_HOST, '--default-toolchain', 'none'],
+      env, (l) => log(`[Rust] ${l}\n`));
+    if (inst.code !== 0) {
+      log('[Rust] The rustup installer failed (above). Install Rust from https://rustup.rs and build again.\n');
+      return {};
+    }
+    have = await run('rustup', ['--version'], env, () => {});
+  }
+  if (have.missing) {
+    log(`[Rust] rustup is installed but not found in ${cargoBin}: install Rust from https://rustup.rs and build again.\n`);
+    return {};
+  }
+
+  const channel = (sdkDir && await sdkRustChannel(sdkDir)) || 'stable';
+  const toolchain = `${channel}-${RUST_HOST}`;
+  const list = await run('rustup', ['target', 'list', '--installed', '--toolchain', toolchain], env, () => {});
+  if (list.code !== 0 || !list.out.split(/\s+/).includes(UVM2_RUST_TARGET)) {
+    log(`[Rust] Installing Rust ${toolchain} with the ${UVM2_RUST_TARGET} target (one time)...\n`);
+    // --force-non-host: on an ARM64 Windows rustup sees an aarch64 host and refuses the
+    // x86_64 toolchain, which runs there under Windows' x64 emulation like the rest of the tools.
+    const t = await run('rustup', ['toolchain', 'install', toolchain, '--profile', 'minimal', '--target', UVM2_RUST_TARGET, '--force-non-host'],
+      env, (l) => log(`[Rust] ${l}\n`));
+    if (t.code !== 0) log(`[Rust] rustup toolchain install ${toolchain} failed (above).\n`);
+  }
+  // dlltool: the windows-sys crate (a dependency of the SDK's proc macros) links through it,
+  // and rustc looks for it on PATH only, while the gnu toolchain keeps its own in the sysroot's
+  // self-contained folder. At the END of PATH: that folder also has an ld.exe and a gcc.
+  const sysroot = await run('rustup', ['run', toolchain, 'rustc', '--print', 'sysroot'], env, () => {});
+  const key = Object.keys(env).find((k) => k.toUpperCase() === 'PATH') ?? 'PATH';
+  if (sysroot.code === 0 && sysroot.out.trim()) {
+    const selfContained = join(sysroot.out.trim(), 'lib', 'rustlib', RUST_HOST, 'bin', 'self-contained');
+    env[key] = [env[key], selfContained].filter(Boolean).join(delimiter);
+  }
+  return { RUSTUP_TOOLCHAIN: toolchain, [key]: env[key] };
+}
+
+/**
+ * The environment a C (make) or uvm2 (CMake + cargo) build needs on Windows, with every
+ * missing tool downloaded first. `base` is the build's environment so far; the result is
+ * `base` plus PATH, the generator and picotool. `uvm2` adds Rust.
+ */
+export async function windowsBuildEnv(o: {
+  base: NodeJS.ProcessEnv; sdkDir: string | null; uvm2: boolean; log: (line: string) => void;
+}): Promise<NodeJS.ProcessEnv> {
+  const env: NodeJS.ProcessEnv = { ...o.base };
+  const dirs: Record<string, string> = {};
+  for (const t of WIN_TOOLS) {
+    if (!o.uvm2 && t.name !== 'make') continue;
+    try {
+      dirs[t.name] = await ensureTool(t, o.log);
+    } catch (e: any) {
+      o.log(`[tools] Could not install ${t.name} ${t.version}: ${e?.message || e}\n`);
+    }
+  }
+  const pathDirs = WIN_TOOLS
+    .filter((t) => dirs[t.name] && t.bin !== null && t.name !== 'picotool')
+    .map((t) => join(dirs[t.name], t.bin as string));
+  if (dirs.make && await isArm64Windows()) {
+    try {
+      pathDirs[0] = await ensureArm64MakeBin(dirs.make, o.log);
+    } catch (e: any) {
+      o.log(`[tools] Could not install busybox for ARM64: ${e?.message || e}\n`);
+    }
+  }
+  // The Arm compiler on PATH too: a project's own rp2350 rule may call arm-none-eabi-gcc bare.
+  if (env.UVM2_ARM_TOOLCHAIN) pathDirs.push(join(env.UVM2_ARM_TOOLCHAIN, 'bin'));
+  prependPath(env, pathDirs);
+  if (o.uvm2) {
+    // Older SDKs' Rust build tools need MinGW's dlltool (windows-sys 0.61): said up front.
+    const tag = o.sdkDir ? basename(o.sdkDir) : '';
+    if (isValidSdkTag(tag) && compareTagsDesc(tag, MIN_WINDOWS_SDK) > 0) {
+      o.log(`[tools] SDK ${tag}: uvm2 builds on Windows need SDK ${MIN_WINDOWS_SDK} or later (the Rust build fails on "dlltool"). Pick a newer SDK in Project Settings.\n`);
+    }
+    if (!env.CMAKE_GENERATOR) env.CMAKE_GENERATOR = 'Ninja';
+    // In front: CMake would otherwise take the Microsoft Store's python.exe stub, or none.
+    try {
+      prependPath(env, [await ensureWindowsPython(o.log)]);
+    } catch (e: any) {
+      o.log(`[tools] Could not install Python ${WIN_PYTHON.version}: ${e?.message || e}\n`);
+    }
+    if (dirs.picotool && !env.PICOTOOL_FETCH_FROM_GIT_PATH) env.PICOTOOL_FETCH_FROM_GIT_PATH = toolPath(dirs.picotool);
+    Object.assign(env, await windowsRust(o.sdkDir, env, o.log));
+  }
+  return env;
+}
+
+// ─── The WASM simulator: emscripten ────────────────────────────────────────
+//
+// `make sim` compiles the game with emcc. On Windows the IDE installs emsdk itself, at the
+// version the simulator builds are made with on the other machines: emsdk's own repository at
+// that tag, the Python emsdk ships for Windows to run it (Windows has none), then `emsdk install` and
+// `activate`, which download Clang, Node and emscripten (about 400 MB, once). The build gets
+// EMCC as "<emsdk's python> <emscripten>/emcc.py": make's busybox sh does not run .bat files.
+
+export const EMSDK_VERSION = '6.0.3';
+const EMSDK_READY = '.vectrex-studio-emsdk-ready';
+
+let emsdkInFlight: Promise<string> | null = null;
+
+/** emsdk at EMSDK_VERSION, installed and activated in ~/VectrexStudio/toolchains/windows. */
+function ensureEmsdk(log: (line: string) => void): Promise<string> {
+  if (emsdkInFlight) return emsdkInFlight;
+  emsdkInFlight = (async () => {
+    const dir = join(winToolsRootDir(), `emsdk-${EMSDK_VERSION}`);
+    try { await fs.access(join(dir, EMSDK_READY)); return dir; } catch { /* not yet */ }
+    log(`[emsdk] Installing emscripten ${EMSDK_VERSION} for the simulator build into ${dir} (about 400 MB, once; a few minutes)...\n`);
+    await installTarball({
+      what: `emsdk ${EMSDK_VERSION}`,
+      url: `https://codeload.github.com/emscripten-core/emsdk/tar.gz/refs/tags/${EMSDK_VERSION}`,
+      root: winToolsRootDir(), name: `emsdk-${EMSDK_VERSION}`, mustContain: 'emsdk.py',
+      marker: { version: EMSDK_VERSION }, progressTag: `emsdk-${EMSDK_VERSION}`,
+    });
+    // A Python to run emsdk.py with. Not emsdk's own python/ folder: `emsdk install` unpacks
+    // the same Python there, and Windows will not overwrite a running python.exe's DLLs.
+    const python = join(await ensureWindowsPython(log), 'python.exe');
+    const env: NodeJS.ProcessEnv = { ...process.env };
+    delete env.PYTHONHOME;
+    delete env.PYTHONPATH;
+    delete env.MSYSTEM;   // set by Git Bash: emsdk would then think it runs under MSYS
+    // emsdk publishes no Windows on Arm build: the x64 one runs there under emulation
+    env.EMSDK_ARCH = 'x86_64';
+    for (const step of ['install', 'activate']) {
+      const r = await new Promise<number | null>((resolve) => {
+        const child = spawn(python, [join(dir, 'emsdk.py'), step, EMSDK_VERSION], { cwd: dir, env, stdio: ['ignore', 'pipe', 'pipe'] });
+        const take = (c: Buffer) => { for (const l of c.toString().split(/\r?\n|\r/)) if (l.trim()) log(`[emsdk] ${l.trim()}\n`); };
+        child.stdout?.on('data', take);
+        child.stderr?.on('data', take);
+        child.on('error', (e) => { log(`[emsdk] ${e.message}\n`); resolve(-1); });
+        child.on('close', resolve);
+      });
+      if (r !== 0) throw new Error(`emsdk ${step} ${EMSDK_VERSION} failed (above)`);
+    }
+    await fs.writeFile(join(dir, EMSDK_READY), `${EMSDK_VERSION}\n`);
+    log(`[emsdk] emscripten ${EMSDK_VERSION} installed: ${dir}\n`);
+    return dir;
+  })().finally(() => { emsdkInFlight = null; });
+  return emsdkInFlight;
+}
+
+/**
+ * The environment `make sim` needs on Windows: make (windowsBuildEnv) and emscripten, both
+ * downloaded once. An emsdk the user set up (EMSDK) is used as it is.
+ */
+export async function windowsSimEnv(o: { base: NodeJS.ProcessEnv; log: (line: string) => void }): Promise<NodeJS.ProcessEnv> {
+  const env = await windowsBuildEnv({ base: o.base, sdkDir: null, uvm2: false, log: o.log });
+  if (env.EMCC) return env;
+  let dir = env.EMSDK && await fs.access(join(env.EMSDK, 'upstream', 'emscripten', 'emcc.py')).then(() => env.EMSDK as string, () => null);
+  if (!dir) {
+    try {
+      dir = await ensureEmsdk(o.log);
+    } catch (e: any) {
+      o.log(`[emsdk] Could not install emscripten: ${e?.message || e}\n`);
+      return env;
+    }
+  }
+  const emscripten = join(dir, 'upstream', 'emscripten');
+  // emsdk's python, or the one its config names when it is the user's own emsdk
+  let python = join(dir, 'python', WIN_PYTHON.dir, 'python.exe');
+  try { await fs.access(python); } catch { python = env.EMSDK_PYTHON || 'python'; }
+  env.EMSDK = toolPath(dir);
+  env.EM_CONFIG = toolPath(join(dir, '.emscripten'));
+  env.EMSDK_PYTHON = toolPath(python);
+  env.EMCC = `${toolPath(python)} ${toolPath(join(emscripten, 'emcc.py'))}`;
+  delete env.PYTHONHOME;
+  delete env.PYTHONPATH;
+  prependPath(env, [emscripten]);
+  return env;
+}

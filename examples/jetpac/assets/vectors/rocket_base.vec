@@ -1,0 +1,103 @@
+{
+  "version": "1.0",
+  "name": "rocket_base",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "base_body",
+          "intensity": 127,
+          "closed": true,
+          "points": [
+            {
+              "x": -9,
+              "y": -4
+            },
+            {
+              "x": -9,
+              "y": 8
+            },
+            {
+              "x": 9,
+              "y": 8
+            },
+            {
+              "x": 9,
+              "y": -4
+            }
+          ]
+        },
+        {
+          "name": "fin_left",
+          "intensity": 100,
+          "closed": true,
+          "points": [
+            {
+              "x": -9,
+              "y": -1
+            },
+            {
+              "x": -13,
+              "y": -4
+            },
+            {
+              "x": -9,
+              "y": -4
+            }
+          ]
+        },
+        {
+          "name": "fin_right",
+          "intensity": 100,
+          "closed": true,
+          "points": [
+            {
+              "x": 9,
+              "y": -1
+            },
+            {
+              "x": 14,
+              "y": -4
+            },
+            {
+              "x": 9,
+              "y": -4
+            }
+          ]
+        },
+        {
+          "name": "engine",
+          "intensity": 90,
+          "closed": true,
+          "points": [
+            {
+              "x": -4,
+              "y": -4
+            },
+            {
+              "x": -4,
+              "y": -6
+            },
+            {
+              "x": 5,
+              "y": -6
+            },
+            {
+              "x": 5,
+              "y": -4
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 1,
+  "center_y": 1
+}

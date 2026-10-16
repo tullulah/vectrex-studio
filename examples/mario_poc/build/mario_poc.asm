@@ -158,6 +158,7 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    CLR DRAW_VEC_INTENSITY ; 0 = use recorded/vector intensity (no override)
     ; Init camera ONCE at boot (RAM not zero-init); LOAD_LEVEL must NOT reset it.
     LDD #0
     STD >CAMERA_X
@@ -718,18 +719,14 @@ _MARIO_HALF_HEIGHT EQU 13
 _MARIO_CENTER_X EQU 0
 _MARIO_CENTER_Y EQU 2
 
-_MARIO_VECTORS:  ; Main entry (header + 10 path(s))
-    FDB 10               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
+_MARIO_VECTORS:  ; Main entry (header + 6 path(s))
+    FDB 6               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
     FDB _MARIO_PATH0        ; pointer to path 0
     FDB _MARIO_PATH1        ; pointer to path 1
     FDB _MARIO_PATH2        ; pointer to path 2
     FDB _MARIO_PATH3        ; pointer to path 3
     FDB _MARIO_PATH4        ; pointer to path 4
     FDB _MARIO_PATH5        ; pointer to path 5
-    FDB _MARIO_PATH6        ; pointer to path 6
-    FDB _MARIO_PATH7        ; pointer to path 7
-    FDB _MARIO_PATH8        ; pointer to path 8
-    FDB _MARIO_PATH9        ; pointer to path 9
 
 _MARIO_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
@@ -751,23 +748,13 @@ _MARIO_PATH2:    ; Path 2
     FCB 127              ; path2: intensity
     FCB $09,$05,0,0        ; path2: header (y=9, x=5)
     FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
+    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
     FCB 2                ; End marker (path complete)
 
 _MARIO_PATH3:    ; Path 3
     FCB 127              ; path3: intensity
-    FCB $0D,$05,0,0        ; path3: header (y=13, x=5)
-    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
-    FCB 2                ; End marker (path complete)
-
-_MARIO_PATH4:    ; Path 4
-    FCB 127              ; path4: intensity
-    FCB $0D,$FB,0,0        ; path4: header (y=13, x=-5)
-    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
-    FCB 2                ; End marker (path complete)
-
-_MARIO_PATH5:    ; Path 5
-    FCB 127              ; path5: intensity
-    FCB $F9,$F9,0,0        ; path5: header (y=-7, x=-7)
+    FCB $F9,$F9,0,0        ; path3: header (y=-7, x=-7)
     FCB $FF,$00,$0E          ; flag=-1, dy=0, dx=14
     FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
     FCB $FF,$00,$F2          ; flag=-1, dy=0, dx=-14
@@ -775,27 +762,17 @@ _MARIO_PATH5:    ; Path 5
     FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
-_MARIO_PATH6:    ; Path 6
-    FCB 127              ; path6: intensity
-    FCB $F9,$F9,0,0        ; path6: header (y=-7, x=-7)
+_MARIO_PATH4:    ; Path 4
+    FCB 127              ; path4: intensity
+    FCB $F9,$F9,0,0        ; path4: header (y=-7, x=-7)
     FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
-    FCB 2                ; End marker (path complete)
-
-_MARIO_PATH7:    ; Path 7
-    FCB 127              ; path7: intensity
-    FCB $F3,$F9,0,0        ; path7: header (y=-13, x=-7)
     FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
     FCB 2                ; End marker (path complete)
 
-_MARIO_PATH8:    ; Path 8
-    FCB 127              ; path8: intensity
-    FCB $F3,$02,0,0        ; path8: header (y=-13, x=2)
+_MARIO_PATH5:    ; Path 5
+    FCB 127              ; path5: intensity
+    FCB $F3,$02,0,0        ; path5: header (y=-13, x=2)
     FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
-    FCB 2                ; End marker (path complete)
-
-_MARIO_PATH9:    ; Path 9
-    FCB 127              ; path9: intensity
-    FCB $F3,$07,0,0        ; path9: header (y=-13, x=7)
     FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 ; Generated from mountain.vec (Malban Draw_Sync_List format)

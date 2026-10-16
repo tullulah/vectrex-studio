@@ -1,0 +1,38 @@
+{
+  "version": "1.0",
+  "name": "jump",
+  "category": "jump",
+  "duration_ms": 180,
+  "oscillator": {
+    "frequency": 330,
+    "channel": 0,
+    "duty": 50
+  },
+  "envelope": {
+    "attack": 10,
+    "decay": 60,
+    "sustain": 12,
+    "release": 100,
+    "peak": 14
+  },
+  "pitch": {
+    "enabled": true,
+    "start_mult": 0.6,
+    "end_mult": 1.5,
+    "curve": 2
+  },
+  "noise": {
+    "enabled": false,
+    "period": 15,
+    "volume": 0,
+    "decay_ms": 0
+  },
+  "modulation": {
+    "arpeggio": false,
+    "arpeggio_notes": [],
+    "arpeggio_speed": 0,
+    "vibrato": false,
+    "vibrato_depth": 0,
+    "vibrato_speed": 0
+  }
+}

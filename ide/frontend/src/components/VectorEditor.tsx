@@ -13,6 +13,8 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useEditorStore } from '../state/editorStore.js';
 import DxfParser from 'dxf-parser';
 import type { IEntity } from 'dxf-parser';
+import { textToPaths } from '../lib/strokeFont.js';
+import { projectView, orbitRotation, type ViewMode } from '../utils/view3d.js';
 
 // Types from the .vec format
 interface Point {
@@ -28,12 +30,23 @@ interface VecPath {
   closed: boolean;
   type?: 'polyline' | 'bezier';
   points: Point[];
+  /* INTENSIDAD POR SEGMENTO, uno por cada tramo (o sea points.length - 1). Sirve para
+   * trazar una recta larga y apagar los tramos que sobran —el aire entre dos escaleras—
+   * en vez de soltar ocho trazos sueltos. En la Vectrex el haz recorre el hueco igual,
+   * asi que apagarlo no cuesta tiempo de haz y en cambio evita que el reordenador
+   * reparta los trozos por el frame y se re-aproxime a cada uno.
+   * Ausente = toda la ruta con `intensity`. El valor es RELATIVO: 127 es el brillo
+   * normal del juego, 0 apagado. */
+  intensities?: number[];
 }
 
 interface Layer {
   name: string;
   visible: boolean;
   paths: VecPath[];
+  // Set when the layer was produced by the text tool, so it can be re-edited
+  // (change the string / size and regenerate in place).
+  text?: { content: string; height: number; intensity: number };
 }
 
 interface CollisionSegment {
@@ -67,13 +80,48 @@ interface VecResource {
   backgroundImage?: string;
   // Background image offset in canvas pixels
   backgroundOffset?: { x: number; y: number };
+  /** Stretch the background to fill the whole Vectrex screen, or draw it at its
+   *  natural size (one image pixel = one resource unit) with its bottom-left corner on
+   *  the origin. Stretching suits a photo or a full-screen mock-up; natural size suits
+   *  a sprite ripped at its real dimensions, which would otherwise be blown up to fill
+   *  the screen and be useless to trace over. Absent = stretch, so files written before
+   *  this existed keep looking the way they did. Superseded by backgroundFit; kept so
+   *  older files load with the mode they were saved with. */
+  backgroundStretch?: boolean;
+  /** How the background image is placed on the screen rect. 'stretch' fills the whole
+   *  Vectrex screen (may deform); 'fitWidth' fills the screen width and scales the
+   *  height by the same ratio (no deformation — for tracing scenery from a photo whose
+   *  aspect differs from 3:4); 'natural' is one image pixel = one resource unit.
+   *  'playfield' puts the image on the ARCADE PLAYFIELD instead of the screen rect — see
+   *  the draw code for why that is a different rectangle and when you want it.
+   *  Absent → fall back to backgroundStretch. */
+  backgroundFit?: 'stretch' | 'fitWidth' | 'natural' | 'naturalCenter' | 'playfield';
+  /** EN QUE REJILLA ESTAN LAS COORDENADAS.
+   *
+   *  'beam' (o ausente) = unidades del haz del Vectrex, que es lo que la consola dibuja.
+   *  'game' = UNIDADES DE LA RECREATIVA, un pixel del arcade por unidad. El puerto lleva
+   *  unas a otras multiplicando por 110/127, asi que una unidad de juego son 0,866 de haz.
+   *
+   *  Por que existe 'game': el escenario de Donkey Kong vive en la rejilla del ARCADE —
+   *  las vigas caen en multiplos de 8 y los peldanos cada 4— y esa rejilla NO se puede
+   *  escribir en enteros de haz: el paso de 4 son 3,465. Guardando el .vec en unidades de
+   *  haz, 34 de las 256 alturas no sobreviven la ida y vuelta, y una escalera dibujada con
+   *  el paso regular salia en la consola con pasos de 3, 5, 4, 4... Con 'game' lo que
+   *  dibujas es exactamente lo que tiene la ROM, y la conversion ocurre UNA vez, al final.
+   *
+   *  El editor lo pinta multiplicando por 110/127, asi que en pantalla sigue viendose 1:1
+   *  con lo que sale en la consola: cambia la rejilla en la que editas, no el tamaño. */
+  units?: 'beam' | 'game';
   collisionMesh?: {
     segments: CollisionSegment[];
   };
   /** Reusable walkable areas (Phase 2 wander AI). Coordinates are relative
    *  to the vec's origin; the playground / codegen translate them by each
    *  placed object's (x, y). Inheritance: .vec → .vplay → .venemy. */
-  walkableAreas?: { y: number; x_min: number; x_max: number }[];
+  // `y` is the surface height at x_min; optional `y2` is the height at x_max.
+  // Absent/equal y2 → FLAT area (historical). Differing → SLOPE (the runtime
+  // interpolates the enemy's Y from its X across [x_min, x_max]).
+  walkableAreas?: { y: number; x_min: number; x_max: number; y2?: number }[];
 }
 
 interface VectorEditorProps {
@@ -88,7 +136,6 @@ interface VectorEditorProps {
 }
 
 type Tool = 'select' | 'pen' | 'line' | 'bezier' | 'polygon' | 'circle' | 'arc' | 'pan' | 'background' | 'walkarea';
-type ViewMode = 'xy' | 'xz' | 'yz' | '3d';
 
 const defaultResource: VecResource = {
   version: '1.0',
@@ -674,6 +721,9 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   
   const [resource, setResource] = useState<VecResource>(() => normalizeResource(initialResource));
   const [currentTool, setCurrentTool] = useState<Tool>('select');
+  // Text tool: null when closed, else the pending text to add. `editLayer` is
+  // the layer index when re-editing an existing text layer (else a new layer).
+  const [textDialog, setTextDialog] = useState<{ text: string; height: number; intensity: number; editLayer?: number } | null>(null);
   const [currentLayerIndex, setCurrentLayerIndex] = useState(0);
   const [currentPathIndex, setCurrentPathIndex] = useState(-1);
   const [selectedPointIndex, setSelectedPointIndex] = useState(-1);
@@ -692,6 +742,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [viewMode, setViewMode] = useState<ViewMode>('xy');
   const [rotation3D, setRotation3D] = useState({ pitch: 30, yaw: 45 }); // degrees
+  const orbitRef = useRef(false);   // the middle-button drag in progress orbits (Shift held)
   const [isDrawing, setIsDrawing] = useState(false);
   const [tempPoints, setTempPoints] = useState<Point[]>([]);
   const [showCollisionMesh, setShowCollisionMesh] = useState(false);
@@ -699,6 +750,11 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   // Walkable-area paint state (active when currentTool === 'walkarea').
   const walkAreaDrawStartRef = useRef<{ x: number; y: number } | null>(null);
   const [walkAreaPreview, setWalkAreaPreview] = useState<{ y: number; x_min: number; x_max: number } | null>(null);
+  // Currently-selected walkable area (index into resource.walkableAreas), set by
+  // clicking a bar on the canvas or its row in the list; highlighted in both.
+  const [selectedWalkAreaIdx, setSelectedWalkAreaIdx] = useState<number | null>(null);
+  // Width of the right properties panel — user-resizable by dragging its left edge.
+  const [rightPanelWidth, setRightPanelWidth] = useState(300);
 
   // Tracks the mousedown position for bezier anchor drag detection
   const bezierMouseDownRef = useRef<{ canvasX: number; canvasY: number; resPoint: Point } | null>(null);
@@ -801,16 +857,23 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   const isInternalChange = useRef(false);
   
   // Sync with external resource changes (but not our own changes)
-  // Resize the canvas to the largest square that fits the available space
+  // Resize the canvas to FILL the available space (was a centered square, which
+  // left big empty side gutters when the area is wider than tall). Drawing stays
+  // aspect-correct and centered because the coordinate scale uses min(w,h); the
+  // extra width just becomes more visible workspace/grid.
   useEffect(() => {
     const el = canvasContainerRef.current;
     if (!el) return;
     const obs = new ResizeObserver(([entry]) => {
       const { width: cw, height: ch } = entry.contentRect;
       if (cw > 20 && ch > 20) {
-        const size = Math.min(Math.floor(cw), Math.floor(ch));
-        setWidth(size);
-        setHeight(size);
+        // The <canvas> has a 2px border on every side, so its visual box is the
+        // drawing buffer + 4px. Subtract that (plus 1px slack) so the border
+        // isn't clipped by the container's overflow:hidden — otherwise the right
+        // edge line disappears and the canvas looks like it runs under the panel.
+        const BORDER = 5;
+        setWidth(Math.max(20, Math.floor(cw) - BORDER));
+        setHeight(Math.max(20, Math.floor(ch) - BORDER));
       }
     });
     obs.observe(el);
@@ -1052,6 +1115,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   const [backgroundImage, setBackgroundImage] = useState<HTMLImageElement | null>(null);
   const [backgroundOpacity, setBackgroundOpacity] = useState(0.5);
   const [showBackground, setShowBackground] = useState(true);
+  const [backgroundFit, setBackgroundFit] = useState<'stretch' | 'fitWidth' | 'natural' | 'naturalCenter' | 'playfield'>('stretch');
   const [backgroundOffset, setBackgroundOffset] = useState({ x: 0, y: 0 });
   const [isBackgroundSelected, setIsBackgroundSelected] = useState(false);
   
@@ -1102,11 +1166,28 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     };
   }, [edgeOptions, backgroundImage, showEdgeSettings, width, height, resource.canvas.width, resource.canvas.height]);
 
+  /* CUANTAS UNIDADES DE HAZ MIDE UNA UNIDAD DEL RECURSO. Ver `units` arriba: con 'game'
+   * el .vec esta en la rejilla de la recreativa y hay que pintarlo a 110/127 para que en
+   * pantalla siga siendo 1:1 con la consola. Metiendo el factor AQUI —en las tres
+   * conversiones y en ningun sitio mas— lo heredan el dibujo, el raton, el arrastre y el
+   * enganche de vertices sin tocarlos. */
+  const HAZ_POR_JUEGO = 110 / 127;
+  const escalaUnidad = resource.units === 'game' ? HAZ_POR_JUEGO : 1;
+  /** una medida en unidades de HAZ, expresada en las del recurso */
+  const enUnidades = useCallback((v: number) => v / escalaUnidad, [escalaUnidad]);
+
   // Convert canvas coordinates to resource coordinates (2D projection)
+  /* HOW FAR A POINT MAY GO: half the canvas, never less than the beam's 127. The limit was a
+   * fixed +-127 (the Vectrex unit), and a canvas wider than 256 — a ScummVM room is 320 to 960
+   * pixels across, one unit a pixel — had every point dragged past x 127 piled up on it
+   * (2026-10-11). A normal 256 canvas keeps exactly the old limit. */
+  const limX = Math.max(127, Math.ceil((resource.canvas?.width ?? 256) / 2));
+  const limY = Math.max(127, Math.ceil((resource.canvas?.height ?? 256) / 2));
+
   const canvasToResource = useCallback((canvasX: number, canvasY: number): Point => {
     const centerX = width / 2;
     const centerY = height / 2;
-    const scale = Math.min(width, height) / resource.canvas.width;
+    const scale = Math.min(width, height) / resource.canvas.width * escalaUnidad;
     
     const x = (canvasX - centerX - pan.x) / (scale * zoom);
     const y = (centerY - canvasY + pan.y) / (scale * zoom);
@@ -1122,42 +1203,22 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       // 3D view - not editable directly
       return { x: Math.round(x), y: Math.round(y), z: 0 };
     }
-  }, [width, height, resource.canvas.width, pan, zoom, viewMode]);
+  }, [width, height, resource.canvas.width, pan, zoom, viewMode, escalaUnidad]);
 
   // Project 3D point to 2D based on current view
   const project3DTo2D = useCallback((point: Point): { x: number; y: number; z: number } => {
-    const x = point.x || 0;
-    const y = point.y || 0;
-    const z = point.z || 0;
-    
-    if (viewMode === 'xy') {
-      return { x, y, z: 0 };
-    } else if (viewMode === 'xz') {
-      return { x, y: z, z: 0 };
-    } else if (viewMode === 'yz') {
-      return { x: y, y: z, z: 0 };
-    } else { // 3D perspective
-      const pitch = (rotation3D.pitch * Math.PI) / 180;
-      const yaw = (rotation3D.yaw * Math.PI) / 180;
-
-      // Rotate around Y axis (yaw)
-      const x1 = x * Math.cos(yaw) - z * Math.sin(yaw);
-      const z1 = x * Math.sin(yaw) + z * Math.cos(yaw);
-
-      // Rotate around X axis (pitch)
-      const y2 = y * Math.cos(pitch) - z1 * Math.sin(pitch);
-      const z2 = y * Math.sin(pitch) + z1 * Math.cos(pitch);
-
-      // Orthographic projection — z2 is depth (smaller = closer to viewer)
-      return { x: x1, y: y2, z: z2 };
-    }
+    // Shared with MeshEditor (utils/view3d). The orthographic views report no
+    // depth here, as they always have; the 3D view reports depth (smaller =
+    // closer to the viewer) for hit-testing.
+    const p = projectView(point.x || 0, point.y || 0, point.z || 0, viewMode, rotation3D);
+    return { x: p.x, y: p.y, z: viewMode === '3d' ? p.depth : 0 };
   }, [viewMode, rotation3D]);
   
   // Convert resource coordinates to canvas coordinates
   const resourceToCanvas = useCallback((point: Point): { x: number; y: number } => {
     const centerX = width / 2;
     const centerY = height / 2;
-    const scale = Math.min(width, height) / resource.canvas.width;
+    const scale = Math.min(width, height) / resource.canvas.width * escalaUnidad;
     
     const projected = project3DTo2D(point);
     
@@ -1165,20 +1226,20 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       x: centerX + projected.x * scale * zoom + pan.x,
       y: centerY - projected.y * scale * zoom + pan.y,
     };
-  }, [width, height, resource.canvas.width, pan, zoom, project3DTo2D]);
+  }, [width, height, resource.canvas.width, pan, zoom, project3DTo2D, escalaUnidad]);
 
   // Like resourceToCanvas but also returns z depth (for 3D hit-testing)
   const resourceToCanvasWithDepth = useCallback((point: Point): { x: number; y: number; z: number } => {
     const centerX = width / 2;
     const centerY = height / 2;
-    const scale = Math.min(width, height) / resource.canvas.width;
+    const scale = Math.min(width, height) / resource.canvas.width * escalaUnidad;
     const projected = project3DTo2D(point);
     return {
       x: centerX + projected.x * scale * zoom + pan.x,
       y: centerY - projected.y * scale * zoom + pan.y,
       z: projected.z,
     };
-  }, [width, height, resource.canvas.width, pan, zoom, project3DTo2D]);
+  }, [width, height, resource.canvas.width, pan, zoom, project3DTo2D, escalaUnidad]);
 
   // Find the nearest vertex (across all layers) within snapRadius canvas pixels.
   // Returns the 3D resource point and its projected canvas position, or null.
@@ -1257,21 +1318,67 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       ctx.save();
       ctx.globalAlpha = backgroundOpacity;
 
-      // Fit image inside the Vectrex screen rect (3:4 portrait, object-fit: contain)
-      const screenL = resourceToCanvas({ x: -96, y: 0 });
-      const screenR = resourceToCanvas({ x: 95, y: 0 });
-      const screenT = resourceToCanvas({ x: 0, y: 127 });
-      const screenB = resourceToCanvas({ x: 0, y: -128 });
-      const rectX = screenL.x + backgroundOffset.x;
-      const rectY = screenT.y + backgroundOffset.y;
-      const rectW = screenR.x - screenL.x;
-      const rectH = screenB.y - screenT.y;
-
-      // Stretch image to fill the Vectrex screen rect (same as vplay editor)
-      const drawWidth = rectW;
-      const drawHeight = rectH;
-      const drawX = rectX;
-      const drawY = rectY;
+      // Three placements. STRETCH fills the Vectrex screen rect, which is what a
+      // full-screen mock-up already at 3:4 wants. FIT WIDTH fills the screen width and
+      // scales the height by the same ratio, so a photo whose aspect isn't 3:4 keeps
+      // its proportions instead of deforming the scenery being traced. NATURAL maps one
+      // image pixel to one resource unit with the image's bottom-left corner on the
+      // origin, which is what a sprite ripped at its real size wants: shapes here are
+      // authored in a small box off the origin (a 16x16 sprite is x 0..15, y 0..15), so
+      // a 43x36 sprite stretched across 191x255 units is five times too big to trace over.
+      let drawX: number, drawY: number, drawWidth: number, drawHeight: number;
+      if (backgroundFit === 'stretch' || backgroundFit === 'fitWidth') {
+        const screenL = resourceToCanvas({ x: enUnidades(-96), y: 0 });
+        const screenR = resourceToCanvas({ x: enUnidades(95), y: 0 });
+        const screenT = resourceToCanvas({ x: 0, y: enUnidades(127) });
+        const screenB = resourceToCanvas({ x: 0, y: enUnidades(-128) });
+        drawX = screenL.x + backgroundOffset.x;
+        drawWidth = screenR.x - screenL.x;
+        if (backgroundFit === 'fitWidth') {
+          drawHeight = drawWidth * (backgroundImage.height / backgroundImage.width);
+          // Vertically centered on the screen rect; the offset drag moves it from there.
+          drawY = (screenT.y + screenB.y - drawHeight) / 2 + backgroundOffset.y;
+        } else {
+          drawY = screenT.y + backgroundOffset.y;
+          drawHeight = screenB.y - screenT.y;
+        }
+      } else if (backgroundFit === 'playfield') {
+        // EL CAMPO DE JUEGO, QUE NO ES LA PANTALLA — y esta es la diferencia que hacia que
+        // lo dibujado no fuese lo que sale en la consola.
+        //
+        // Las capturas de arcade que se calcan (Donkey Kong) miden 224x256 unidades DE
+        // JUEGO, y el puerto las lleva al haz multiplicando por 110/127 en LOS DOS ejes:
+        // 194x222 unidades de haz. O sea que el dibujo del juego NO llena la pantalla del
+        // Vectrex — llena el ancho y se queda en el 87% del alto, y eso es correcto.
+        //
+        // 'stretch' metia la foto en el rectangulo de PANTALLA (192x256), asi que se
+        // calcaba sobre una imagen 15% mas alta de lo que iba a salir. El compositor
+        // compensaba esa diferencia solo en la horizontal, y la vertical se perdia.
+        // Poniendo la foto donde el juego la va a poner, lo que calcas es lo que sale.
+        const W = enUnidades(224 * 110 / 127), H = enUnidades(256 * 110 / 127);
+        const tl = resourceToCanvas({ x: -W / 2, y: H / 2 });
+        const br = resourceToCanvas({ x: W / 2, y: -H / 2 });
+        drawX = tl.x + backgroundOffset.x;
+        drawY = tl.y + backgroundOffset.y;
+        drawWidth = br.x - tl.x;
+        drawHeight = br.y - tl.y;
+      } else if (backgroundFit === 'naturalCenter') {
+        // one pixel = one unit with the image CENTRE on the origin — for
+        // sprites authored centred
+        const tl = resourceToCanvas({ x: -backgroundImage.width / 2, y: backgroundImage.height / 2 });
+        const br = resourceToCanvas({ x: backgroundImage.width / 2, y: -backgroundImage.height / 2 });
+        drawX = tl.x + backgroundOffset.x;
+        drawY = tl.y + backgroundOffset.y;
+        drawWidth = br.x - tl.x;
+        drawHeight = br.y - tl.y;
+      } else {
+        const tl = resourceToCanvas({ x: 0, y: backgroundImage.height });
+        const br = resourceToCanvas({ x: backgroundImage.width, y: 0 });
+        drawX = tl.x + backgroundOffset.x;
+        drawY = tl.y + backgroundOffset.y;
+        drawWidth = br.x - tl.x;
+        drawHeight = br.y - tl.y;
+      }
 
       ctx.drawImage(backgroundImage, drawX, drawY, drawWidth, drawHeight);
 
@@ -1339,10 +1446,10 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       ctx.setLineDash([4, 4]); // Dashed line
       
       // Vectrex screen: 3:4 portrait — X: -96 to +95 (192 units), Y: -128 to +127 (256 units)
-      const screenLeft = resourceToCanvas({ x: -96, y: 0 });
-      const screenRight = resourceToCanvas({ x: 95, y: 0 });
-      const screenTop = resourceToCanvas({ x: 0, y: 127 });
-      const screenBottom = resourceToCanvas({ x: 0, y: -128 });
+      const screenLeft = resourceToCanvas({ x: enUnidades(-96), y: 0 });
+      const screenRight = resourceToCanvas({ x: enUnidades(95), y: 0 });
+      const screenTop = resourceToCanvas({ x: 0, y: enUnidades(127) });
+      const screenBottom = resourceToCanvas({ x: 0, y: enUnidades(-128) });
       
       ctx.beginPath();
       ctx.rect(
@@ -1369,11 +1476,43 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         const path = layer.paths[pathIdx];
         if (!path || !Array.isArray(path.points) || path.points.length < 2) continue;
 
+        /* UN PATH APAGADO SE SIGUE VIENDO AQUI. Con intensity 0 se pintaba en negro sobre
+         * negro: invisible en el editor, o sea imposible de seleccionar y de corregir. En
+         * el juego no se ve —esa es la idea— pero aqui hay que poder trabajarlo, asi que
+         * va en gris discontinuo, igual que los tramos apagados. */
+        const apagado = path.intensity === 0;
         const intensity = path.intensity / 127;
         const green = Math.floor(200 + 55 * intensity);
-        ctx.strokeStyle = `rgb(${Math.floor(100 * intensity)}, ${green}, ${Math.floor(100 * intensity)})`;
+        ctx.strokeStyle = apagado
+          ? '#404040'
+          : `rgb(${Math.floor(100 * intensity)}, ${green}, ${Math.floor(100 * intensity)})`;
+        ctx.setLineDash(apagado ? [3, 3] : []);
         ctx.lineWidth = 2;
 
+        // Con intensidad por segmento hay que pintar tramo a tramo: un solo trazo no
+        // puede tener dos brillos. Los apagados se dejan marcados en gris oscuro para
+        // poder EDITARLOS — en el juego no se ven, pero aqui tienen que verse.
+        if (path.type !== 'bezier' && Array.isArray(path.intensities)) {
+          /* UN PATH CERRADO TIENE UN TRAMO MAS: el de cierre, del ultimo punto al
+           * primero. Sin contarlo, la figura se pinta ABIERTA — y justo las vigas del
+           * escenario son paths cerrados, asi que el fallo salia en la primera que se
+           * tocaba. */
+          const nseg = path.closed ? path.points.length : path.points.length - 1;
+          for (let i = 1; i <= nseg; i++) {
+            const a = path.points[i - 1], b2 = path.points[i % path.points.length];
+            if (!a || !b2) continue;
+            const vi = path.intensities[i - 1] ?? path.intensity;
+            const f = vi / 127;
+            ctx.strokeStyle = vi === 0
+              ? '#404040'
+              : `rgb(${Math.floor(100 * f)}, ${Math.floor(200 + 55 * f)}, ${Math.floor(100 * f)})`;
+            ctx.setLineDash(vi === 0 ? [3, 3] : []);
+            ctx.beginPath();
+            const pa = resourceToCanvas(a), pb = resourceToCanvas(b2);
+            ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
+          }
+          ctx.setLineDash([]);
+        } else {
         ctx.beginPath();
         if (path.type === 'bezier') {
           renderBezierPath(path.points, ctx);
@@ -1391,6 +1530,8 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           if (path.closed) ctx.closePath();
         }
         ctx.stroke();
+        }
+        ctx.setLineDash([]);
 
         // For selected bezier path: draw handle lines on top
         if (path.type === 'bezier' && layerIdx === currentLayerIndex && pathIdx === currentPathIndex) {
@@ -1517,13 +1658,16 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     // dashed bars with their index, plus the live preview while painting.
     if (resource.walkableAreas?.length || walkAreaPreview) {
       ctx.save();
-      ctx.strokeStyle = '#44ffcc';
-      ctx.fillStyle = '#44ffcc';
-      ctx.lineWidth = 1.5;
       ctx.setLineDash([4, 3]);
       (resource.walkableAreas ?? []).forEach((a, idx) => {
+        const sel = idx === selectedWalkAreaIdx;
+        ctx.strokeStyle = sel ? '#ffdd33' : '#44ffcc';
+        ctx.fillStyle = sel ? '#ffdd33' : '#44ffcc';
+        ctx.lineWidth = sel ? 3 : 1.5;
+        // Right end sits at y2 (surface height at x_max) — draws the incline
+        // for a sloped area; equals `y` for a flat one.
         const left  = resourceToCanvas({ x: a.x_min, y: a.y });
-        const right = resourceToCanvas({ x: a.x_max, y: a.y });
+        const right = resourceToCanvas({ x: a.x_max, y: a.y2 ?? a.y });
         ctx.beginPath();
         ctx.moveTo(left.x, left.y);
         ctx.lineTo(right.x, right.y);
@@ -1535,7 +1679,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         ctx.stroke();
         ctx.font = '11px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText(`W${idx}`, (left.x + right.x) / 2, left.y - 6);
+        ctx.fillText(`W${idx}`, (left.x + right.x) / 2, Math.min(left.y, right.y) - 6);
         ctx.setLineDash([4, 3]);
       });
       if (walkAreaPreview) {
@@ -1852,7 +1996,44 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       ctx.stroke();
       ctx.restore();
     }
-  }, [resource, currentLayerIndex, currentPathIndex, selectedPointIndex, selectedPoints, tempPoints, pan, zoom, width, height, resourceToCanvas, backgroundImage, backgroundOpacity, showBackground, isBoxSelecting, boxStart, boxEnd, showPreview, previewPaths, showEdgeSettings, isBackgroundSelected, backgroundOffset, isSubtractSelect, isMoveMode, selectedTreePathKey, selectedTreePathKeys, currentTool, showCollisionMesh, selectedEdge, walkAreaPreview]);
+
+    // Text tool: live ghost preview of the string ON THE CANVAS at its REAL size
+    // and position (centred on the origin, where it will be dropped). The dialog's
+    // little preview auto-fits its box and can't convey scale, so this is what
+    // tells you the height you picked is the height you'll get.
+    if (textDialog && textDialog.text && textDialog.height > 0) {
+      // new text centres on the origin; re-editing centres on the layer's current
+      // strokes so the preview sits where the text already is
+      let cx = 0, cy = 0;
+      const el = textDialog.editLayer;
+      if (el != null && resource.layers[el]?.paths.length) {
+        let mnx = Infinity, mny = Infinity, mxx = -Infinity, mxy = -Infinity;
+        resource.layers[el].paths.forEach(p => p.points.forEach(pt => {
+          if (pt.x < mnx) mnx = pt.x; if (pt.x > mxx) mxx = pt.x;
+          if (pt.y < mny) mny = pt.y; if (pt.y > mxy) mxy = pt.y;
+        }));
+        if (isFinite(mnx)) { cx = (mnx + mxx) / 2; cy = (mny + mxy) / 2; }
+      }
+      const strokes = textToPaths(textDialog.text, textDialog.height, { center: { x: cx, y: cy } });
+      ctx.save();
+      ctx.strokeStyle = '#66ff66';
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.85;
+      ctx.setLineDash([]);
+      for (const s of strokes) {
+        if (s.points.length < 2) continue;
+        ctx.beginPath();
+        const p0 = resourceToCanvas(s.points[0]);
+        ctx.moveTo(p0.x, p0.y);
+        for (let i = 1; i < s.points.length; i++) {
+          const p = resourceToCanvas(s.points[i]);
+          ctx.lineTo(p.x, p.y);
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }, [resource, currentLayerIndex, currentPathIndex, selectedPointIndex, selectedPoints, tempPoints, pan, zoom, width, height, resourceToCanvas, backgroundImage, backgroundOpacity, showBackground, backgroundFit, isBoxSelecting, boxStart, boxEnd, showPreview, previewPaths, showEdgeSettings, isBackgroundSelected, backgroundOffset, isSubtractSelect, isMoveMode, selectedTreePathKey, selectedTreePathKeys, currentTool, showCollisionMesh, selectedEdge, walkAreaPreview, selectedWalkAreaIdx, textDialog]);
 
   useEffect(() => {
     draw();
@@ -2100,6 +2281,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       };
       img.src = resource.backgroundImage;
       setBackgroundOffset(resource.backgroundOffset ?? { x: 0, y: 0 });
+      setBackgroundFit(resource.backgroundFit ?? ((resource.backgroundStretch ?? true) ? 'stretch' : 'natural'));
     } else {
       setBackgroundImage(null);
       setShowBackground(false);
@@ -2168,12 +2350,15 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       return;
     }
 
-    // Middle mouse button (button 1) → temporary pan regardless of current tool
+    // Middle mouse button (button 1) → temporary pan regardless of current tool;
+    // with Shift held, ORBIT instead (switching to the 3D view if not in it)
     if (e.button === 1) {
       e.preventDefault();
       const canvasX = e.clientX - rect.left;
       const canvasY = e.clientY - rect.top;
       dragStartRef.current = { x: canvasX, y: canvasY, panX: pan.x, panY: pan.y };
+      orbitRef.current = e.shiftKey;
+      if (e.shiftKey && viewMode !== '3d') setViewMode('3d');
       setIsDrawing(true);
       return;
     }
@@ -2431,6 +2616,14 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       draw();
     }
 
+    // Middle mouse button + Shift drag → orbit the 3D view
+    if (e.buttons === 4 && dragStartRef.current && orbitRef.current) {
+      const deltaX = canvasX - dragStartRef.current.x;
+      const deltaY = canvasY - dragStartRef.current.y;
+      setRotation3D(r => orbitRotation(r, deltaX, deltaY));
+      dragStartRef.current = { ...dragStartRef.current, x: canvasX, y: canvasY };
+      return;
+    }
     // Middle mouse button drag → pan (e.buttons bit 4 = middle button held)
     if (e.buttons === 4 && dragStartRef.current) {
       const deltaX = canvasX - dragStartRef.current.x;
@@ -2458,10 +2651,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       
       if (viewMode === '3d') {
         // 3D rotation
-        setRotation3D({
-          pitch: Math.max(-89, Math.min(89, rotation3D.pitch - deltaY * 0.5)),
-          yaw: (rotation3D.yaw + deltaX * 0.5) % 360,
-        });
+        setRotation3D(orbitRotation(rotation3D, deltaX, deltaY));
         dragStartRef.current = { ...dragStartRef.current, x: canvasX, y: canvasY };
       } else {
         // Ortho view panning
@@ -2504,8 +2694,8 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         const [pIdx, ptIdx] = key.split('-').map(Number);
         const path = newResource.layers[currentLayerIndex]?.paths[pIdx];
         if (path?.points[ptIdx]) {
-          path.points[ptIdx].x = Math.round(Math.max(-127, Math.min(127, startPos.x + dx)));
-          path.points[ptIdx].y = Math.round(Math.max(-127, Math.min(127, startPos.y + dy)));
+          path.points[ptIdx].x = Math.round(Math.max(-limX, Math.min(limX, startPos.x + dx)));
+          path.points[ptIdx].y = Math.round(Math.max(-limY, Math.min(limY, startPos.y + dy)));
         }
       }
       updateResource(resource, newResource);
@@ -2521,6 +2711,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   };
 
   const handleMouseUp = () => {
+    orbitRef.current = false;
     // Persist background offset if the background was dragged
     if (currentTool === 'background' && isDrawing && isBackgroundSelected && dragStartRef.current) {
       const nr = { ...resource, backgroundOffset: backgroundOffset };
@@ -2533,6 +2724,21 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       if (a.x_max - a.x_min >= 2) {
         const next = [...(resource.walkableAreas ?? []), { y: a.y, x_min: a.x_min, x_max: a.x_max }];
         updateResource(resource, { ...resource, walkableAreas: next });
+      } else {
+        // No horizontal drag → treat as a click: select the nearest existing
+        // walkable area (highlight it here and in the list). Tolerance is a
+        // fixed ~8px in canvas space, converted to resource units via zoom.
+        const clickX = (a.x_min + a.x_max) / 2;
+        const tol = 8 / zoom;
+        let hit: number | null = null;
+        let bestDy = Infinity;
+        (resource.walkableAreas ?? []).forEach((w, idx) => {
+          const dy = Math.abs(w.y - a.y);
+          const lo = Math.min(w.x_min, w.x_max) - tol;
+          const hi = Math.max(w.x_min, w.x_max) + tol;
+          if (dy <= tol && clickX >= lo && clickX <= hi && dy < bestDy) { bestDy = dy; hit = idx; }
+        });
+        setSelectedWalkAreaIdx(hit);
       }
       walkAreaDrawStartRef.current = null;
       setWalkAreaPreview(null);
@@ -2756,6 +2962,47 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   }, [resource, selectedTreePathKey, selectedTreePathKeys, updateResource]);
 
   // Set intensity on all selected paths (from tree selection OR from canvas point selection)
+  /* LOS SEGMENTOS SELECCIONADOS del path actual: un tramo cuenta cuando sus DOS extremos
+   * estan marcados. No hay modo nuevo ni herramienta nueva, se marcan los dos puntos. */
+  const segmentosSeleccionados = React.useMemo(() => {
+    const out = new Set<number>();
+    const path = resource.layers[currentLayerIndex]?.paths[currentPathIndex];
+    if (!path || currentPathIndex < 0) return [] as number[];
+    /* `selectedEdge` ES la seleccion de segmento del editor: se pone al pulsar la LINEA
+     * (no un punto) y es lo que se pinta en naranja. Yo lo habia montado sobre
+     * `selectedPoints`, que ese mismo manejador VACIA — asi que pulsar el tramo, escribir
+     * un valor y dar a Apply se llevaba el path entero por delante. */
+    if (selectedEdge && selectedEdge.pathIdx === currentPathIndex) out.add(selectedEdge.edgeIdx);
+    /* y ademas, dos puntos contiguos marcados (seleccion por caja o con shift) */
+    const nseg = path.closed ? path.points.length : path.points.length - 1;
+    for (let i = 0; i < nseg; i++) {
+      if (selectedPoints.has(`${currentPathIndex}-${i}`) &&
+          selectedPoints.has(`${currentPathIndex}-${(i + 1) % path.points.length}`)) out.add(i);
+    }
+    return [...out].sort((a, b) => a - b);
+  }, [resource, currentLayerIndex, currentPathIndex, selectedPoints, selectedEdge]);
+
+  /* La intensidad que hay que ENSEÑAR: la del tramo si hay uno solo seleccionado, y si no
+   * la del path. Antes siempre enseñaba la del path, asi que un tramo apagado se leia como
+   * "127" y al pulsar Apply se lo llevaba por delante. */
+  const intensidadMostrada = (() => {
+    const path = resource.layers[currentLayerIndex]?.paths[currentPathIndex];
+    if (!path) return null;
+    if (segmentosSeleccionados.length === 1) {
+      const k = segmentosSeleccionados[0];
+      return Array.isArray(path.intensities) ? (path.intensities[k] ?? path.intensity) : path.intensity;
+    }
+    return path.intensity;
+  })();
+
+  const claveSeleccion = `${currentLayerIndex}:${currentPathIndex}:${segmentosSeleccionados.join(",")}`;
+  useEffect(() => {
+    /* Solo al cambiar la SELECCION. Si dependiera del valor, se pisaria lo que estas
+     * tecleando en cuanto el recurso se actualice. */
+    if (intensidadMostrada != null) setSetIntensityInput(String(intensidadMostrada));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [claveSeleccion]);
+
   const handleSetIntensitySelected = useCallback((intensity: number) => {
     // Build set of "layerIdx-pathIdx" keys from tree selection
     const keysFromTree = selectedTreePathKeys.size > 0 ? selectedTreePathKeys
@@ -2770,6 +3017,24 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     } else if (selectedPointIndex >= 0 && currentPathIndex >= 0) {
       keysFromPoints.add(`${currentLayerIndex}-${currentPathIndex}`);
     }
+    /* CON UN TRAMO SELECCIONADO, EL APPLY VA AL TRAMO. Antes iba siempre al path entero:
+     * marcabas un segmento, escribias 0 y se apagaba el path completo — o peor, ponias
+     * 127, 0, 127... en orden y el ultimo valor arrasaba con todos los anteriores. */
+    if (segmentosSeleccionados.length > 0) {
+      const nr = JSON.parse(JSON.stringify(resource)) as VecResource;
+      const p2 = nr.layers[currentLayerIndex]?.paths[currentPathIndex];
+      if (!p2) return;
+      const nseg = p2.closed ? p2.points.length : p2.points.length - 1;
+      const ints = Array.isArray(p2.intensities) && p2.intensities.length === nseg
+        ? p2.intensities.slice()
+        : new Array(Math.max(0, nseg)).fill(p2.intensity);
+      segmentosSeleccionados.forEach(k => { ints[k] = intensity; });
+      /* Se queda aunque todos coincidan con la del path: si se borrase, el usuario veria
+       * su marca desaparecer al igualar los valores y no sabria si guardo o no. */
+      p2.intensities = ints;
+      updateResource(resource, nr);
+      return;
+    }
     const allKeys = new Set([...keysFromTree, ...keysFromPoints]);
     if (allKeys.size === 0) return;
     const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
@@ -2780,7 +3045,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       }
     });
     updateResource(resource, newResource);
-  }, [resource, selectedTreePathKey, selectedTreePathKeys, selectedPoints, selectedPointIndex, currentPathIndex, currentLayerIndex, updateResource]);
+  }, [resource, selectedTreePathKey, selectedTreePathKeys, selectedPoints, selectedPointIndex, currentPathIndex, currentLayerIndex, updateResource, segmentosSeleccionados]);
 
   // Clean orphan paths: remove paths with <=1 point and fix incomplete bezier structures
   const handleCleanOrphans = useCallback(() => {
@@ -2855,6 +3120,63 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     } else {
       setTempPoints([]);
     }
+  };
+
+  // Where a text block is centred: the origin for a new one, or the current
+  // centre of the layer's strokes when re-editing (so it stays where you moved
+  // it). Shared by the canvas preview and the commit below.
+  const getTextCenter = (editLayer?: number): { x: number; y: number } => {
+    if (editLayer == null) return { x: 0, y: 0 };
+    const lyr = resource.layers[editLayer];
+    if (!lyr || !lyr.paths.length) return { x: 0, y: 0 };
+    let mnx = Infinity, mny = Infinity, mxx = -Infinity, mxy = -Infinity;
+    lyr.paths.forEach(p => p.points.forEach(pt => {
+      if (pt.x < mnx) mnx = pt.x; if (pt.x > mxx) mxx = pt.x;
+      if (pt.y < mny) mny = pt.y; if (pt.y > mxy) mxy = pt.y;
+    }));
+    if (!isFinite(mnx)) return { x: 0, y: 0 };
+    return { x: (mnx + mxx) / 2, y: (mny + mxy) / 2 };
+  };
+
+  // Text tool: turn the dialog's string into editable stroke paths in their OWN
+  // layer (so the word stays grouped and never mixes with other vectors), then
+  // select the whole thing in move-mode so it can be dragged into place at once.
+  // Re-editing an existing text layer replaces its strokes in place, keeping its
+  // position. The layer keeps `text` metadata so it can be re-edited later.
+  const addTextPaths = () => {
+    if (!textDialog) return;
+    const { text, height, intensity, editLayer } = textDialog;
+    if (!text.trim() || !(height > 0)) { setTextDialog(null); return; }
+    const center = getTextCenter(editLayer);
+    const strokes = textToPaths(text, height, { center });
+    if (!strokes.length) { setTextDialog(null); return; }
+    const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+    const newPaths: VecPath[] = strokes.map(s => ({ name: s.name, intensity, closed: false, points: s.points }));
+    let target: number;
+    if (editLayer != null && newResource.layers[editLayer]) {
+      newResource.layers[editLayer].paths = newPaths;
+      newResource.layers[editLayer].text = { content: text, height, intensity };
+      target = editLayer;
+    } else {
+      newResource.layers.push({
+        name: `text: ${text.trim().slice(0, 18)}`,
+        visible: true, paths: newPaths,
+        text: { content: text, height, intensity },
+      });
+      target = newResource.layers.length - 1;
+    }
+    updateResource(resource, newResource);
+    setCurrentLayerIndex(target);
+    // select every point so the whole word drags as one group; move-mode lets a
+    // drag from empty canvas space move it immediately
+    const sel = new Set<string>();
+    newPaths.forEach((p, pi) => p.points.forEach((_, i) => sel.add(`${pi}-${i}`)));
+    setSelectedPoints(sel);
+    setCurrentPathIndex(-1);
+    setSelectedPointIndex(-1);
+    setCurrentTool('select');
+    setIsMoveMode(true);
+    setTextDialog(null);
   };
 
   const handleDoubleClick = () => {
@@ -2943,8 +3265,8 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           name: `${path.name}_copy`,
           points: path.points.map((pt: any) => ({
             ...pt,
-            x: Math.max(-127, Math.min(127, pt.x + PASTE_OFFSET)),
-            y: Math.max(-127, Math.min(127, pt.y + PASTE_OFFSET)),
+            x: Math.max(-limX, Math.min(limX, pt.x + PASTE_OFFSET)),
+            y: Math.max(-limY, Math.min(limY, pt.y + PASTE_OFFSET)),
           }))
         }));
         const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
@@ -3252,137 +3574,30 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   // UI Components
   const Toolbar = () => (
     <div style={{ display: 'flex', gap: '4px', marginBottom: '8px', padding: '4px', background: '#2a2a4e', borderRadius: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
-      <button
-        onClick={() => setCurrentTool('select')}
-        style={{
-          padding: '8px 12px',
-          background: currentTool === 'select' ? '#4a4a8e' : '#3a3a5e',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-        }}
-        title="Select tool - click to select, drag to box select"
-      >
-        ⬚ Select
-      </button>
-      <button
-        onClick={() => setCurrentTool('pen')}
-        style={{
-          padding: '8px 12px',
-          background: currentTool === 'pen' ? '#4a4a8e' : '#3a3a5e',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-        }}
-        title="Pen tool - click to add points, double-click to finish path"
-      >
-        ✏️ Pen
-      </button>
-      <button
-        onClick={() => setCurrentTool('pan')}
-        style={{
-          padding: '8px 12px',
-          background: currentTool === 'pan' ? '#4a4a8e' : '#3a3a5e',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-        }}
-        title={viewMode === '3d' ? 'Pan/Rotate - drag to rotate 3D view' : 'Pan - drag to move view'}
-      >
-        {viewMode === '3d' ? '🔄 Rotate' : '✋ Pan'}
-      </button>
-      <button
-        onClick={() => setCurrentTool('walkarea')}
-        style={{
-          padding: '8px 12px',
-          background: currentTool === 'walkarea' ? '#4a8e6a' : '#3a5e4a',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-        }}
-        title="Walkable area — click-drag horizontally to paint a [x_min,x_max] at y (Phase 2 wander AI)"
-      >
-        🛣️ WalkArea
-      </button>
-      <button
-        onClick={() => setCurrentTool('circle')}
-        style={{
-          padding: '8px 12px',
-          background: currentTool === 'circle' ? '#4a4a8e' : '#3a3a5e',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-        }}
-        title="Circle tool - click center, drag to set radius"
-      >
-        ⭕ Circle
-      </button>
-      <button
-        onClick={() => setCurrentTool('arc')}
-        style={{
-          padding: '8px 12px',
-          background: currentTool === 'arc' ? '#4a4a8e' : '#3a3a5e',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-        }}
-        title="Arc tool - click center, drag to set radius"
-      >
-        ◔ Arc
-      </button>
-      <button
-        onClick={() => setCurrentTool('polygon')}
-        style={{
-          padding: '8px 12px',
-          background: currentTool === 'polygon' ? '#4a4a8e' : '#3a3a5e',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-        }}
-        title="Polygon tool - click center, drag to set radius"
-      >
-        ⬡ Polygon
-      </button>
-      <button
-        onClick={() => setCurrentTool('bezier')}
-        style={{
-          padding: '8px 12px',
-          background: currentTool === 'bezier' ? '#4a4a8e' : '#3a3a5e',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-        }}
-        title="Bezier tool - click to add sharp anchor, click+drag to add smooth anchor. Enter/Right-click to finish."
-      >
-        ∿ Bezier
-      </button>
-      {backgroundImage && (
-        <button
-          onClick={() => setCurrentTool('background')}
-          style={{
-            padding: '8px 12px',
-            background: currentTool === 'background' ? '#8a6a4a' : '#5a4a3a',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-          }}
-          title="Move background - drag to reposition the background image"
-        >
-          🖼️ Move BG
-        </button>
-      )}
-      
-      <div style={{ width: '1px', background: '#4a4a6e', margin: '0 8px' }} />
-      
+      {/* The four views, one button each. The keys 1-4 only reach the canvas when it has
+          focus, and the cube's centre is a small target: these are always there. In 3D,
+          middle button + Shift orbits (see handleMouseDown). */}
+      {([['xy', 'XY', 'Front view (X-Y) — key 1'], ['xz', 'XZ', 'Top view (X-Z) — key 2'],
+         ['yz', 'YZ', 'Side view (Y-Z) — key 3'], ['3d', '3D', '3D view — key 4; orbit with middle button + Shift']] as const)
+        .map(([mode, label, title]) => (
+          <button
+            key={mode}
+            onClick={() => setViewMode(mode)}
+            style={{
+              padding: '8px 10px',
+              background: viewMode === mode ? '#4a4a8e' : '#3a3a5e',
+              color: viewMode === mode ? 'white' : '#bbb',
+              border: viewMode === mode ? '1px solid #7a7abf' : '1px solid transparent',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+            }}
+            title={title}
+          >
+            {label}
+          </button>
+        ))}
+      <div style={{ width: '1px', alignSelf: 'stretch', background: '#4a4a6e', margin: '0 4px' }} />
       {/* Scale buttons */}
       <button
         onClick={() => {
@@ -3399,7 +3614,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }}
         title="Scale up - increase size by 50%"
       >
-        🔍+ Scale Up
+        🔍+
       </button>
       <button
         onClick={() => {
@@ -3416,7 +3631,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }}
         title="Scale down - decrease size by 33%"
       >
-        🔍- Scale Down
+        🔍-
       </button>
       
       <div style={{ width: '1px', background: '#4a4a6e', margin: '0 8px' }} />
@@ -3442,7 +3657,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }}
         title="Delete selected points or paths (Delete key)"
       >
-        🗑️ Delete {selectedTreePathKeys.size > 1 ? `(${selectedTreePathKeys.size} paths)` : selectedPoints.size > 0 ? `(${selectedPoints.size})` : ''}
+        🗑️ {selectedTreePathKeys.size > 1 ? `(${selectedTreePathKeys.size})` : selectedPoints.size > 0 ? `(${selectedPoints.size})` : ''}
       </button>
       
       <div style={{ width: '1px', background: '#4a4a6e', margin: '0 8px' }} />
@@ -3462,7 +3677,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }}
         title="Undo (Ctrl+Z / Cmd+Z)"
       >
-        ↶ Undo
+        ↶
       </button>
       <button
         onClick={handleRedo}
@@ -3478,7 +3693,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }}
         title="Redo (Ctrl+Shift+Z / Cmd+Shift+Z)"
       >
-        ↷ Redo
+        ↷
       </button>
       
       <div style={{ width: '1px', background: '#4a4a6e', margin: '0 8px' }} />
@@ -3496,7 +3711,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }}
         title="Center - move all points so center aligns to (0,0)"
       >
-        📍 Center
+        📍
       </button>
       <button
         onClick={mirrorVectorX}
@@ -3510,7 +3725,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }}
         title="Mirror X - flip horizontally (negate X coordinates)"
       >
-        ↔️ Mirror X
+        ↔️
       </button>
       <button
         onClick={mirrorVectorY}
@@ -3524,7 +3739,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }}
         title="Mirror Y - flip vertically (negate Y coordinates)"
       >
-        ⇅ Mirror Y
+        ⇅
       </button>
       <button
         onClick={() => rotateVector(90)}
@@ -3538,7 +3753,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }}
         title="Rotate 90° counter-clockwise around (0,0)"
       >
-        ↺ Rotate +90°
+        ↺
       </button>
       <button
         onClick={() => rotateVector(-90)}
@@ -3552,7 +3767,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }}
         title="Rotate 90° clockwise around (0,0)"
       >
-        ↻ Rotate -90°
+        ↻
       </button>
       <input
         type="number"
@@ -3592,30 +3807,31 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }}
         title="Rotate by the angle in the input (positive = CCW)"
       >
-        🔁 Rotate
+        🔁
       </button>
       <button
         onClick={chainEdges}
         style={{ padding: '8px 12px', background: '#3a5a3e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
         title="Chain edges — merge 2-point paths that share endpoints into polylines, reducing path count"
       >
-        🔗 Chain Edges
+        🔗
       </button>
       <button
         onClick={() => handleSimplify(2.0)}
         style={{ padding: '8px 12px', background: '#5a3a2e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
         title="Simplify paths (ε=2) — Ramer-Douglas-Peucker: removes near-collinear points invisible at Vectrex scale. Undoable with Ctrl+Z."
       >
-        ✂️ Simplify
+        ✂️
       </button>
 
       <div style={{ width: '1px', background: '#4a4a6e', margin: '0 8px' }} />
       
       <button
         onClick={() => fileInputRef.current?.click()}
-        style={{ padding: '8px 12px', background: '#3a5a3e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+        style={{ padding: '8px 10px', background: '#3a5a3e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+        title="Load a background reference image"
       >
-        📷 Load Image
+        📷
       </button>
       <input
         ref={fileInputRef}
@@ -3629,7 +3845,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         style={{ padding: '8px 12px', background: '#3a4a5a', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
         title="Import DXF geometry as new paths on current layer"
       >
-        📐 Import DXF
+        📐
       </button>
       <input
         ref={dxfInputRef}
@@ -3643,7 +3859,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         style={{ padding: '8px 12px', background: '#3a4a5a', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
         title="Import OBJ 3D mesh wireframe as paths (Fusion 360, Blender, etc.)"
       >
-        📦 Import OBJ
+        📦
       </button>
       <input
         ref={objInputRef}
@@ -3658,40 +3874,43 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           <button
             onClick={() => setShowBackground(!showBackground)}
             style={{
-              padding: '8px 12px',
+              padding: '8px 10px',
               background: showBackground ? '#4a4a8e' : '#3a3a5e',
               color: 'white',
               border: 'none',
               borderRadius: '4px',
               cursor: 'pointer',
             }}
+            title="Show/hide the background reference"
           >
-            {showBackground ? '👁 Hide' : '👁 Show'}
+            👁
           </button>
           <button
             onClick={handleAutoDetect}
             disabled={isProcessing}
             style={{
-              padding: '8px 12px',
+              padding: '8px 10px',
               background: isProcessing ? '#666' : '#5a3a8e',
               color: 'white',
               border: 'none',
               borderRadius: '4px',
               cursor: isProcessing ? 'wait' : 'pointer',
             }}
+            title="Auto-trace the background image into paths"
           >
-            {isProcessing ? '⏳ Processing...' : '✨ Auto-Trace'}
+            {isProcessing ? '⏳' : '✨'}
           </button>
           <button
             onClick={() => setShowEdgeSettings(!showEdgeSettings)}
             style={{
-              padding: '8px 12px',
+              padding: '8px 10px',
               background: showEdgeSettings ? '#4a4a8e' : '#3a3a5e',
               color: 'white',
               border: 'none',
               borderRadius: '4px',
               cursor: 'pointer',
             }}
+            title="Edge/trace settings"
           >
             ⚙️
           </button>
@@ -3715,6 +3934,83 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       <span style={{ color: '#aaa', padding: '8px' }}>{Math.round(zoom * 100)}%</span>
     </div>
   );
+
+  /* ESTOS PANELES SE LLAMAN, NO SE MONTAN: {Panel()} y no <Panel />.
+   *
+   * Estan declarados aqui dentro, asi que cada render crea un TIPO de componente nuevo.
+   * Usados como <Panel /> React ve un tipo distinto en cada render, desmonta el arbol
+   * entero y monta otro: el input de intensidad pierde el foco a cada tecla y el panel
+   * derecho se rebobina al principio cada vez que tocas algo. Llamandolos, el JSX que
+   * devuelven se cuela en el arbol del padre y los nodos del DOM son los mismos de antes.
+   *
+   * ViewCube se queda como <ViewCube /> a proposito: ese SI usa hooks, y llamarlo los
+   * meteria en el padre. Ademas va sobre el lienzo, no en el panel que se rebobinaba. */
+  const ToolRail = () => {
+    const railTools: { id: Tool; icon: string; title: string; active: string; idle: string }[] = [
+      { id: 'select', icon: '⬚', title: 'Select — click to select, drag to box-select', active: '#4a4a8e', idle: '#3a3a5e' },
+      { id: 'pen', icon: '✏️', title: 'Pen — click to add points, double-click to finish path', active: '#4a4a8e', idle: '#3a3a5e' },
+      {
+        id: 'pan',
+        icon: viewMode === '3d' ? '🔄' : '✋',
+        title: viewMode === '3d' ? 'Pan/Rotate — drag to rotate 3D view' : 'Pan — drag to move view',
+        active: '#4a4a8e',
+        idle: '#3a3a5e',
+      },
+      { id: 'walkarea', icon: '🛣️', title: 'WalkArea — click-drag horizontally to paint a [x_min,x_max] at y (Phase 2 wander AI)', active: '#4a8e6a', idle: '#3a5e4a' },
+      { id: 'circle', icon: '⭕', title: 'Circle — click center, drag to set radius', active: '#4a4a8e', idle: '#3a3a5e' },
+      { id: 'arc', icon: '◔', title: 'Arc — click center, drag to set radius', active: '#4a4a8e', idle: '#3a3a5e' },
+      { id: 'polygon', icon: '⬡', title: 'Polygon — click center, drag to set radius', active: '#4a4a8e', idle: '#3a3a5e' },
+      { id: 'bezier', icon: '∿', title: 'Bezier — click to add sharp anchor, click+drag to add smooth anchor. Enter/Right-click to finish.', active: '#4a4a8e', idle: '#3a3a5e' },
+    ];
+    if (backgroundImage) {
+      railTools.push({ id: 'background', icon: '🖼️', title: 'Move BG — drag to reposition the background image', active: '#8a6a4a', idle: '#5a4a3a' });
+    }
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '4px', background: '#2a2a4e', borderRadius: '4px', alignSelf: 'flex-start' }}>
+        {railTools.map(t => {
+          const isActive = currentTool === t.id;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setCurrentTool(t.id)}
+              style={{
+                width: 40,
+                height: 40,
+                fontSize: 18,
+                padding: 0,
+                background: isActive ? t.active : t.idle,
+                color: 'white',
+                border: isActive ? '1px solid #8ab' : '1px solid transparent',
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
+              title={t.title}
+            >
+              {t.icon}
+            </button>
+          );
+        })}
+        {/* Text tool: an ACTION (opens a dialog) rather than a drawing mode, so
+            it lives here with its own onClick instead of in railTools. */}
+        <button
+          onClick={() => {
+            const al = resource.layers[currentLayerIndex];
+            if (al && al.text) setTextDialog({ text: al.text.content, height: al.text.height, intensity: al.text.intensity, editLayer: currentLayerIndex });
+            else setTextDialog({ text: '', height: 24, intensity: 127 });
+          }}
+          style={{
+            width: 40, height: 40, fontSize: 15, fontWeight: 'bold', padding: 0,
+            background: textDialog ? '#4a4a8e' : '#3a3a5e', color: 'white',
+            border: textDialog ? '1px solid #8ab' : '1px solid transparent',
+            borderRadius: '4px', cursor: 'pointer',
+          }}
+          title="Text — type a string + size into its own layer (editable strokes). With a text layer active, re-edits it."
+        >
+          Abc
+        </button>
+      </div>
+    );
+  };
 
   const CircleArcSettings = () => {
     if (currentTool !== 'circle' && currentTool !== 'arc' && currentTool !== 'polygon') return null;
@@ -4025,10 +4321,47 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
               <input type="checkbox" checked={showBackground} onChange={(e) => setShowBackground(e.target.checked)} style={{ margin: 0 }} />
               <span>📷 Background</span>
               <button
+                title="Export the background image to a PNG (named after this .vec)"
+                onClick={() => {
+                  const url = resource.backgroundImage;
+                  if (!url) return;
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `${resource.name || 'background'}.png`;
+                  document.body.appendChild(a);
+                  a.click();
+                  a.remove();
+                }}
+                style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: '#8cf', cursor: 'pointer', fontSize: '12px', padding: '2px 4px' }}
+              >⬇ PNG</button>
+              <button
                 onClick={() => { if (window.confirm('Remove background image?')) { setBackgroundImage(null); setShowBackground(false); setShowEdgeSettings(false); const nr = { ...resource }; delete nr.backgroundImage; updateResource(resource, nr); } }}
-                style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: '#a66', cursor: 'pointer', fontSize: '12px', padding: '2px 4px' }}
+                style={{ background: 'transparent', border: 'none', color: '#a66', cursor: 'pointer', fontSize: '12px', padding: '2px 4px' }}
               >✕</button>
             </div>
+            <label
+              title="Stretch: fill the whole screen (may deform). Fit width: fill the screen width, height keeps the image's aspect ratio — use this to trace scenery from a photo. 1:1: one image pixel = one unit, bottom-left on the origin — use this for a sprite ripped at its real size."
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}
+            >
+              <select
+                value={backgroundFit}
+                onChange={(e) => {
+                  const v = e.target.value as 'stretch' | 'fitWidth' | 'natural' | 'naturalCenter';
+                  setBackgroundFit(v);
+                  updateResource(resource, { ...resource, backgroundFit: v, backgroundStretch: v === 'stretch' });
+                }}
+                style={{ background: '#2a3a2e', color: '#8f8', border: '1px solid #5a8a5a', borderRadius: '3px', fontSize: '11px', padding: '1px 2px' }}
+              >
+                <option value="stretch">stretch to screen</option>
+                <option value="fitWidth">fit width (keep aspect)</option>
+                <option value="natural">1:1 pixels</option>
+                <option value="naturalCenter">1:1 centered</option>
+                <option value="playfield">arcade playfield (224x256)</option>
+              </select>
+              <span style={{ opacity: 0.85 }}>
+                {backgroundFit === 'natural' || backgroundFit === 'naturalCenter' ? `${backgroundImage.width}×${backgroundImage.height} units` : ''}
+              </span>
+            </label>
           </div>
         )}
 
@@ -4174,16 +4507,27 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
                                   setCurrentLayerIndex(layerIdx);
                                   setCurrentPathIndex(pathIdx);
                                   setSelectedPointIndex(ptIdx);
-                                  setSelectedPoints(new Set());
+                                  /* PULSAR UN PUNTO EN EL ARBOL LO SELECCIONA. Antes VACIABA
+                                   * `selectedPoints`, asi que quien seleccionaba por el arbol
+                                   * —que es lo natural cuando ves la lista de puntos— no podia
+                                   * formar nunca un tramo: el Apply se iba al path entero y
+                                   * apagaba el dibujo completo. Con shift/cmd se añade, igual
+                                   * que en el lienzo. */
+                                  const key = `${pathIdx}-${ptIdx}`;
+                                  setSelectedPoints(prev => (e.shiftKey || e.metaKey || e.ctrlKey)
+                                    ? new Set([...prev, key])
+                                    : new Set([key]));
                                   setSelectedTreePathKey(treeKey);
                                 }}
                                 style={{
                                   padding: '2px 4px',
                                   fontSize: '10px',
-                                  color: selectedPointIndex === ptIdx && currentPathIndex === pathIdx ? '#ffff00' : '#667',
+                                  color: (selectedPoints.has(`${pathIdx}-${ptIdx}`) ||
+                                          (selectedPointIndex === ptIdx && currentPathIndex === pathIdx)) ? '#ffff00' : '#667',
                                   cursor: 'pointer',
                                   borderRadius: '2px',
-                                  background: selectedPointIndex === ptIdx && currentPathIndex === pathIdx ? '#3a3a1a' : 'transparent',
+                                  background: (selectedPoints.has(`${pathIdx}-${ptIdx}`) ||
+                                               (selectedPointIndex === ptIdx && currentPathIndex === pathIdx)) ? '#3a3a1a' : 'transparent',
                                   whiteSpace: 'nowrap',
                                   overflow: 'hidden',
                                   textOverflow: 'ellipsis',
@@ -4215,13 +4559,20 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
 
   // Path properties panel - shows when a path is selected
   const PathPropertiesPanel = () => {
-    if (currentPathIndex < 0) return null;
-    
     const activeLayer = resource.layers[currentLayerIndex];
-    if (!activeLayer || !activeLayer.paths[currentPathIndex]) return null;
+    // .vec-level data (Walkable Areas / Collision Mesh) renders regardless of
+    // path selection; `path` is null when no path is selected, and the
+    // path-specific sections (intensity, points) are guarded on it below.
+    const path = (currentPathIndex >= 0 && activeLayer && activeLayer.paths[currentPathIndex])
+      ? activeLayer.paths[currentPathIndex] : null;
     
-    const path = activeLayer.paths[currentPathIndex];
-    
+    /* Los atajos de apagar/encender usan EL MISMO camino que el Apply. Antes tenian su
+     * propia copia de la logica y divergieron: aquella borraba el array cuando todos los
+     * tramos coincidian con la intensidad del path, asi que poner 127 en el ultimo tramo
+     * se llevaba por delante los ceros anteriores. Dos caminos para lo mismo es como se
+     * llega ahi. */
+    const handleSegmentIntensity = (valor: number) => handleSetIntensitySelected(valor);
+
     const handleIntensityChange = (newIntensity: number) => {
       const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
       if (newResource.layers[currentLayerIndex] && newResource.layers[currentLayerIndex].paths[currentPathIndex]) {
@@ -4232,6 +4583,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     
     return (
       <div style={{ background: '#2a2a4e', padding: '8px', borderRadius: '4px', marginTop: '8px' }}>
+        {path && (<>
         <div style={{ color: '#6af', marginBottom: '8px', fontSize: '12px', fontWeight: 'bold' }}>
           Path {currentPathIndex + 1} Properties
         </div>
@@ -4252,6 +4604,57 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
             }}
             title="Adjust path intensity (brightness)"
           />
+          {/* THE SEGMENTS, ONE BY ONE. The earlier buttons depended on both ends of the
+              segment being selected, and depending on how the points are selected that
+              does not always fill `selectedPoints`; the Apply then went to the whole path and
+              turned the whole drawing off without saying why. This list does not depend on
+              any selection: each segment has its own value and is edited here. */}
+          {path.points.length > 1 && (
+            <div style={{ marginTop: '10px' }}>
+              <div style={{ color: '#aaa', fontSize: '11px', marginBottom: '4px' }}>
+                Segments <span style={{ color: '#666' }}>· 0 = off</span>
+              </div>
+              <div style={{ maxHeight: 160, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {path.points.slice(0, path.closed ? undefined : -1).map((_, k) => {
+                  const v = Array.isArray(path.intensities) ? (path.intensities[k] ?? path.intensity) : path.intensity;
+                  const ponTramo = (nv: number) => {
+                    const nr = JSON.parse(JSON.stringify(resource)) as VecResource;
+                    const p2 = nr.layers[currentLayerIndex]?.paths[currentPathIndex];
+                    if (!p2) return;
+                    const nseg2 = p2.closed ? p2.points.length : p2.points.length - 1;
+                    const ints = Array.isArray(p2.intensities) && p2.intensities.length === nseg2
+                      ? p2.intensities.slice()
+                      : new Array(nseg2).fill(p2.intensity);
+                    ints[k] = Math.max(0, Math.min(127, nv));
+                    p2.intensities = ints;
+                    /* If the whole path was at 0, that no longer makes sense with segments
+                       turned on: the opening VK_INT would turn them all off. */
+                    if (p2.intensity === 0 && ints.some(x => x > 0)) p2.intensity = 127;
+                    updateResource(resource, nr);
+                  };
+                  return (
+                    <div key={k} style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 10 }}>
+                      <span style={{ color: '#778', width: 28 }}>{k + 1}→{k + 2}</span>
+                      <input
+                        type="number" min="0" max="127" value={v}
+                        onChange={(e) => ponTramo(parseInt(e.target.value) || 0)}
+                        style={{ width: 46, padding: '2px 4px', background: '#0e1e2e', color: '#fff',
+                                 border: '1px solid #4a6a8a', borderRadius: 3, fontSize: 11 }}
+                      />
+                      <button
+                        onClick={() => ponTramo(v === 0 ? 127 : 0)}
+                        style={{ flex: 1, padding: '2px 4px', borderRadius: 3, cursor: 'pointer', fontSize: 10,
+                                 background: v === 0 ? '#5a3a3a' : '#3a5a3a',
+                                 border: '1px solid ' + (v === 0 ? '#8a5a5a' : '#5a8a5a'), color: '#ddd' }}
+                      >
+                        {v === 0 ? 'off' : 'on'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: '4px', marginTop: '4px', fontSize: '10px' }}>
             <button
               onClick={() => handleIntensityChange(Math.max(0, path.intensity - 10))}
@@ -4298,7 +4701,9 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           </div>
         </div>
 
-        {/* Collision Mesh section */}
+        </>)}
+
+        {/* Collision Mesh section — .vec-level, always visible */}
         <div style={{ marginTop: '10px', borderTop: '1px solid #444', paddingTop: '8px' }}>
           <div style={{ color: '#c8a', marginBottom: '6px', fontSize: '12px', fontWeight: 'bold' }}>
             Collision Mesh
@@ -4306,23 +4711,25 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           <div style={{ display: 'flex', gap: '4px', marginBottom: '6px', flexWrap: 'wrap' }}>
             <button
               onClick={() => {
+                if (!path) return;
                 const segs = generateMeshFromPath(path);
                 const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
                 newResource.collisionMesh = { segments: segs };
                 updateResource(resource, newResource);
                 setShowCollisionMesh(true);
               }}
+              disabled={!path}
               style={{
                 flex: 1,
                 padding: '5px 4px',
-                background: '#3a3a6a',
-                border: '1px solid #6060aa',
-                color: '#ccf',
+                background: path ? '#3a3a6a' : '#2a2a2a',
+                border: path ? '1px solid #6060aa' : '1px solid #444',
+                color: path ? '#ccf' : '#666',
                 borderRadius: '3px',
-                cursor: 'pointer',
+                cursor: path ? 'pointer' : 'default',
                 fontSize: '10px',
               }}
-              title="Auto-generate collision mesh from horizontal edges of selected path"
+              title={path ? "Auto-generate collision mesh from horizontal edges of selected path" : "Select a path first to auto-generate from its edges"}
             >
               Auto-generate
             </button>
@@ -4411,6 +4818,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
               ? `${resource.collisionMesh.segments.length} segment${resource.collisionMesh.segments.length !== 1 ? 's' : ''}`
               : 'No mesh — click Auto-generate or select an edge'}
           </div>
+          <div style={{ maxHeight: '120px', overflowY: 'auto', overflowX: 'hidden' }}>
           {resource.collisionMesh?.segments?.map((seg, idx) => (
             <div key={idx} style={{
               fontSize: '9px', color: '#c8a', fontFamily: 'monospace',
@@ -4433,6 +4841,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
               >x</button>
             </div>
           ))}
+          </div>
         </div>
 
         {/* Walkable Areas section: stored on the .vec itself and inherited
@@ -4446,10 +4855,17 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
               ? `${resource.walkableAreas.length} area${resource.walkableAreas.length !== 1 ? 's' : ''} — pick 🛣️ WalkArea to add more`
               : 'No areas — pick 🛣️ WalkArea and drag horizontally to paint'}
           </div>
+          <div style={{ maxHeight: '150px', overflowY: 'auto', overflowX: 'hidden' }}>
           {(resource.walkableAreas ?? []).map((a, idx) => {
-            const patch = (k: 'y' | 'x_min' | 'x_max', v: number) => {
+            const patch = (k: 'y' | 'x_min' | 'x_max' | 'y2', v: number) => {
               const next = (resource.walkableAreas ?? []).slice();
-              next[idx] = { ...next[idx], [k]: v };
+              // y2 equal to y means "flat" — drop it so the data stays clean.
+              if (k === 'y2' && v === next[idx].y) {
+                const { y2: _drop, ...flat } = next[idx];
+                next[idx] = flat;
+              } else {
+                next[idx] = { ...next[idx], [k]: v };
+              }
               updateResource(resource, { ...resource, walkableAreas: next });
             };
             const inputStyle = {
@@ -4463,48 +4879,61 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
             // setResource and the deep re-render reflowed the side panel,
             // visibly jumping its scroll to the top. defaultValue + a key
             // bound to the committed value avoids the re-render loop.
-            const commit = (k: 'y' | 'x_min' | 'x_max') => (e: React.FocusEvent<HTMLInputElement> | React.KeyboardEvent<HTMLInputElement>) => {
+            // `y2` reads back the effective slope end-height (defaults to y).
+            const fieldVal = (k: 'y' | 'x_min' | 'x_max' | 'y2') => (k === 'y2' ? (a.y2 ?? a.y) : a[k]);
+            const commit = (k: 'y' | 'x_min' | 'x_max' | 'y2') => (e: React.FocusEvent<HTMLInputElement> | React.KeyboardEvent<HTMLInputElement>) => {
               const el = e.currentTarget;
               const v = parseInt(el.value);
-              if (Number.isFinite(v) && v !== a[k]) patch(k, v);
+              if (Number.isFinite(v) && v !== fieldVal(k)) patch(k, v);
             };
-            const onKey = (k: 'y' | 'x_min' | 'x_max') => (e: React.KeyboardEvent<HTMLInputElement>) => {
+            const onKey = (k: 'y' | 'x_min' | 'x_max' | 'y2') => (e: React.KeyboardEvent<HTMLInputElement>) => {
               if (e.key === 'Enter') { e.currentTarget.blur(); }
-              else if (e.key === 'Escape') { e.currentTarget.value = String(a[k]); e.currentTarget.blur(); }
+              else if (e.key === 'Escape') { e.currentTarget.value = String(fieldVal(k)); e.currentTarget.blur(); }
             };
+            const isSlope = a.y2 !== undefined && a.y2 !== a.y;
             // Disable mouse-wheel value-change so scrolling the panel doesn't
             // change the field while it has focus.
             const onWheel = (e: React.WheelEvent<HTMLInputElement>) => { e.currentTarget.blur(); };
             return (
               <div key={idx} style={{
                 fontSize: '9px', color: '#4fc', fontFamily: 'monospace',
-                marginTop: '2px', display: 'flex', alignItems: 'center', gap: '3px'
+                marginTop: '2px', display: 'flex', alignItems: 'center', gap: '3px',
+                background: idx === selectedWalkAreaIdx ? '#2a4a44' : 'transparent',
+                borderRadius: '3px', padding: '1px 2px',
               }}>
-                <span style={{ width: 18 }}>W{idx}</span>
-                <span title="Vertical position: usually the platform's top surface; nudge until enemies sit correctly">y</span>
+                <span
+                  onClick={() => setSelectedWalkAreaIdx(idx === selectedWalkAreaIdx ? null : idx)}
+                  title="Click to select/highlight this area on the canvas"
+                  style={{ width: 18, cursor: 'pointer', color: idx === selectedWalkAreaIdx ? '#ffdd33' : (isSlope ? '#fc8' : '#4fc'), fontWeight: idx === selectedWalkAreaIdx ? 'bold' : 'normal' }}
+                >{isSlope ? '⧗' : ''}W{idx}</span>
+                <span title="Surface height at x_min (the left end of the area). On a flat area this is the whole platform's height.">y</span>
                 <input type="number" key={`y_${a.y}`} defaultValue={a.y} onBlur={commit('y')} onKeyDown={onKey('y')} onWheel={onWheel} style={inputStyle} />
                 <span>x</span>
                 <input type="number" key={`xmin_${a.x_min}`} defaultValue={a.x_min} onBlur={commit('x_min')} onKeyDown={onKey('x_min')} onWheel={onWheel} style={inputStyle} />
-                <span>..</span>
+                <span title="x_max (horizontal range: from x_min to x_max)" style={{ color: '#8ab', padding: '0 1px' }}>→</span>
                 <input type="number" key={`xmax_${a.x_max}`} defaultValue={a.x_max} onBlur={commit('x_max')} onKeyDown={onKey('x_max')} onWheel={onWheel} style={inputStyle} />
+                <span title="Surface height at x_max (the right end). Set it different from y to make the area a SLOPE — enemies follow the incline. Equal to y = flat." style={{ color: isSlope ? '#fc8' : '#8ab', padding: '0 1px' }}>⇕y2</span>
+                <input type="number" key={`y2_${a.y2 ?? a.y}`} defaultValue={a.y2 ?? a.y} onBlur={commit('y2')} onKeyDown={onKey('y2')} onWheel={onWheel} style={{ ...inputStyle, color: isSlope ? '#fc8' : '#4fc', borderColor: isSlope ? '#a74' : '#4a4' }} />
                 <button
                   onClick={() => {
                     const next = (resource.walkableAreas ?? []).slice();
                     next.splice(idx, 1);
                     updateResource(resource, { ...resource, walkableAreas: next });
+                    setSelectedWalkAreaIdx(null);
                   }}
                   style={{
                     padding: '1px 4px', background: 'transparent',
                     border: '1px solid #666', color: '#f88', borderRadius: '2px',
-                    cursor: 'pointer', fontSize: '9px',
+                    cursor: 'pointer', fontSize: '9px', flexShrink: 0,
                   }}
                 >x</button>
               </div>
             );
           })}
+          </div>
           {(resource.walkableAreas?.length ?? 0) > 0 && (
             <button
-              onClick={() => updateResource(resource, { ...resource, walkableAreas: [] })}
+              onClick={() => { updateResource(resource, { ...resource, walkableAreas: [] }); setSelectedWalkAreaIdx(null); }}
               style={{
                 marginTop: '6px', padding: '4px 8px', background: '#4a2a2a',
                 border: '1px solid #8a4a4a', color: '#faa', borderRadius: '3px',
@@ -4514,11 +4943,13 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           )}
         </div>
 
+        {path && (
         <div style={{ fontSize: '11px', color: '#888' }}>
           <div>Points: {path.points.length}</div>
           <div>Closed: {path.closed ? 'Yes' : 'No'}</div>
           <div style={{ marginTop: '4px', color: '#666' }}>{path.name}</div>
         </div>
+        )}
       </div>
     );
   };
@@ -4708,16 +5139,45 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     const pathsFromPoints = new Set<string>();
     selectedPoints.forEach(key => pathsFromPoints.add(`${currentLayerIndex}-${key.split('-')[0]}`));
     if (selectedPointIndex >= 0 && currentPathIndex >= 0) pathsFromPoints.add(`${currentLayerIndex}-${currentPathIndex}`);
+    /* EL PATH QUE SE ESTA EDITANDO CUENTA. El panel de abajo dice "Path N Properties" y
+     * te deja tocarle la intensidad, pero Apply solo miraba la seleccion del arbol y los
+     * puntos marcados: escribias un valor y el boton seguia apagado sin explicar por que.
+     * Si hay un path actual, es lo que Apply tiene delante. */
+    if (currentPathIndex >= 0 && currentLayerIndex >= 0) pathsFromPoints.add(`${currentLayerIndex}-${currentPathIndex}`);
     const keysFromTree = selectedTreePathKeys.size > 0 ? selectedTreePathKeys
       : (selectedTreePathKey ? new Set([selectedTreePathKey]) : new Set<string>());
     const allSelKeys = new Set([...keysFromTree, ...pathsFromPoints]);
     const hasPathSel = allSelKeys.size > 0;
     const selCount = allSelKeys.size;
     return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '200px', flexShrink: 0, overflowY: 'auto' }}>
+    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '8px', width: rightPanelWidth, minWidth: 140, flexShrink: 0, overflowY: 'auto', minHeight: 0 }}>
+      {/* Drag the left edge to resize the panel wider/narrower. */}
+      <div
+        onMouseDown={(e) => {
+          e.preventDefault();
+          const startX = e.clientX;
+          const startW = rightPanelWidth;
+          const onMove = (ev: MouseEvent) => setRightPanelWidth(Math.max(140, Math.min(600, startW + (startX - ev.clientX))));
+          const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+          window.addEventListener('mousemove', onMove);
+          window.addEventListener('mouseup', onUp);
+        }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#6a6aa0'; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#3a3a5e'; }}
+        style={{ position: 'absolute', left: -5, top: 0, bottom: 0, width: 8, cursor: 'ew-resize', zIndex: 10,
+                 background: '#3a3a5e', borderRadius: 4, transition: 'background 0.12s' }}
+        title="Drag to resize the panel"
+      />
       {/* Set Intensity + Clean Orphans — always at top */}
       <div style={{ background: '#1e2230', border: '1px solid #3a3a5e', borderRadius: '4px', padding: '8px' }}>
-        <div style={{ color: '#aaa', fontSize: '11px', fontWeight: 'bold', marginBottom: '6px' }}>Intensity</div>
+        <div style={{ color: '#aaa', fontSize: '11px', fontWeight: 'bold', marginBottom: '6px' }}>
+          Intensity
+          {segmentosSeleccionados.length === 1
+            ? <span style={{ color: '#6af', fontWeight: 'normal' }}> · segment {segmentosSeleccionados[0] + 1}</span>
+            : segmentosSeleccionados.length > 1
+              ? <span style={{ color: '#6af', fontWeight: 'normal' }}> · {segmentosSeleccionados.length} segments</span>
+              : <span style={{ color: '#666', fontWeight: 'normal' }}> · path</span>}
+        </div>
         <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
           <input
             type="number" min="0" max="127"
@@ -4740,7 +5200,11 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
             style={{ flex: 1, padding: '4px 6px', background: hasPathSel ? '#2a5a7e' : '#2a2a3e', border: '1px solid ' + (hasPathSel ? '#4a8aae' : '#3a3a5e'), color: hasPathSel ? '#7cf' : '#556', borderRadius: '3px', cursor: hasPathSel ? 'pointer' : 'not-allowed', fontSize: '11px', fontWeight: 'bold' }}
             title={hasPathSel ? `Apply to ${selCount} path${selCount !== 1 ? 's' : ''}` : 'Select paths first'}
           >
-            Apply{hasPathSel ? ` (${selCount})` : ''}
+            {segmentosSeleccionados.length === 1
+              ? `Apply · segment ${segmentosSeleccionados[0] + 1}`
+              : segmentosSeleccionados.length > 1
+                ? `Apply · ${segmentosSeleccionados.length} segments`
+                : `Apply${hasPathSel ? ` · path (${selCount})` : ''}`}
           </button>
         </div>
         <button
@@ -4751,20 +5215,21 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           🧹 Clean Orphans
         </button>
       </div>
-      <LayersPanel />
-      <PathPropertiesPanel />
-      <EdgeSettingsPanel />
+      {LayersPanel()}
+      {PathPropertiesPanel()}
+      {EdgeSettingsPanel()}
     </div>
     );
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden', height: '100%' }}>
+    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden', height: '100%' }}>
       <Toolbar />
-      <CircleArcSettings />
+      {CircleArcSettings()}
       <div style={{ display: 'flex', gap: '8px', overflow: 'hidden', flex: 1 }}>
+        {ToolRail()}
         {/* Centering wrapper — takes all remaining horizontal space */}
-        <div ref={canvasContainerRef} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+        <div ref={canvasContainerRef} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
         {/* Inner div sized to the square canvas — no wasted black area */}
         <div style={{ position: 'relative', width, height, flexShrink: 0 }}>
           <canvas
@@ -4803,7 +5268,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           <ViewCube />
         </div>
         </div>
-        <RightPanel />
+        {RightPanel()}
       </div>
       <div style={{ color: '#888', fontSize: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>
@@ -4833,6 +5298,108 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           <span>Zoom: {(zoom * 100).toFixed(0)}%</span>
         </span>
       </div>
+
+      {/* Text tool dialog: type a string + cap height, live-preview the strokes,
+          and drop them into the active layer as editable polylines. */}
+      {textDialog && (() => {
+        const preview = textToPaths(textDialog.text || 'Abc', textDialog.height, { center: { x: 0, y: 0 } });
+        // bbox of the preview strokes for the SVG viewBox
+        let mnx = Infinity, mny = Infinity, mxx = -Infinity, mxy = -Infinity;
+        preview.forEach(s => s.points.forEach(p => {
+          if (p.x < mnx) mnx = p.x; if (p.x > mxx) mxx = p.x;
+          if (p.y < mny) mny = p.y; if (p.y > mxy) mxy = p.y;
+        }));
+        if (!isFinite(mnx)) { mnx = -10; mny = -10; mxx = 10; mxy = 10; }
+        const pad = 4;
+        const vbW = (mxx - mnx) + pad * 2, vbH = (mxy - mny) + pad * 2;
+        return (
+          // Floating panel (NOT a full-screen modal) so the canvas stays visible
+          // behind it and you can see the green real-size ghost preview.
+          <div style={{
+            position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 2000,
+            background: '#1e1e3a', border: '2px solid #4a4a8e', borderRadius: '8px',
+            padding: '20px', width: '360px', color: 'white', fontFamily: 'monospace',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+          }}>
+            <div>
+              <h3 style={{ margin: '0 0 16px', color: '#aaaaff' }}>🅰 {textDialog.editLayer != null ? 'Edit text layer' : 'Vector text'}</h3>
+
+              <label style={{ display: 'block', fontSize: '12px', color: '#888', marginBottom: '4px' }}>Text</label>
+              <input
+                autoFocus
+                type="text"
+                value={textDialog.text}
+                onChange={e => setTextDialog({ ...textDialog, text: e.target.value })}
+                onKeyDown={e => { if (e.key === 'Enter') addTextPaths(); if (e.key === 'Escape') setTextDialog(null); }}
+                placeholder="INSERT COIN"
+                style={{
+                  width: '100%', boxSizing: 'border-box', padding: '8px', marginBottom: '12px',
+                  background: '#2a2a4e', color: 'white', border: '1px solid #4a4a8e', borderRadius: '4px',
+                  fontFamily: 'monospace', fontSize: '14px',
+                }}
+              />
+
+              <div style={{ display: 'flex', gap: '16px', marginBottom: '12px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#888', marginBottom: '4px' }}>Height (units)</label>
+                  <input
+                    type="number" min={1} max={256} value={textDialog.height}
+                    onChange={e => setTextDialog({ ...textDialog, height: Number(e.target.value) })}
+                    onKeyDown={e => { if (e.key === 'Enter') addTextPaths(); }}
+                    style={{
+                      width: '100%', boxSizing: 'border-box', padding: '8px',
+                      background: '#2a2a4e', color: 'white', border: '1px solid #4a4a8e', borderRadius: '4px',
+                      fontFamily: 'monospace', fontSize: '14px',
+                    }}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#888', marginBottom: '4px' }}>Intensity (0-127)</label>
+                  <input
+                    type="number" min={0} max={127} value={textDialog.intensity}
+                    onChange={e => setTextDialog({ ...textDialog, intensity: Math.max(0, Math.min(127, Number(e.target.value))) })}
+                    onKeyDown={e => { if (e.key === 'Enter') addTextPaths(); }}
+                    style={{
+                      width: '100%', boxSizing: 'border-box', padding: '8px',
+                      background: '#2a2a4e', color: 'white', border: '1px solid #4a4a8e', borderRadius: '4px',
+                      fontFamily: 'monospace', fontSize: '14px',
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* live preview (y-up flipped for SVG) */}
+              <div style={{ background: '#0a0a1e', border: '1px solid #2a2a4e', borderRadius: '4px', padding: '8px', marginBottom: '16px', textAlign: 'center' }}>
+                <svg width="100%" height="90" viewBox={`${mnx - pad} ${-(mxy + pad)} ${vbW} ${vbH}`} preserveAspectRatio="xMidYMid meet">
+                  {preview.map((s, i) => (
+                    <polyline key={i}
+                      points={s.points.map(p => `${p.x},${-p.y}`).join(' ')}
+                      fill="none" stroke="#6f6" strokeWidth={Math.max(0.5, textDialog.height / 24)} strokeLinecap="round" strokeLinejoin="round"
+                    />
+                  ))}
+                </svg>
+              </div>
+
+              <div style={{ fontSize: '11px', color: '#777', marginBottom: '12px' }}>
+                The green ghost on the canvas shows the REAL size &amp; position (this box only previews letter shapes). {preview.length} stroke(s) → {textDialog.editLayer != null
+                  ? <>replaces layer “{resource.layers[textDialog.editLayer]?.name ?? '?'}” in place</>
+                  : <>a new layer of its own</>}. Drops in selected, in move-mode, so you can drag it into place; re-edit it later with this button.
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button onClick={() => setTextDialog(null)}
+                  style={{ padding: '8px 16px', background: '#3a3a5e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                  Cancel
+                </button>
+                <button onClick={addTextPaths}
+                  style={{ padding: '8px 16px', background: '#4a8e6a', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                  Add text
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* DXF Import Dialog */}
       {dxfImport && (() => {
@@ -4945,7 +5512,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
                     </div>
                     {mode === 'silhouette' && (
                       <div style={{ fontSize: '11px', color: '#8af', marginBottom: '8px', background: '#1a1a30', borderRadius: '4px', padding: '6px 8px' }}>
-                        Muestra solo los edges donde las normales de las caras adyacentes cruzan el plano de visión — perfecto para cilindros y esferas.
+                        Shows only the edges where the normals of adjacent faces cross the view plane — ideal for cylinders and spheres.
                       </div>
                     )}
                     {/* Angle slider — only for hard mode */}

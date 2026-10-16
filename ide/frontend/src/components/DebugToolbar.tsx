@@ -18,6 +18,7 @@ export function DebugToolbar() {
   const currentAsmAddress = useDebugStore(s => s.currentAsmAddress);
   const cycles = useDebugStore(s => s.cycles);
   const fps = useDebugStore(s => s.currentFps);
+  const drawFps = useDebugStore(s => s.drawFps);
   
   // Keyboard shortcuts
   React.useEffect(() => {
@@ -163,6 +164,15 @@ export function DebugToolbar() {
           <span className="debug-info-item">
             <span className="debug-info-label">{t('label.fps', 'FPS')}:</span>
             <span className="debug-info-value">{fps.toFixed(1)}</span>
+          </span>
+        )}
+
+        {/* The refresh rate the drawing would allow on the console. A separate label on purpose:
+            mixing it with the emulator fps invites reading one as the other. */}
+        {drawFps > 0 && (
+          <span className="debug-info-item" title={t('tooltip.drawfps', 'Refresh rate the drawing would allow on the console (1.5 MHz / bus cycles per frame)')}>
+            <span className="debug-info-label">{t('label.drawfps', 'Draw')}:</span>
+            <span className="debug-info-value">{drawFps.toFixed(1)}</span>
           </span>
         )}
 

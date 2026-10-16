@@ -1,0 +1,180 @@
+{
+ "version": "1.0",
+ "name": "0xdd",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "p0",
+     "intensity": 100,
+     "closed": false,
+     "points": [
+      {
+       "x": 0,
+       "y": 0
+      },
+      {
+       "x": 0,
+       "y": 7
+      }
+     ]
+    },
+    {
+     "name": "p1",
+     "intensity": 100,
+     "closed": false,
+     "points": [
+      {
+       "x": 0,
+       "y": 4
+      },
+      {
+       "x": 4,
+       "y": 4
+      }
+     ]
+    },
+    {
+     "name": "p2",
+     "intensity": 100,
+     "closed": false,
+     "points": [
+      {
+       "x": 4,
+       "y": 1
+      },
+      {
+       "x": 4,
+       "y": 7
+      }
+     ]
+    },
+    {
+     "name": "p3",
+     "intensity": 100,
+     "closed": false,
+     "points": [
+      {
+       "x": 9,
+       "y": 2
+      },
+      {
+       "x": 6,
+       "y": 1
+      },
+      {
+       "x": 6,
+       "y": 7
+      },
+      {
+       "x": 9,
+       "y": 7
+      }
+     ]
+    },
+    {
+     "name": "p4",
+     "intensity": 100,
+     "closed": false,
+     "points": [
+      {
+       "x": 6,
+       "y": 5
+      },
+      {
+       "x": 9,
+       "y": 5
+      }
+     ]
+    },
+    {
+     "name": "p5",
+     "intensity": 100,
+     "closed": false,
+     "points": [
+      {
+       "x": 11,
+       "y": 7
+      },
+      {
+       "x": 11,
+       "y": 2
+      },
+      {
+       "x": 14,
+       "y": 3
+      }
+     ]
+    },
+    {
+     "name": "p6",
+     "intensity": 100,
+     "closed": false,
+     "points": [
+      {
+       "x": 16,
+       "y": 3
+      },
+      {
+       "x": 16,
+       "y": 7
+      },
+      {
+       "x": 18,
+       "y": 7
+      },
+      {
+       "x": 19,
+       "y": 6
+      },
+      {
+       "x": 18,
+       "y": 5
+      },
+      {
+       "x": 16,
+       "y": 5
+      }
+     ]
+    },
+    {
+     "name": "p7",
+     "intensity": 100,
+     "closed": false,
+     "points": [
+      {
+       "x": 22,
+       "y": 7
+      },
+      {
+       "x": 21,
+       "y": 5
+      }
+     ]
+    },
+    {
+     "name": "p8",
+     "intensity": 100,
+     "closed": false,
+     "points": [
+      {
+       "x": 21,
+       "y": 3
+      },
+      {
+       "x": 21,
+       "y": 3
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -17,3 +17,6 @@ animations = ["assets/animations/*.anim"]
 music = ["assets/music/*.mus"]
 sfx = ["assets/sfx/*.sfx"]
 voices = ["assets/voices/*.vox"]
+
+[sdk]
+version = "v1.3.2"

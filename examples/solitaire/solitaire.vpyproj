@@ -11,3 +11,6 @@ debug_symbols = true
 [sources]
 vpy = ["src/**/*.vpy"]
 vectors = ["assets/vectors/**/*.vec"]
+
+[sdk]
+version = "v1.3.2"

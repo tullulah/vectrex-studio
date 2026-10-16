@@ -34,7 +34,6 @@
 .equ CAMERA_X,            0x2007F14C  @ camera X offset (used by show_level)
 .equ CAMERA_Y,            0x2007F150  @ camera Y offset
 .equ TEXT_SIZE,           0x2007F154  @ text scale factor (1=normal, 2=double, ...)
-.equ TEXT_COLOR,          0x2007F158  @ text intensity (0-127)
 .equ LEVEL_DATA_PTR,      0x2007F15C  @ pointer to loaded level ROM data
 .equ DBGVAL,              0x2007F160  @ debug_print last written value
 .equ PRINT_BEAM_X,        0x2007F164  @ beam X shadow during print_text
@@ -57,12 +56,17 @@
 .equ VPY_MOVE_X,          0x2007F300  @ last MOVE X position (added to DRAW_LINE x0/x1)
 .equ VPY_MOVE_Y,          0x2007F304  @ last MOVE Y position (added to DRAW_LINE y0/y1)
 .equ ENEMY_COUNT_ARM,     0x2007F308  @ active enemy count
-.equ ENEMY_POOL_ARM,      0x2007F30C  @ enemy pool: 8 slots × 24 bytes
-.equ J1_AXIS_X,           0x2007F3CC  @ cached J1 X axis (-127..127), updated each WAIT_RECAL
-.equ J1_AXIS_Y,           0x2007F3D0  @ cached J1 Y axis (-127..127), updated each WAIT_RECAL
-.equ J2_AXIS_X,           0x2007F3D4  @ cached J2 X axis (-127..127), updated each WAIT_RECAL
-.equ J2_AXIS_Y,           0x2007F3D8  @ cached J2 Y axis (-127..127), updated each WAIT_RECAL
-.equ USER_RAM_START,      0x2007F3DC  @ user variables begin here
+.equ ENEMY_POOL_ARM,      0x2007F30C  @ enemy pool: 8 slots × 32 bytes
+.equ J1_AXIS_X,           0x2007F40C  @ cached J1 X axis (-127..127), updated each WAIT_RECAL
+.equ J1_AXIS_Y,           0x2007F410  @ cached J1 Y axis (-127..127), updated each WAIT_RECAL
+.equ J2_AXIS_X,           0x2007F414  @ cached J2 X axis (-127..127), updated each WAIT_RECAL
+.equ J2_AXIS_Y,           0x2007F418  @ cached J2 Y axis (-127..127), updated each WAIT_RECAL
+.equ ENEMY_STATE_ARM,     0x2007F41C  @ enemy state per slot: 8 × i32
+.equ VPY_PLAYER_ANIM_STATE, 0x2007F43C  @ player animation state: frame_idx(u8)+ticks_left(u8)
+.equ VPY_BRIGHTNESS_OVERRIDE, 0x2007F43E  @ SET_INTENSITY override: 0=.vec intensity, >0=override (1 byte)
+.equ VPY_DRAW_SCALE,      0x2007F43F  @ escala del proximo DRAW_VECTOR_EX (x32; 0/32 = 1:1, 1 byte)
+.equ WANDER_SCRATCH_ARM,  0x2007F440  @ wander AI scratch: 8 slots x 4 bytes (scratch_a|target_x)
+.equ USER_RAM_START,      0x2007F460  @ user variables begin here
 
 @ --- VIA 6522 registers (Vectrex bus addresses) ---
 .equ VIA_BASE,       0xD000
@@ -123,404 +127,86 @@ game_header:
     .word 0x00000000        @ reserved
     .word 0x00000000        @ reserved
 
-@ ============================================================
-@ bus_write: write one byte to Vectrex bus address
-@   r0 = address (16-bit Vectrex bus address, e.g. 0xD000)
-@   r1 = data byte
-@ Clobbers: r2, r3
-@ ============================================================
+@ bus_write(r0=vectrex addr, r1=data) — BIOS trap: SYS_BUS_WRITE
 .global bus_write
 .type bus_write, %function
 .thumb_func
 bus_write:
-    push    {r4, r5, lr}
-    ldr     r4, =0xD0000000         @ SIO_BASE
-    movw    r2, #0x7FFF
-    and     r2, r0, r2               @ address → GP0-GP14
-    and     r3, r1, #0xFF
-    lsl     r3, r3, #15              @ data → GP15-GP22
-    orr     r2, r2, r3               @ combined GPIO value
-    ldr     r3, =0x007F7FFF          @ ADDR_MASK | DATA_MASK
-    str     r3, [r4, #0x24]          @ SIO_GPIO_OE_SET
-    str     r2, [r4, #0x14]          @ SIO_GPIO_OUT_SET (set bits)
-    mvn     r3, r2
-    ldr     r5, =0x007F7FFF
-    and     r3, r3, r5
-    str     r3, [r4, #0x18]          @ SIO_GPIO_OUT_CLR (clear bits)
-    mov     r3, #1
-    lsl     r3, r3, #24              @ 1 << PIN_RW (24)
-    str     r3, [r4, #0x18]          @ GPIO_CLR: R/W low
-    mov     r3, #300
-1:  subs    r3, r3, #1
-    bne     1b
-    mov     r3, #1
-    lsl     r3, r3, #24
-    str     r3, [r4, #0x14]          @ GPIO_SET: R/W high
-    pop     {r4, r5, pc}
-    .ltorg
+    svc     #8                      @ SYS_BUS_WRITE
+    bx      lr
 
-@ ============================================================
-@ bus_read: read one byte from Vectrex bus address
-@   r0 = address
-@ Returns: r0 = data byte
-@ Clobbers: r2, r3
-@ ============================================================
+@ bus_read(r0=addr) -> r0=data — BIOS trap: SYS_BUS_READ
 .global bus_read
 .type bus_read, %function
 .thumb_func
 bus_read:
-    push    {r4, lr}
-    ldr     r4, =0xD0000000
-    ldr     r2, =0x00007FFF          @ ADDR_MASK
-    str     r2, [r4, #0x24]          @ OE_SET address lines
-    ldr     r2, =0x007F8000          @ DATA_MASK
-    str     r2, [r4, #0x28]          @ OE_CLR data lines
-    movw    r2, #0x7FFF
-    and     r2, r0, r2
-    str     r2, [r4, #0x14]          @ set addr bits
-    mvn     r3, r2
-    movw    r2, #0x7FFF
-    and     r3, r3, r2
-    str     r3, [r4, #0x18]          @ clear addr bits
-    mov     r2, #1
-    lsl     r2, r2, #24
-    str     r2, [r4, #0x14]
-    mov     r3, #300
-1:  subs    r3, r3, #1
-    bne     1b
-    ldr     r0, [r4, #0x04]          @ SIO_GPIO_IN
-    lsr     r0, r0, #15              @ shift data to bits 0-7
-    and     r0, r0, #0xFF
-    pop     {r4, pc}
-    .ltorg
-
-@ vpy_spawn_enemies(r0=count_ptr, r1=enemies_ptr)
-.global vpy_spawn_enemies
-.type vpy_spawn_enemies, %function
-.thumb_func
-vpy_spawn_enemies:
-    push    {r4, r5, r6, r7, r8, r9, lr}
-    ldr     r4, [r0]             @ count
-    ldr     r5, =ENEMY_COUNT_ARM
-    str     r4, [r5]             @ store count
-    cmp     r4, #0
-    beq.w   vspe_done
-    cmp     r4, #8               @ clamp to max 8
-    it      gt
-    movgt   r4, #8
-    str     r4, [r5]             @ update clamped count
-    mov     r6, r1               @ r6 = ROM entry ptr
-    ldr     r7, =ENEMY_POOL_ARM  @ r7 = pool slot ptr
-    mov     r8, #24              @ pool stride
-vspe_loop:
-    ldr     r9, [r6, #0]         @ sprite_ptr
-    mov     r0, #1
-    str     r0, [r7, #0]         @ active
-    ldrsh   r0, [r6, #4]         @ spawn_x
-    str     r0, [r7, #4]         @ world_x
-    ldrsh   r0, [r6, #6]         @ spawn_y
-    str     r0, [r7, #8]         @ world_y
-    str     r9, [r7, #12]        @ sprite_ptr
-    ldrb    r0, [r6, #8]         @ ai_type
-    ldrb    r1, [r6, #9]         @ wp_count
-    add     r2, r6, #12          @ wp_base = ROM+12
-    str     r2, [r7, #16]        @ wp_base
-    mov     r2, #0               @ wp_idx
-    strb    r2, [r7, #20]        @ wp_idx
-    strb    r1, [r7, #21]        @ wp_count
-    strb    r0, [r7, #22]        @ ai_type
-    lsl     r0, r1, #2           @ wp_count * 4
-    add     r0, r0, #12          @ offset = 12 + wp_count*4
-    ldrb    r0, [r6, r0]         @ is_anim byte
-    strb    r0, [r7, #23]        @ pool[+23] = is_anim
-    ldrb    r1, [r6, #9]         @ wp_count again
-    mov     r0, #4
-    mul     r0, r1, r0           @ wp_count * 4
-    add     r0, r0, #16          @ +12 base +4 is_anim+pad
-    add     r6, r6, r0           @ next ROM entry
-    add     r7, r7, r8           @ next pool slot
-    subs    r4, r4, #1
-    bne     vspe_loop
-vspe_done:
-    pop     {r4, r5, r6, r7, r8, r9, pc}
-    .ltorg
-
-@ vpy_update_enemies()
-.global vpy_update_enemies
-.type vpy_update_enemies, %function
-.thumb_func
-vpy_update_enemies:
-    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
-    ldr     r4, =ENEMY_COUNT_ARM
-    ldr     r4, [r4]
-    cmp     r4, #0
-    beq.w   vupe_done
-    ldr     r5, =ENEMY_POOL_ARM  @ r5 = pool base
-    mov     r8, #24              @ pool stride
-vupe_loop:
-    ldr     r0, [r5, #0]         @ active?
-    cmp     r0, #0
-    beq.w   vupe_next
-    ldrb    r0, [r5, #22]        @ ai_type
-    cmp     r0, #1               @ patrol?
-    bne.w   vupe_next
-    ldrb    r6, [r5, #21]        @ wp_count
-    cmp     r6, #0
-    beq.w   vupe_next
-    ldr     r7, [r5, #16]        @ wp_base
-    ldrb    r9, [r5, #20]        @ wp_idx
-    lsl     r0, r9, #2           @ idx * 4
-    add     r7, r7, r0           @ r7 = &wp[idx]
-    ldrsh   r10, [r7, #0]        @ target_x
-    ldrsh   r11, [r7, #2]        @ target_y
-    ldr     r0, [r5, #4]         @ world_x
-    ldr     r1, [r5, #8]         @ world_y
-    cmp     r0, r10
-    beq.w   vupe_move_y          @ already at target x
-    sub     r2, r10, r0          @ dx = target_x - world_x
-    blt.w   vupe_x_pos
-    rsb     r2, r2, #0           @ |dx|
-    cmp     r2, #1               @ PATROL_SPEED
-    ble.w   vupe_x_snap
-    sub     r0, r0, #1
-    b.w     vupe_x_store
-vupe_x_pos:
-    cmp     r2, #1               @ PATROL_SPEED
-    ble.w   vupe_x_snap
-    add     r0, r0, #1
-    b.w     vupe_x_store
-vupe_x_snap:
-    mov     r0, r10              @ snap to target_x
-vupe_x_store:
-    str     r0, [r5, #4]         @ update world_x
-vupe_move_y:
-    cmp     r1, r11
-    beq.w   vupe_check_wp        @ already at target y
-    sub     r2, r11, r1          @ dy = target_y - world_y
-    blt.w   vupe_y_pos
-    rsb     r2, r2, #0           @ |dy|
-    cmp     r2, #1               @ PATROL_SPEED
-    ble.w   vupe_y_snap
-    sub     r1, r1, #1
-    b.w     vupe_y_next
-vupe_y_pos:
-    cmp     r2, #1               @ PATROL_SPEED
-    ble.w   vupe_y_snap
-    add     r1, r1, #1
-    b.w     vupe_y_next
-vupe_y_snap:
-    mov     r1, r11              @ snap to target_y
-vupe_y_next:
-    str     r1, [r5, #8]         @ update world_y
-    b.w     vupe_next
-vupe_check_wp:
-    ldr     r0, [r5, #4]         @ world_x (after move)
-    cmp     r0, r10
-    bne.w   vupe_next             @ x not yet at target
-    add     r9, r9, #1
-    cmp     r9, r6               @ >= wp_count?
-    it      ge
-    movge   r9, #0               @ wrap to 0
-    strb    r9, [r5, #20]        @ update wp_idx
-vupe_next:
-    add     r5, r5, r8
-    subs    r4, r4, #1
-    bne     vupe_loop
-vupe_done:
-    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
-    .ltorg
-
-@ vpy_draw_enemies()
-.global vpy_draw_enemies
-.type vpy_draw_enemies, %function
-.thumb_func
-vpy_draw_enemies:
-    push    {r4, r5, r6, r7, r8, lr}
-    ldr     r4, =ENEMY_COUNT_ARM
-    ldr     r4, [r4]
-    cmp     r4, #0
-    beq.w   vdre_done
-    ldr     r5, =ENEMY_POOL_ARM
-    mov     r8, #24
-    ldr     r6, =CAMERA_X
-    ldr     r7, =CAMERA_Y
-    ldr     r6, [r6]             @ camera_x
-    ldr     r7, [r7]             @ camera_y
-vdre_loop:
-    ldr     r0, [r5, #0]         @ active?
-    cmp     r0, #0
-    beq.w   vdre_next
-    ldr     r0, [r5, #12]        @ sprite_ptr
-    cmp     r0, #0
-    beq.w   vdre_next
-    ldr     r1, [r5, #4]         @ world_x
-    sub     r1, r1, r6           @ screen_x
-    ldr     r2, [r5, #8]         @ world_y
-    sub     r2, r2, r7           @ screen_y
-    ldrb    r3, [r5, #23]        @ is_anim
-    cmp     r3, #0
-    bne.w   vdre_use_anim
-    mov     r3, #0               @ mirror=0
-    sub     sp, sp, #8           @ reserve 8 bytes (keeps 8-byte alignment)
-    mov     r12, #127
-    str     r12, [sp]            @ intensity=127 at [sp+0] (5th arg)
-    bl      vpy_draw_vector_ex
-    add     sp, sp, #8           @ clean up stack reservation
-    b.w     vdre_next
-vdre_use_anim:
-    bl      vpy_draw_anim
-vdre_next:
-    add     r5, r5, r8
-    subs    r4, r4, #1
-    bne     vdre_loop
-vdre_done:
-    pop     {r4, r5, r6, r7, r8, pc}
-    .ltorg
+    svc     #11                     @ SYS_BUS_READ
+    bx      lr
 
 @ ============================================================
 @ Drawing engine — ARM Thumb2 / RP2350 bus master
 @ ============================================================
 
-@ SIN_TABLE[128]: sin(i*2π/128)*127 as i8
-.global _SIN_TABLE
-_SIN_TABLE:
-    .byte   0x00, 0x06, 0x0C, 0x13, 0x19, 0x1F, 0x25, 0x2B, 0x31, 0x36, 0x3C, 0x41, 0x47, 0x4C, 0x51, 0x55
-    .byte   0x5A, 0x5E, 0x62, 0x66, 0x6A, 0x6D, 0x70, 0x73, 0x75, 0x78, 0x7A, 0x7B, 0x7D, 0x7E, 0x7E, 0x7F
-    .byte   0x7F, 0x7F, 0x7E, 0x7E, 0x7D, 0x7B, 0x7A, 0x78, 0x75, 0x73, 0x70, 0x6D, 0x6A, 0x66, 0x62, 0x5E
-    .byte   0x5A, 0x55, 0x51, 0x4C, 0x47, 0x41, 0x3C, 0x36, 0x31, 0x2B, 0x25, 0x1F, 0x19, 0x13, 0x0C, 0x06
-    .byte   0x00, 0xFA, 0xF4, 0xED, 0xE7, 0xE1, 0xDB, 0xD5, 0xCF, 0xCA, 0xC4, 0xBF, 0xB9, 0xB4, 0xAF, 0xAB
-    .byte   0xA6, 0xA2, 0x9E, 0x9A, 0x96, 0x93, 0x90, 0x8D, 0x8B, 0x88, 0x86, 0x85, 0x83, 0x82, 0x82, 0x81
-    .byte   0x81, 0x81, 0x82, 0x82, 0x83, 0x85, 0x86, 0x88, 0x8B, 0x8D, 0x90, 0x93, 0x96, 0x9A, 0x9E, 0xA2
-    .byte   0xA6, 0xAB, 0xAF, 0xB4, 0xB9, 0xBF, 0xC4, 0xCA, 0xCF, 0xD5, 0xDB, 0xE1, 0xE7, 0xED, 0xF4, 0xFA
-
-@ smul_lut(r0=val i8, r1=angle 0-127) → r0=(val*sin)>>7
-.global smul_lut
-.type smul_lut, %function
-.thumb_func
-smul_lut:
-    ldr     r2, =_SIN_TABLE
-    and     r1, r1, #0x7F
-    ldrb    r2, [r2, r1]
-    sxtb    r2, r2
-    sxtb    r0, r0
-    mul     r0, r0, r2
-    asr     r0, r0, #7
-    bx      lr
-
-@ dv_reset() — reset Vectrex integrators, set ACR=$18
+@ dv_reset() — BIOS trap: SYS_RESET0REF
 .global dv_reset
 .type dv_reset, %function
 .thumb_func
 dv_reset:
-    push    {lr}
-    mov     r0, #0xD00A
-    mov     r1, #0x00
-    bl      bus_write
-    mov     r0, #0xD00B
-    mov     r1, #0x18
-    bl      bus_write
-    mov     r0, #0xD00C
-    mov     r1, #0xCC
-    bl      bus_write
-    mov     r0, #0xD001
-    mov     r1, #0x00
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x03
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x02
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x02
-    bl      bus_write
-    pop     {pc}
-    .ltorg
+    svc     #0                      @ SYS_RESET0REF
+    bx      lr
 
-@ dv_move_to(r0=dx, r1=dy) — position beam, no draw
+@ dv_move_to(r0=dx, r1=dy) — BIOS trap: SYS_MOVE (a ramped delta after a
+@ reset). Split into <=127-per-axis steps: a scrolled origin can land far
+@ past the i8 DAC range, and SYS_MOVE casts to i8 → the whole shape WRAPS to
+@ the wrong side of the screen (mario_poc floor tiles). SYS_MOVE ramps the
+@ INTEGRATORS (velocity×time), not an absolute DAC, so stepping accumulates
+@ to the true (off-screen) origin — the visible part draws in place and the
+@ physical screen clips the rest. A move already within +/-127 does one step
+@ (unchanged).
 .global dv_move_to
 .type dv_move_to, %function
 .thumb_func
 dv_move_to:
-    push    {r4, r5, lr}
-    mov     r4, r0
-    mov     r5, r1
-    mov     r0, #0xD001
-    mov     r1, r5
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x00
-    bl      bus_write
-    mov     r0, #60
-dv_mt_s: subs r0,r0,#1
-    bne dv_mt_s
-    mov     r0, #0xD000
-    mov     r1, #0x01
-    bl      bus_write
-    mov     r0, #0xD001
-    mov     r1, r4
-    bl      bus_write
-    mov     r0, #0xD00A
-    mov     r1, #0x00
-    bl      bus_write
-    mov     r0, #0xD006
-    mov     r1, #0x7F
-    bl      bus_write
-    mov     r0, #0xD005
-    mov     r1, #0x00
-    bl      bus_write
-dv_mt_p: mov r0,#0xD00D
-    bl bus_read
-    tst r0,#0x40
-    beq dv_mt_p
-    mov     r0, #0xD004
-    bl      bus_read
-    pop     {r4, r5, pc}
-    .ltorg
+    push    {r2, r3, r4, r5, r6, r7, lr}  @ callers assume traps preserve regs
+    mov     r4, r0                  @ remaining dx
+    mov     r5, r1                  @ remaining dy
+    mov     r6, #127
+    rsb     r7, r6, #0              @ r7 = -127
+    mov     r3, #8                  @ max split steps (anti-hang guard)
+dvmt_loop:
+    mov     r0, r4                  @ step_x = clamp(remaining_x, -127, 127)
+    cmp     r0, r6
+    it      gt
+    movgt   r0, r6
+    cmp     r0, r7
+    it      lt
+    movlt   r0, r7
+    mov     r1, r5                  @ step_y = clamp(remaining_y, -127, 127)
+    cmp     r1, r6
+    it      gt
+    movgt   r1, r6
+    cmp     r1, r7
+    it      lt
+    movlt   r1, r7
+    push    {r0, r1}                @ svc clobbers r0; keep the steps
+    svc     #3                      @ SYS_MOVE (this step)
+    pop     {r0, r1}
+    subs    r4, r4, r0              @ remaining -= step
+    subs    r5, r5, r1
+    orrs    r2, r4, r5              @ both zero? → done
+    beq     dvmt_done
+    subs    r3, r3, #1              @ else step, until the cap
+    bne     dvmt_loop
+dvmt_done:
+    pop     {r2, r3, r4, r5, r6, r7, pc}
 
-@ dv_draw_delta(r0=dx, r1=dy) — draw one vector segment
+@ dv_draw_delta(r0=dx, r1=dy) — BIOS trap: SYS_DRAW_DELTA
 .global dv_draw_delta
 .type dv_draw_delta, %function
 .thumb_func
 dv_draw_delta:
-    push    {r4, r5, lr}
-    mov     r4, r0
-    mov     r5, r1
-    mov     r0, #0xD001
-    mov     r1, r5
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x00
-    bl      bus_write
-    mov     r0, #60
-dv_dd_s: subs r0,r0,#1
-    bne dv_dd_s
-    mov     r0, #0xD000
-    mov     r1, #0x01
-    bl      bus_write
-    mov     r0, #0xD001
-    mov     r1, r4
-    bl      bus_write
-    mov     r0, #0xD00A
-    mov     r1, #0xFF
-    bl      bus_write
-    mov     r0, #0xD006
-    mov     r1, #0x7F
-    bl      bus_write
-    mov     r0, #0xD005
-    mov     r1, #0x00
-    bl      bus_write
-dv_dd_p: mov r0,#0xD00D
-    bl bus_read
-    tst r0,#0x40
-    beq dv_dd_p
-    mov     r0, #0xD00A
-    mov     r1, #0x00
-    bl      bus_write
-    mov     r0, #0xD004
-    bl      bus_read
-    pop     {r4, r5, pc}
-    .ltorg
+    svc     #4                      @ SYS_DRAW_DELTA
+    bx      lr
 
 @ vpy_draw_vector(r0=asset_ptr, r1=ox, r2=oy)
 @ Draws asset at screen position (ox, oy). ox=0, oy=0 = screen centre.
@@ -541,7 +227,12 @@ dvv_pl:
     add     r7, r7, #4
     ldr     r7, [r4, r7]
     bl      dv_reset
-    ldrb    r0, [r7]
+    ldrb    r0, [r7]            @ per-path .vec intensity
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    ldrb    r1, [r1]
+    cmp     r1, #0
+    it      ne
+    movne   r0, r1  @ SET_INTENSITY override wins
     bl      vpy_set_intensity
     ldrsb   r0, [r7, #2]
     add     r0, r0, r9
@@ -570,974 +261,57 @@ dvv_done:
     pop     {r4, r5, r6, r7, r8, r9, r10, pc}
     .ltorg
 
-@ vpy_draw_vector_3d(r0,r1=ax,r2=ay,r3=az,[sp+36]=ox,[sp+40]=oy)
-.global vpy_draw_vector_3d
-.type vpy_draw_vector_3d, %function
-.thumb_func
-vpy_draw_vector_3d:
-    push    {r4,r5,r6,r7,r8,r9,r10,r11,lr}
-    mov     r4, r0
-    mov     r5, r1               @ ax
-    mov     r6, r2               @ ay
-    mov     r7, r3               @ az
-    ldrsb   r8, [sp, #36]        @ ox (sign-extend)
-    ldrsb   r9, [sp, #40]        @ oy
-    ldr     r0, =_dv3d_cos
-    add     r1, r5, #32
-    and r1,r1,#0x7F
-    strb r1,[r0]
-    add     r1, r6, #32
-    and r1,r1,#0x7F
-    strb r1,[r0,#1]
-    add     r1, r7, #32
-    and r1,r1,#0x7F
-    strb r1,[r0,#2]
-    ldr     r10, [r4]
-    add r4,r4,#4
-    ldr     r11, =_dv3d_vbuf
-dv3_vl:
-    cmp r10,#0
-    beq dv3_vd
-    sub r10,r10,#1
-    ldr     r0, =_dv3d_tmp
-    ldrsb   r1, [r4]
-    strb r1,[r0]
-    ldrsb   r1, [r4,#1]
-  strb r1,[r0,#1]
-    ldrsb   r1, [r4,#2]
-  strb r1,[r0,#2]
-    add     r4, r4, #3
-    ldr     r0,=_dv3d_tmp
-    ldrsb   r0,[r0,#1]
-    ldr     r2,=_dv3d_cos
-    ldrb    r1,[r2,#0]
-    bl      smul_lut
-    ldr     r2,=_dv3d_sm
-    strb r0,[r2]
-    ldr     r0,=_dv3d_tmp
-    ldrsb   r0,[r0,#2]
-    mov     r1,r5
-    bl      smul_lut
-    ldr     r2,=_dv3d_sm
-    ldrsb r3,[r2]
-    sub r0,r3,r0
-    strb r0,[r2,#1]
-    ldr     r0,=_dv3d_tmp
-    ldrsb   r0,[r0,#1]
-    mov     r1,r5
-    bl      smul_lut
-    ldr     r2,=_dv3d_sm
-    strb r0,[r2]
-    ldr     r0,=_dv3d_tmp
-    ldrsb   r0,[r0,#2]
-    ldr     r2,=_dv3d_cos
-    ldrb    r1,[r2,#0]
-    bl      smul_lut
-    ldr     r2,=_dv3d_sm
-    ldrsb r3,[r2]
-    add r0,r0,r3
-    strb r0,[r2,#2]
-    ldr     r0,=_dv3d_tmp
-    ldrsb   r0,[r0,#0]
-    ldr     r2,=_dv3d_cos
-    ldrb    r1,[r2,#1]
-    bl      smul_lut
-    ldr     r2,=_dv3d_sm
-    strb r0,[r2]
-    ldr     r0,=_dv3d_sm
-    ldrsb   r0,[r0,#2]
-    mov     r1,r6
-    bl      smul_lut
-    ldr     r2,=_dv3d_sm
-    ldrsb r3,[r2]
-    add r0,r0,r3
-    strb r0,[r2,#3]
-    ldr     r0,=_dv3d_sm
-    ldrsb   r0,[r0,#3]
-    ldr     r2,=_dv3d_cos
-    ldrb    r1,[r2,#2]
-    bl      smul_lut
-    ldr     r2,=_dv3d_sm
-    strb r0,[r2]
-    ldr     r0,=_dv3d_sm
-    ldrsb   r0,[r0,#1]
-    ldr     r2,=_dv3d_cos
-    ldrb    r1,[r2,#2]
-    bl      smul_lut
-    ldr     r2,=_dv3d_sm
-    ldrsb r3,[r2]
-    sub r0,r3,r0
-    add r0,r0,r8
-    strb    r0,[r11]
-    ldr     r0,=_dv3d_sm
-    ldrsb   r0,[r0,#3]
-    mov     r1,r7
-    bl      smul_lut
-    ldr     r2,=_dv3d_sm
-    strb r0,[r2]
-    ldr     r0,=_dv3d_sm
-    ldrsb   r0,[r0,#1]
-    ldr     r2,=_dv3d_cos
-    ldrb    r1,[r2,#2]
-    bl      smul_lut
-    ldr     r2,=_dv3d_sm
-    ldrsb r3,[r2]
-    add r0,r0,r3
-    add r0,r0,r9
-    strb    r0,[r11,#1]
-    add     r11,r11,#2
-    b dv3_vl
-dv3_vd:
-    bl      dv_reset
-    ldr     r10,[r4]
-    add r4,r4,#4
-    ldr     r11,=_dv3d_vbuf
-    ldr     r0,=_dv3d_cur
-    mov r1,#0
-    strh r1,[r0]
-dv3_pl:
-    cmp r10,#0
-    beq dv3_pd
-    sub r10,r10,#1
-    ldrb    r5,[r4]              @ pt_count
-    ldrb    r6,[r4,#1]           @ closed
-    add     r4,r4,#2
-    cmp     r5,#0
-    beq dv3_pnext_emp
-    mov     r7, r4
-    ldrb    r0,[r7]
-    lsl r2,r0,#1
-    ldrsb   r0,[r11,r2]
-    add     r2,r2,#1
-    ldrsb r1,[r11,r2]
-    ldr     r2,=_dv3d_cur
-    ldrsb   r3,[r2,#0]
-    sub r0,r0,r3
-    ldrsb   r3,[r2,#1]
-    sub r1,r1,r3
-    push    {r0,r1}
-    ldrb    r0,[r7]
-    lsl r2,r0,#1
-    ldrsb   r8,[r11,r2]
-    add     r2,r2,#1
-    ldrsb r9,[r11,r2]
-    ldr     r2,=_dv3d_cur
-    strb r8,[r2]
-    strb r9,[r2,#1]
-    pop     {r0,r1}
-    bl      dv_move_to
-    sub     r5,r5,#1
-    add r7,r7,#1
-dv3_vxtx:
-    cmp     r5,#0
-    beq dv3_close
-    sub r5,r5,#1
-    ldrb    r0,[r7]
-    lsl r2,r0,#1
-    ldrsb   r0,[r11,r2]
-    add     r2,r2,#1
-    ldrsb r1,[r11,r2]
-    push    {r0,r1}
-    ldr     r2,=_dv3d_cur
-    ldrsb   r3,[r2,#0]
-    sub r0,r0,r3
-    ldrsb   r3,[r2,#1]
-    sub r1,r1,r3
-    bl      dv_draw_delta
-    pop     {r0,r1}
-    ldr     r2,=_dv3d_cur
-    strb r0,[r2]
-    strb r1,[r2,#1]
-    add     r7,r7,#1
-    b dv3_vxtx
-dv3_close:
-    cmp     r6,#0
-    beq dv3_pnext
-    ldr     r2,=_dv3d_cur
-    ldrsb   r3,[r2,#0]
-    sub r0,r8,r3
-    ldrsb   r3,[r2,#1]
-    sub r1,r9,r3
-    bl      dv_draw_delta
-    ldr     r2,=_dv3d_cur
-    strb r8,[r2]
-    strb r9,[r2,#1]
-dv3_pnext:
-    mov     r4,r7
-    b dv3_pl
-dv3_pnext_emp:
-    b       dv3_pl
-dv3_pd:
-    pop     {r4,r5,r6,r7,r8,r9,r10,r11,pc}
-    .ltorg
-
 @ ============================================================
 @ VPy Builtins — ARM Thumb2 / RP2350
 @ ============================================================
 
-@ ============================================================
-@ Vector font — ASCII 32-126 stroke data
-@ Each glyph: [cmd(1=move,2=draw), x(0-4), y(0-6), ..., 0x00]
-@ _FONT_PTRS[char-32] = absolute address of glyph (0 = no strokes)
-@ ============================================================
-
-.global _FONT_PTRS
-_FONT_PTRS:
-    .word   0    @ ' ' no strokes
-    .word   _glyph_033   @ '!'
-    .word   _glyph_034   @ '"'
-    .word   0    @ '#' no strokes
-    .word   0    @ '$' no strokes
-    .word   0    @ '%' no strokes
-    .word   0    @ '&' no strokes
-    .word   0    @ ''' no strokes
-    .word   0    @ '(' no strokes
-    .word   0    @ ')' no strokes
-    .word   0    @ '*' no strokes
-    .word   _glyph_043   @ '+'
-    .word   _glyph_044   @ ','
-    .word   _glyph_045   @ '-'
-    .word   _glyph_046   @ '.'
-    .word   _glyph_047   @ '/'
-    .word   _glyph_048   @ '0'
-    .word   _glyph_049   @ '1'
-    .word   _glyph_050   @ '2'
-    .word   _glyph_051   @ '3'
-    .word   _glyph_052   @ '4'
-    .word   _glyph_053   @ '5'
-    .word   _glyph_054   @ '6'
-    .word   _glyph_055   @ '7'
-    .word   _glyph_056   @ '8'
-    .word   _glyph_057   @ '9'
-    .word   _glyph_058   @ ':'
-    .word   _glyph_059   @ ';'
-    .word   _glyph_060   @ '<'
-    .word   _glyph_061   @ '='
-    .word   _glyph_062   @ '>'
-    .word   _glyph_063   @ '?'
-    .word   0    @ '@' no strokes
-    .word   _glyph_065   @ 'A'
-    .word   _glyph_066   @ 'B'
-    .word   _glyph_067   @ 'C'
-    .word   _glyph_068   @ 'D'
-    .word   _glyph_069   @ 'E'
-    .word   _glyph_070   @ 'F'
-    .word   _glyph_071   @ 'G'
-    .word   _glyph_072   @ 'H'
-    .word   _glyph_073   @ 'I'
-    .word   _glyph_074   @ 'J'
-    .word   _glyph_075   @ 'K'
-    .word   _glyph_076   @ 'L'
-    .word   _glyph_077   @ 'M'
-    .word   _glyph_078   @ 'N'
-    .word   _glyph_079   @ 'O'
-    .word   _glyph_080   @ 'P'
-    .word   _glyph_081   @ 'Q'
-    .word   _glyph_082   @ 'R'
-    .word   _glyph_083   @ 'S'
-    .word   _glyph_084   @ 'T'
-    .word   _glyph_085   @ 'U'
-    .word   _glyph_086   @ 'V'
-    .word   _glyph_087   @ 'W'
-    .word   _glyph_088   @ 'X'
-    .word   _glyph_089   @ 'Y'
-    .word   _glyph_090   @ 'Z'
-    .word   0    @ '[' no strokes
-    .word   0    @ '\' no strokes
-    .word   0    @ ']' no strokes
-    .word   0    @ '^' no strokes
-    .word   0    @ '_' no strokes
-    .word   0    @ '`' no strokes
-    .word   _glyph_097   @ 'a'
-    .word   _glyph_098   @ 'b'
-    .word   _glyph_099   @ 'c'
-    .word   _glyph_100   @ 'd'
-    .word   _glyph_101   @ 'e'
-    .word   _glyph_102   @ 'f'
-    .word   _glyph_103   @ 'g'
-    .word   _glyph_104   @ 'h'
-    .word   _glyph_105   @ 'i'
-    .word   _glyph_106   @ 'j'
-    .word   _glyph_107   @ 'k'
-    .word   _glyph_108   @ 'l'
-    .word   _glyph_109   @ 'm'
-    .word   _glyph_110   @ 'n'
-    .word   _glyph_111   @ 'o'
-    .word   _glyph_112   @ 'p'
-    .word   _glyph_113   @ 'q'
-    .word   _glyph_114   @ 'r'
-    .word   _glyph_115   @ 's'
-    .word   _glyph_116   @ 't'
-    .word   _glyph_117   @ 'u'
-    .word   _glyph_118   @ 'v'
-    .word   _glyph_119   @ 'w'
-    .word   _glyph_120   @ 'x'
-    .word   _glyph_121   @ 'y'
-    .word   _glyph_122   @ 'z'
-    .word   0    @ '{' no strokes
-    .word   0    @ '|' no strokes
-    .word   0    @ '}' no strokes
-    .word   0    @ '~' no strokes
-
-.global _FONT_DATA
-_FONT_DATA:
-_glyph_033:  @ '!'
-    .byte   1, 2, 6
-    .byte   2, 2, 2
-    .byte   1, 2, 0
-    .byte   2, 2, 1
-    .byte   0
-_glyph_034:  @ '"'
-    .byte   1, 1, 5
-    .byte   2, 1, 6
-    .byte   1, 3, 5
-    .byte   2, 3, 6
-    .byte   0
-_glyph_043:  @ '+'
-    .byte   1, 2, 1
-    .byte   2, 2, 5
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_044:  @ ','
-    .byte   1, 2, 1
-    .byte   2, 1, 0
-    .byte   0
-_glyph_045:  @ '-'
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_046:  @ '.'
-    .byte   1, 1, 0
-    .byte   2, 2, 0
-    .byte   0
-_glyph_047:  @ '/'
-    .byte   1, 0, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_048:  @ '0'
-    .byte   1, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   0
-_glyph_049:  @ '1'
-    .byte   1, 2, 0
-    .byte   2, 2, 6
-    .byte   0
-_glyph_050:  @ '2'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   2, 4, 3
-    .byte   2, 0, 3
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-_glyph_051:  @ '3'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   2, 4, 0
-    .byte   2, 0, 0
-    .byte   1, 4, 3
-    .byte   2, 1, 3
-    .byte   0
-_glyph_052:  @ '4'
-    .byte   1, 0, 6
-    .byte   2, 0, 3
-    .byte   2, 4, 3
-    .byte   1, 4, 6
-    .byte   2, 4, 0
-    .byte   0
-_glyph_053:  @ '5'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 3
-    .byte   2, 4, 3
-    .byte   2, 4, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_054:  @ '6'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 3
-    .byte   2, 0, 3
-    .byte   0
-_glyph_055:  @ '7'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   2, 2, 0
-    .byte   0
-_glyph_056:  @ '8'
-    .byte   1, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_057:  @ '9'
-    .byte   1, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_058:  @ ':'
-    .byte   1, 2, 1
-    .byte   2, 2, 2
-    .byte   1, 2, 4
-    .byte   2, 2, 5
-    .byte   0
-_glyph_059:  @ ';'
-    .byte   1, 2, 4
-    .byte   2, 2, 5
-    .byte   1, 2, 1
-    .byte   2, 1, 0
-    .byte   0
-_glyph_060:  @ '<'
-    .byte   1, 3, 6
-    .byte   2, 0, 3
-    .byte   2, 3, 0
-    .byte   0
-_glyph_061:  @ '='
-    .byte   1, 0, 4
-    .byte   2, 4, 4
-    .byte   1, 0, 2
-    .byte   2, 4, 2
-    .byte   0
-_glyph_062:  @ '>'
-    .byte   1, 1, 6
-    .byte   2, 4, 3
-    .byte   2, 1, 0
-    .byte   0
-_glyph_063:  @ '?'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   2, 4, 4
-    .byte   2, 2, 3
-    .byte   1, 2, 1
-    .byte   2, 2, 2
-    .byte   0
-_glyph_065:  @ 'A'
-    .byte   1, 0, 0
-    .byte   2, 2, 6
-    .byte   2, 4, 0
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_066:  @ 'B'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 3, 3
-    .byte   2, 0, 3
-    .byte   2, 3, 3
-    .byte   2, 3, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_067:  @ 'C'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-_glyph_068:  @ 'D'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 4, 5
-    .byte   2, 4, 1
-    .byte   2, 3, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_069:  @ 'E'
-    .byte   1, 4, 0
-    .byte   2, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 3, 3
-    .byte   0
-_glyph_070:  @ 'F'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 3, 3
-    .byte   0
-_glyph_071:  @ 'G'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 3
-    .byte   2, 2, 3
-    .byte   0
-_glyph_072:  @ 'H'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   1, 4, 0
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_073:  @ 'I'
-    .byte   1, 1, 0
-    .byte   2, 3, 0
-    .byte   1, 2, 0
-    .byte   2, 2, 6
-    .byte   1, 1, 6
-    .byte   2, 3, 6
-    .byte   0
-_glyph_074:  @ 'J'
-    .byte   1, 0, 1
-    .byte   2, 1, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   1, 1, 6
-    .byte   2, 3, 6
-    .byte   0
-_glyph_075:  @ 'K'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   1, 0, 3
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 4, 0
-    .byte   0
-_glyph_076:  @ 'L'
-    .byte   1, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-_glyph_077:  @ 'M'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 2, 3
-    .byte   2, 4, 6
-    .byte   2, 4, 0
-    .byte   0
-_glyph_078:  @ 'N'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_079:  @ 'O'
-    .byte   1, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   0
-_glyph_080:  @ 'P'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 4, 5
-    .byte   2, 4, 4
-    .byte   2, 3, 3
-    .byte   2, 0, 3
-    .byte   0
-_glyph_081:  @ 'Q'
-    .byte   1, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   1, 3, 1
-    .byte   2, 4, 0
-    .byte   0
-_glyph_082:  @ 'R'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 4, 5
-    .byte   2, 4, 4
-    .byte   2, 3, 3
-    .byte   2, 0, 3
-    .byte   2, 4, 0
-    .byte   0
-_glyph_083:  @ 'S'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 3
-    .byte   2, 4, 3
-    .byte   2, 4, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_084:  @ 'T'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   1, 2, 6
-    .byte   2, 2, 0
-    .byte   0
-_glyph_085:  @ 'U'
-    .byte   1, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_086:  @ 'V'
-    .byte   1, 0, 6
-    .byte   2, 2, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_087:  @ 'W'
-    .byte   1, 0, 6
-    .byte   2, 1, 0
-    .byte   2, 2, 3
-    .byte   2, 3, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_088:  @ 'X'
-    .byte   1, 0, 0
-    .byte   2, 4, 6
-    .byte   1, 0, 6
-    .byte   2, 4, 0
-    .byte   0
-_glyph_089:  @ 'Y'
-    .byte   1, 0, 6
-    .byte   2, 2, 3
-    .byte   2, 4, 6
-    .byte   1, 2, 3
-    .byte   2, 2, 0
-    .byte   0
-_glyph_090:  @ 'Z'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-_glyph_097:  @ 'a'
-    .byte   1, 0, 0
-    .byte   2, 2, 6
-    .byte   2, 4, 0
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_098:  @ 'b'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 3, 3
-    .byte   2, 0, 3
-    .byte   2, 3, 3
-    .byte   2, 3, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_099:  @ 'c'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-_glyph_100:  @ 'd'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 4, 5
-    .byte   2, 4, 1
-    .byte   2, 3, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_101:  @ 'e'
-    .byte   1, 4, 0
-    .byte   2, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 3, 3
-    .byte   0
-_glyph_102:  @ 'f'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 3, 3
-    .byte   0
-_glyph_103:  @ 'g'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 3
-    .byte   2, 2, 3
-    .byte   0
-_glyph_104:  @ 'h'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   1, 4, 0
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_105:  @ 'i'
-    .byte   1, 1, 0
-    .byte   2, 3, 0
-    .byte   1, 2, 0
-    .byte   2, 2, 6
-    .byte   1, 1, 6
-    .byte   2, 3, 6
-    .byte   0
-_glyph_106:  @ 'j'
-    .byte   1, 0, 1
-    .byte   2, 1, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   1, 1, 6
-    .byte   2, 3, 6
-    .byte   0
-_glyph_107:  @ 'k'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   1, 0, 3
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 4, 0
-    .byte   0
-_glyph_108:  @ 'l'
-    .byte   1, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-_glyph_109:  @ 'm'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 2, 3
-    .byte   2, 4, 6
-    .byte   2, 4, 0
-    .byte   0
-_glyph_110:  @ 'n'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_111:  @ 'o'
-    .byte   1, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   0
-_glyph_112:  @ 'p'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 4, 5
-    .byte   2, 4, 4
-    .byte   2, 3, 3
-    .byte   2, 0, 3
-    .byte   0
-_glyph_113:  @ 'q'
-    .byte   1, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   1, 3, 1
-    .byte   2, 4, 0
-    .byte   0
-_glyph_114:  @ 'r'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 4, 5
-    .byte   2, 4, 4
-    .byte   2, 3, 3
-    .byte   2, 0, 3
-    .byte   2, 4, 0
-    .byte   0
-_glyph_115:  @ 's'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 3
-    .byte   2, 4, 3
-    .byte   2, 4, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_116:  @ 't'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   1, 2, 6
-    .byte   2, 2, 0
-    .byte   0
-_glyph_117:  @ 'u'
-    .byte   1, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_118:  @ 'v'
-    .byte   1, 0, 6
-    .byte   2, 2, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_119:  @ 'w'
-    .byte   1, 0, 6
-    .byte   2, 1, 0
-    .byte   2, 2, 3
-    .byte   2, 3, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_120:  @ 'x'
-    .byte   1, 0, 0
-    .byte   2, 4, 6
-    .byte   1, 0, 6
-    .byte   2, 4, 0
-    .byte   0
-_glyph_121:  @ 'y'
-    .byte   1, 0, 6
-    .byte   2, 2, 3
-    .byte   2, 4, 6
-    .byte   1, 2, 3
-    .byte   2, 2, 0
-    .byte   0
-_glyph_122:  @ 'z'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-
-@ vpy_wait_recal() — wait for VIA Timer 1 (frame sync)
+@ vpy_wait_recal() — BIOS trap: SYS_WAIT_RECAL
 .global vpy_wait_recal
 .type vpy_wait_recal, %function
 .thumb_func
 vpy_wait_recal:
-    push    {lr}
-    mov     r0, #0xD006
-    mov     r1, #0x7F
-    bl      bus_write
-    mov     r0, #0xD007
-    mov     r1, #0x00
-    bl      bus_write
-    mov     r0, #0xD005
-    mov     r1, #0x00
-    bl      bus_write
-vpy_wr_poll:
-    mov     r0, #0xD00D
-    bl      bus_read
-    tst     r0, #0x40
-    beq     vpy_wr_poll
-    mov     r0, #0xD004
-    bl      bus_read
-    pop     {pc}
-    .ltorg
+    svc     #1                      @ SYS_WAIT_RECAL
+    bx      lr
 
-@ vpy_set_intensity(r0=intensity 0-127)
+@ vpy_set_intensity(r0=intensity 0-127) — BIOS trap: SYS_SET_INTENSITY
 .global vpy_set_intensity
 .type vpy_set_intensity, %function
 .thumb_func
 vpy_set_intensity:
-    push    {lr}
-    and     r1, r0, #0x7F
-    mov     r0, #0xD001
-    bl      bus_write
-    pop     {pc}
-    .ltorg
+    svc     #2                      @ SYS_SET_INTENSITY
+    bx      lr
 
-@ vpy_move(r0=x, r1=y) — position beam (absolute from current)
-.global vpy_move
-.type vpy_move, %function
-.thumb_func
-vpy_move:
-    push    {r4, r5, lr}
-    mov     r4, r0
-    mov     r5, r1
-    ldr     r0, =VPY_MOVE_X
-    str     r4, [r0]            @ VPY_MOVE_X = x
-    str     r5, [r0, #4]        @ VPY_MOVE_Y = y  (VPY_MOVE_Y = VPY_MOVE_X + 4)
-    mov     r0, #0xD001
-    mov     r1, r5
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x00
-    bl      bus_write
-    mov     r0, #0xD001
-    mov     r1, r4
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x01
-    bl      bus_write
-    pop     {r4, r5, pc}
-    .ltorg
-
-@ vpy_draw_line(r0=x0, r1=y0, r2=x1, r3=y1, [sp+0]=intensity)
-@ Splits segments longer than 127 units using SDIV for proportional steps
-.global vpy_draw_line
-.type vpy_draw_line, %function
-.thumb_func
-vpy_draw_line:
-    push    {r4, r5, r6, r7, r8, lr}
-    mov     r4, r0
-    mov     r5, r1
-    mov     r6, r2
-    mov     r7, r3
-    ldr     r2, =VPY_MOVE_X
-    ldr     r3, [r2]            @ r3 = VPY_MOVE_X
-    ldr     r2, [r2, #4]        @ r2 = VPY_MOVE_Y
-    add     r4, r4, r3          @ x0 += MOVE_X
-    add     r5, r5, r2          @ y0 += MOVE_Y
-    add     r6, r6, r3          @ x1 += MOVE_X
-    add     r7, r7, r2          @ y1 += MOVE_Y
-    ldr     r8, [sp, #24]           @ intensity (5th arg, past 6 saved regs)
-    bl      dv_reset
-    mov     r0, r8
-    bl      vpy_set_intensity
-    mov     r0, r4
-    mov     r1, r5
-    bl      dv_move_to
-    sub     r4, r6, r4
-    sub     r5, r7, r5
-    movs    r6, r4
-    bpl     vdl_dx_pos
-    neg     r6, r4
-vdl_dx_pos:
-    movs    r7, r5
-    bpl     vdl_dy_pos
-    neg     r7, r5
-vdl_dy_pos:
-    cmp     r6, r7
-    it      ge
-    movge   r7, r6
-    cmp     r7, #0
-    beq     vdl_done
-    add     r7, r7, #126
-    mov     r6, #127
-    sdiv    r8, r7, r6
-vdl_loop:
-    cmp     r8, #0
-    beq     vdl_done
-    sdiv    r0, r4, r8
-    sdiv    r1, r5, r8
-    sub     r4, r4, r0
-    sub     r5, r5, r1
-    sub     r8, r8, #1
-    bl      dv_draw_delta
-    b       vdl_loop
-vdl_done:
-    pop     {r4, r5, r6, r7, r8, pc}
-    .ltorg
-
-@ vpy_draw_vector_ex(r0=asset, r1=ox, r2=oy, r3=mirror, [sp+0]=intensity)
+@ vpy_draw_vector_ex(r0=asset, r1=ox, r2=oy, r3=mirror, [sp+0]=intensity; escala en VPY_DRAW_SCALE)
 @ Draws asset centered at (ox,oy); mirror: bit0=flipX, bit1=flipY
 @ dv_reset called before EVERY path so each path starts from screen centre.
+@
+@ ESCALA (r11) desde VPY_DRAW_SCALE, en treintaydosavos: 32 = 1:1, y 0 tambien.
+@ El .vplay siempre llevo el byte y NINGUN dibujante lo leia — por eso los
+@ objetos salian al 100% aunque el editor dijera 0,7.
+@
+@ Se escala la POSICION ACUMULADA, no cada delta. Escalar delta a delta
+@ redondea en cada uno y el error se suma: con 0,7 un trazo de veinte
+@ segmentos de 1 unidad acabaria a cero o al doble segun caiga el redondeo.
+@ Llevando la cuenta sin escalar y restando posiciones escaladas, el error
+@ nunca pasa de medio punto. [sp+0..12] = ux, uy, lsx, lsy.
 .global vpy_draw_vector_ex
 .type vpy_draw_vector_ex, %function
 .thumb_func
 vpy_draw_vector_ex:
-    push    {r4, r5, r6, r7, r8, r9, r10, lr}
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    sub     sp, sp, #16         @ [sp+0]=ux [sp+4]=uy [sp+8]=lsx [sp+12]=lsy
     mov     r4, r0              @ asset_ptr
     mov     r9, r1              @ ox  (kept for whole function)
     mov     r10, r2             @ oy  (kept for whole function)
     mov     r7, r3              @ mirror
-    ldr     r8, [sp, #32]       @ intensity arg (8 saved regs = 32 bytes)
+    ldr     r8, [sp, #52]       @ intensity arg (16 locales + 9 regs = 52)
+    ldr     r0, =VPY_DRAW_SCALE
+    ldrb    r11, [r0]           @ escala pedida (x32)
+    mov     r1, #0
+    strb    r1, [r0]    @ CONSUMIDA: no se hereda
+    cmp     r11, #0
+    it      eq
+    moveq   r11, #32   @ 0 => 1:1
     ldr     r5, [r4]            @ path_count
     mov     r6, #0              @ path_idx
 dvex_pl:
@@ -1562,8 +336,18 @@ dvex_nfx:
     beq     dvex_nfy
     neg     r1, r1
 dvex_nfy:
-    add     r0, r0, r9          @ x_start + ox
-    add     r1, r1, r10         @ y_start + oy
+    str     r0, [sp, #0]        @ ux = x_start (sin escalar)
+    str     r1, [sp, #4]        @ uy = y_start
+    mul     r0, r0, r11
+    add     r0, r0, #16
+    asr     r0, r0, #5   @ (x*s+16)>>5
+    mul     r1, r1, r11
+    add     r1, r1, #16
+    asr     r1, r1, #5
+    str     r0, [sp, #8]        @ lsx = ultimo x escalado
+    str     r1, [sp, #12]       @ lsy
+    add     r0, r0, r9          @ x_start*escala + ox
+    add     r1, r1, r10         @ y_start*escala + oy
     bl      dv_move_to
     add     r2, r3, #5          @ command ptr
 dvex_cl:
@@ -1582,6 +366,24 @@ dvex_nfx2:
     beq     dvex_nfy2
     neg     r1, r1
 dvex_nfy2:
+    ldr     r12, [sp, #0]       @ ux
+    add     r12, r12, r0
+    str     r12, [sp, #0]
+    mul     r12, r12, r11
+    add     r12, r12, #16
+    asr     r12, r12, #5
+    ldr     r0, [sp, #8]        @ lsx
+    sub     r0, r12, r0         @ dx escalado
+    str     r12, [sp, #8]
+    ldr     r12, [sp, #4]       @ uy
+    add     r12, r12, r1
+    str     r12, [sp, #4]
+    mul     r12, r12, r11
+    add     r12, r12, #16
+    asr     r12, r12, #5
+    ldr     r1, [sp, #12]       @ lsy
+    sub     r1, r12, r1         @ dy escalado
+    str     r12, [sp, #12]
     bl      dv_draw_delta
     add     r2, r2, #3
     b       dvex_cl
@@ -1592,2264 +394,8 @@ dvex_cend:
     add     r6, r6, #1
     b       dvex_pl
 dvex_done:
-    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
-    .ltorg
-
-@ vpy_draw_circle(r0=cx, r1=cy, r2=radius, r3=intensity)
-@ 16-segment circle via sin/cos LUT
-.global vpy_draw_circle
-.type vpy_draw_circle, %function
-.thumb_func
-vpy_draw_circle:
-    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
-    sub     sp, sp, #8              @ [sp+0]=first_x [sp+4]=first_y
-    mov     r4, r0                  @ cx
-    mov     r5, r1                  @ cy
-    asr     r6, r2, #1              @ r6 = diam/2 = radius (matches M6809 convention)
-    mov     r7, r3                  @ intensity
-    bl      dv_reset
-    mov     r0, r7
-    bl      vpy_set_intensity
-    mov     r0, #0
-    bl      vpy_cos
-    mul     r0, r0, r6
-    mov     r1, #127
-    sdiv    r0, r0, r1
-    add     r9, r4, r0              @ prev_x = cx + cos(0)*r/127
-    mov     r0, #0
-    bl      vpy_sin
-    mul     r0, r0, r6
-    mov     r1, #127
-    sdiv    r0, r0, r1
-    add     r10, r5, r0             @ prev_y = cy + sin(0)*r/127
-    str     r9, [sp]
-    str     r10, [sp, #4] @ save first point
-    mov     r0, r9
-    mov     r1, r10
-    bl      dv_move_to
-    mov     r8, #1
-vpy_dc_loop:
-    cmp     r8, #16
-    bge     vpy_dc_close
-    lsl     r0, r8, #3
-    bl      vpy_cos
-    mul     r0, r0, r6
-    mov     r1, #127
-    sdiv    r0, r0, r1
-    add     r11, r4, r0             @ new_x
-    lsl     r0, r8, #3
-    bl      vpy_sin
-    mul     r0, r0, r6
-    mov     r1, #127
-    sdiv    r0, r0, r1
-    add     r0, r5, r0              @ new_y in r0
-    sub     r2, r11, r9             @ dx = new_x - prev_x
-    sub     r3, r0, r10             @ dy = new_y - prev_y
-    mov     r9, r11                 @ prev_x = new_x
-    mov     r10, r0                 @ prev_y = new_y
-    mov     r0, r2
-    mov     r1, r3
-    bl      dv_draw_delta
-    add     r8, r8, #1
-    b       vpy_dc_loop
-vpy_dc_close:
-    ldr     r0, [sp]                @ first_x
-    ldr     r1, [sp, #4]            @ first_y
-    sub     r0, r0, r9              @ dx = first_x - prev_x
-    sub     r1, r1, r10             @ dy = first_y - prev_y
-    bl      dv_draw_delta
-    add     sp, sp, #8
+    add     sp, sp, #16         @ soltar ux/uy/lsx/lsy
     pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
-    .ltorg
-
-@ vpy_draw_rect(r0=x, r1=y, r2=w, r3=h, [sp+0]=intensity)
-.global vpy_draw_rect
-.type vpy_draw_rect, %function
-.thumb_func
-vpy_draw_rect:
-    push    {r4, r5, r6, r7, r8, lr}    @ 24 bytes
-    mov     r4, r0
-    mov     r5, r1
-    mov     r6, r2
-    mov     r7, r3
-    ldr     r8, [sp, #24]               @ intensity
-    bl      dv_reset
-    mov     r0, r8
-    bl      vpy_set_intensity
-    mov     r0, r4
-    mov     r1, r5
-    bl      dv_move_to
-    mov     r0, r6
-    mov     r1, #0
-    bl      dv_draw_delta
-    mov     r0, #0
-    mov     r1, r7
-    bl      dv_draw_delta
-    neg     r0, r6
-    mov     r1, #0
-    bl      dv_draw_delta
-    mov     r0, #0
-    neg     r1, r7
-    bl      dv_draw_delta
-    pop     {r4, r5, r6, r7, r8, pc}
-    .ltorg
-
-@ vpy_draw_filled_rect(r0=x, r1=y, r2=w, r3=h, [sp+28]=intensity)
-@ Outer outline (vpy_draw_rect) + horizontal scan lines (step=3)
-.global vpy_draw_filled_rect
-.type vpy_draw_filled_rect, %function
-.thumb_func
-vpy_draw_filled_rect:
-    push    {r4, r5, r6, r7, r8, r9, lr}    @ 28 bytes
-    mov     r4, r0              @ x
-    mov     r5, r1              @ y
-    mov     r6, r2              @ w
-    mov     r7, r3              @ h
-    ldr     r8, [sp, #28]       @ intensity
-    push    {r8}                @ intensity as 5th arg
-    mov     r0, r4
-    mov     r1, r5
-    mov     r2, r6
-    mov     r3, r7
-    bl      vpy_draw_rect
-    add     sp, sp, #4
-    bl      dv_reset
-    mov     r0, r8
-    bl      vpy_set_intensity
-    mov     r0, r4
-    mov     r1, r5
-    bl      dv_move_to
-    mov     r9, #0              @ scan offset
-vdfr_loop:
-    cmp     r9, r7
-    bge     vdfr_done
-    mov     r0, r6
-    mov     r1, #0
-    bl      dv_draw_delta
-    add     r9, r9, #3
-    cmp     r9, r7
-    bge     vdfr_done
-    neg     r0, r6
-    mov     r1, #3
-    bl      dv_move_to
-    b       vdfr_loop
-vdfr_done:
-    pop     {r4, r5, r6, r7, r8, r9, pc}
-    .ltorg
-
-@ vpy_draw_polygon(r0=n, r1=intensity, r2=x0, r3=y0, [sp+0]=x1,y1,...)
-.global vpy_draw_polygon
-.type vpy_draw_polygon, %function
-.thumb_func
-vpy_draw_polygon:
-    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 36 bytes
-    mov     r4, r0              @ n (total vertices)
-    mov     r5, r1              @ intensity
-    mov     r6, r2              @ first_x
-    mov     r7, r3              @ first_y
-    add     r8, sp, #36         @ ptr to x1 (first extra stack arg)
-    mov     r9, r6              @ prev_x = first_x
-    mov     r10, r7             @ prev_y = first_y
-    bl      dv_reset
-    mov     r0, r5
-    bl      vpy_set_intensity
-    mov     r0, r6
-    mov     r1, r7
-    bl      dv_move_to
-    mov     r11, #1             @ vertex idx = 1
-vdpoly_loop:
-    cmp     r11, r4
-    bge     vdpoly_close
-    ldr     r0, [r8]            @ xi
-    ldr     r1, [r8, #4]        @ yi
-    add     r8, r8, #8
-    sub     r2, r0, r9          @ dx = xi - prev_x
-    sub     r3, r1, r10         @ dy = yi - prev_y
-    mov     r9, r0
-    mov     r10, r1
-    mov     r0, r2
-    mov     r1, r3
-    bl      dv_draw_delta
-    add     r11, r11, #1
-    b       vdpoly_loop
-vdpoly_close:
-    sub     r0, r6, r9          @ dx = first_x - prev_x
-    sub     r1, r7, r10         @ dy = first_y - prev_y
-    bl      dv_draw_delta
-    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
-    .ltorg
-
-@ vpy_draw_ellipse(r0=cx, r1=cy, r2=rx, r3=ry, [sp+0]=intensity)
-@ 16-segment parametric ellipse via sin/cos LUT
-.global vpy_draw_ellipse
-.type vpy_draw_ellipse, %function
-.thumb_func
-vpy_draw_ellipse:
-    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 36 bytes
-    sub     sp, sp, #8          @ [sp+0]=first_x [sp+4]=first_y
-    mov     r4, r0              @ cx
-    mov     r5, r1              @ cy
-    mov     r6, r2              @ rx
-    mov     r7, r3              @ ry
-    ldr     r8, [sp, #44]       @ intensity (8+36=44)
-    bl      dv_reset
-    mov     r0, r8
-    bl      vpy_set_intensity
-    mov     r0, #0
-    bl      vpy_cos
-    mul     r0, r0, r6
-    mov     r1, #127
-    sdiv    r0, r0, r1
-    add     r8, r4, r0          @ prev_x = cx + rx*cos(0)/127
-    str     r8, [sp, #0]        @ first_x
-    mov     r0, #0
-    bl      vpy_sin
-    mul     r0, r0, r7
-    mov     r1, #127
-    sdiv    r0, r0, r1
-    add     r9, r5, r0          @ prev_y = cy + ry*sin(0)/127
-    str     r9, [sp, #4]        @ first_y
-    mov     r0, r8
-    mov     r1, r9
-    bl      dv_move_to
-    mov     r10, #1             @ i = 1
-vde_loop:
-    cmp     r10, #16
-    bge     vde_close
-    lsl     r0, r10, #3         @ angle = i*8
-    bl      vpy_cos
-    mul     r0, r0, r6
-    mov     r1, #127
-    sdiv    r0, r0, r1
-    add     r11, r4, r0         @ new_x = cx + rx*cos/127
-    lsl     r0, r10, #3
-    bl      vpy_sin
-    mul     r0, r0, r7
-    mov     r1, #127
-    sdiv    r0, r0, r1
-    add     r0, r5, r0          @ new_y
-    sub     r2, r11, r8         @ dx = new_x - prev_x
-    sub     r3, r0, r9          @ dy = new_y - prev_y
-    mov     r8, r11             @ prev_x = new_x
-    mov     r9, r0              @ prev_y = new_y
-    mov     r0, r2
-    mov     r1, r3
-    bl      dv_draw_delta
-    add     r10, r10, #1
-    b       vde_loop
-vde_close:
-    ldr     r0, [sp, #0]        @ first_x
-    ldr     r1, [sp, #4]        @ first_y
-    sub     r0, r0, r8          @ dx = first_x - prev_x
-    sub     r1, r1, r9          @ dy = first_y - prev_y
-    bl      dv_draw_delta
-    add     sp, sp, #8
-    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
-    .ltorg
-
-@ vpy_draw_arc(r0=segs, r1=cx, r2=cy, r3=r, [sp+0]=start_deg, [sp+4]=sweep_deg, [sp+8]=intensity)
-.global vpy_draw_arc
-.type vpy_draw_arc, %function
-.thumb_func
-vpy_draw_arc:
-    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 36 bytes
-    mov     r4, r0              @ segs (loop counter)
-    mov     r5, r1              @ cx
-    mov     r6, r2              @ cy
-    mov     r7, r3              @ radius
-    ldr     r0, [sp, #36]       @ start_deg
-    lsl     r0, r0, #7          @ * 128
-    mov     r1, #360
-    sdiv    r8, r0, r1          @ r8 = start_step
-    ldr     r0, [sp, #40]       @ sweep_deg
-    lsl     r0, r0, #7
-    sdiv    r0, r0, r1          @ sweep_steps (r1 still 360)
-    cmp     r4, #0
-    beq     vpy_arc_done
-    sdiv    r9, r0, r4          @ r9 = step_size = sweep_steps / segs
-    ldr     r0, [sp, #44]       @ intensity
-    bl      dv_reset
-    bl      vpy_set_intensity
-    and     r0, r8, #127
-    bl      vpy_cos
-    mul     r0, r0, r7
-    mov     r1, #127
-    sdiv    r0, r0, r1
-    add     r10, r5, r0         @ prev_x = cx + r*cos(start)/127
-    and     r0, r8, #127
-    bl      vpy_sin
-    mul     r0, r0, r7
-    mov     r1, #127
-    sdiv    r0, r0, r1
-    add     r11, r6, r0         @ prev_y = cy + r*sin(start)/127
-    mov     r0, r10
-    mov     r1, r11
-    bl      dv_move_to
-vpy_arc_loop:
-    cmp     r4, #0
-    beq     vpy_arc_done
-    add     r8, r8, r9          @ current_angle += step_size
-    and     r0, r8, #127
-    bl      vpy_cos
-    mul     r0, r0, r7
-    mov     r1, #127
-    sdiv    r0, r0, r1
-    add     r0, r5, r0          @ new_x
-    push    {r0}                @ save new_x (r0 clobbered by next bl)
-    and     r0, r8, #127
-    bl      vpy_sin
-    mul     r0, r0, r7
-    mov     r1, #127
-    sdiv    r0, r0, r1
-    add     r1, r6, r0          @ new_y
-    pop     {r0}                @ restore new_x
-    sub     r2, r0, r10         @ dx = new_x - prev_x
-    sub     r3, r1, r11         @ dy = new_y - prev_y
-    mov     r10, r0             @ prev_x = new_x
-    mov     r11, r1             @ prev_y = new_y
-    mov     r0, r2
-    mov     r1, r3
-    bl      dv_draw_delta
-    sub     r4, r4, #1
-    b       vpy_arc_loop
-vpy_arc_done:
-    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
-    .ltorg
-
-@ vpy_draw_bezier(x0,y0,cp1x,cp1y,[sp+0]=cp2x,cp2y,x1,y1,steps,intensity)
-.global vpy_draw_bezier
-.type vpy_draw_bezier, %function
-.thumb_func
-vpy_draw_bezier:
-    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
-    sub     sp, sp, #36
-    mov     r4, r0
-    mov     r5, r1
-    mov     r6, r2
-    mov     r7, r3
-    ldr     r8,  [sp, #72]      @ cp2x
-    ldr     r9,  [sp, #76]      @ cp2y
-    ldr     r10, [sp, #80]      @ x1
-    ldr     r11, [sp, #84]      @ y1
-    ldr     r1,  [sp, #88]      @ steps
-    ldr     r0,  [sp, #92]      @ intensity
-    cmp     r1, #1
-    blt     vbez_done
-    str     r1, [sp]
-    mov     r1, #1
-    str     r1, [sp, #4]
-    bl      dv_reset
-    bl      vpy_set_intensity
-    mov     r0, r4
-    mov     r1, r5
-    bl      dv_move_to
-    str     r4, [sp, #8]
-    str     r5, [sp, #12]
-vbez_loop:
-    ldr     r0, [sp, #4]
-    ldr     r1, [sp]
-    cmp     r0, r1
-    bgt     vbez_done
-    lsl     r2, r0, #8
-    sdiv    r2, r2, r1
-    sub     r0, r6, r4
-    mul     r0, r0, r2
-    asr     r0, r0, #8
-    add     r0, r0, r4
-    str     r0, [sp, #20]
-    sub     r0, r7, r5
-    mul     r0, r0, r2
-    asr     r0, r0, #8
-    add     r0, r0, r5
-    str     r0, [sp, #24]
-    sub     r0, r8, r6
-    mul     r0, r0, r2
-    asr     r0, r0, #8
-    add     r0, r0, r6
-    str     r0, [sp, #28]
-    sub     r0, r9, r7
-    mul     r0, r0, r2
-    asr     r0, r0, #8
-    add     r0, r0, r7
-    str     r0, [sp, #32]
-    sub     r1, r10, r8
-    mul     r1, r1, r2
-    asr     r1, r1, #8
-    add     r1, r1, r8
-    sub     r3, r11, r9
-    mul     r3, r3, r2
-    asr     r3, r3, #8
-    add     r3, r3, r9
-    ldr     r12, [sp, #20]
-    ldr     r0, [sp, #28]
-    sub     r0, r0, r12
-    mul     r0, r0, r2
-    asr     r0, r0, #8
-    add     r0, r0, r12
-    str     r0, [sp, #20]
-    ldr     r12, [sp, #24]
-    ldr     r0, [sp, #32]
-    sub     r0, r0, r12
-    mul     r0, r0, r2
-    asr     r0, r0, #8
-    add     r0, r0, r12
-    str     r0, [sp, #24]
-    ldr     r12, [sp, #28]
-    sub     r1, r1, r12
-    mul     r1, r1, r2
-    asr     r1, r1, #8
-    add     r1, r1, r12
-    str     r1, [sp, #28]
-    ldr     r12, [sp, #32]
-    sub     r3, r3, r12
-    mul     r3, r3, r2
-    asr     r3, r3, #8
-    add     r3, r3, r12
-    str     r3, [sp, #32]
-    ldr     r12, [sp, #20]
-    ldr     r0, [sp, #28]
-    sub     r0, r0, r12
-    mul     r0, r0, r2
-    asr     r0, r0, #8
-    add     r0, r0, r12
-    ldr     r12, [sp, #24]
-    ldr     r1, [sp, #32]
-    sub     r1, r1, r12
-    mul     r1, r1, r2
-    asr     r1, r1, #8
-    add     r1, r1, r12
-    ldr     r2, [sp, #8]        @ prev_x
-    ldr     r3, [sp, #12]       @ prev_y
-    str     r0, [sp, #8]        @ prev_x = bx
-    str     r1, [sp, #12]       @ prev_y = by
-    sub     r0, r0, r2          @ dx = bx - prev_x
-    sub     r1, r1, r3          @ dy = by - prev_y
-    bl      dv_draw_delta
-    ldr     r0, [sp, #4]
-    add     r0, r0, #1
-    str     r0, [sp, #4]
-    b       vbez_loop
-vbez_done:
-    add     sp, sp, #36
-    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
-    .ltorg
-
-@ vpy_draw_bezier_quad(x0,y0,cpx,cpy,[sp+0]=x1,y1,steps,intensity)
-.global vpy_draw_bezier_quad
-.type vpy_draw_bezier_quad, %function
-.thumb_func
-vpy_draw_bezier_quad:
-    push    {r4, r5, r6, r7, r8, r9, lr}
-    sub     sp, sp, #28
-    mov     r4, r0
-    mov     r5, r1
-    mov     r6, r2
-    mov     r7, r3
-    ldr     r8, [sp, #56]       @ x1
-    ldr     r9, [sp, #60]       @ y1
-    ldr     r1, [sp, #64]       @ steps
-    ldr     r0, [sp, #68]       @ intensity
-    cmp     r1, #1
-    blt     vbezq_done
-    str     r1, [sp]
-    mov     r1, #1
-    str     r1, [sp, #4]
-    bl      dv_reset
-    bl      vpy_set_intensity
-    mov     r0, r4
-    mov     r1, r5
-    bl      dv_move_to
-    str     r4, [sp, #8]
-    str     r5, [sp, #12]
-vbezq_loop:
-    ldr     r0, [sp, #4]
-    ldr     r1, [sp]
-    cmp     r0, r1
-    bgt     vbezq_done
-    lsl     r2, r0, #8
-    sdiv    r2, r2, r1
-    sub     r3, r6, r4
-    mul     r3, r3, r2
-    asr     r3, r3, #8
-    add     r3, r3, r4
-    sub     r0, r8, r6
-    mul     r0, r0, r2
-    asr     r0, r0, #8
-    add     r0, r0, r6
-    sub     r0, r0, r3
-    mul     r0, r0, r2
-    asr     r0, r0, #8
-    add     r0, r0, r3
-    str     r0, [sp, #20]
-    sub     r3, r7, r5
-    mul     r3, r3, r2
-    asr     r3, r3, #8
-    add     r3, r3, r5
-    sub     r1, r9, r7
-    mul     r1, r1, r2
-    asr     r1, r1, #8
-    add     r1, r1, r7
-    sub     r1, r1, r3
-    mul     r1, r1, r2
-    asr     r1, r1, #8
-    add     r1, r1, r3
-    ldr     r0, [sp, #20]       @ bx
-    ldr     r2, [sp, #8]        @ prev_x
-    ldr     r3, [sp, #12]       @ prev_y
-    str     r0, [sp, #8]        @ prev_x = bx
-    str     r1, [sp, #12]       @ prev_y = by
-    sub     r0, r0, r2          @ dx
-    sub     r1, r1, r3          @ dy
-    bl      dv_draw_delta
-    ldr     r0, [sp, #4]
-    add     r0, r0, #1
-    str     r0, [sp, #4]
-    b       vbezq_loop
-vbezq_done:
-    add     sp, sp, #28
-    pop     {r4, r5, r6, r7, r8, r9, pc}
-    .ltorg
-
-@ vpy_print_text(r0=x, r1=y, r2=str_ptr)
-.global vpy_print_text
-.type vpy_print_text, %function
-.thumb_func
-vpy_print_text:
-    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
-    mov     r4, r0
-    mov     r5, r1
-    mov     r6, r2
-    ldr     r7, =TEXT_SIZE
-    ldr     r7, [r7]
-    cmp     r7, #0
-    bne     vpt_sc
-    mov     r7, #3
-vpt_sc:
-    ldr     r8, =TEXT_COLOR
-    ldr     r8, [r8]
-    cmp     r8, #0
-    bne     vpt_cc
-    mov     r8, #100
-vpt_cc:
-    bl      dv_reset
-    mov     r0, r8
-    bl      vpy_set_intensity
-    mov     r0, r4
-    mov     r1, r5
-    bl      dv_move_to
-    ldr     r10, =PRINT_BEAM_X
-    str     r4, [r10]
-    ldr     r11, =PRINT_BEAM_Y
-    str     r5, [r11]
-    mov     r9, r4              @ cur_x = x
-vpt_loop:
-    ldrb    r0, [r6]
-    add     r6, r6, #1
-    cmp     r0, #0
-    beq     vpt_done
-    cmp     r0, #0x80
-    beq     vpt_done
-    cmp     r0, #0x61
-    blt     vpt_nl
-    cmp     r0, #0x7A
-    bgt     vpt_nl
-    sub     r0, r0, #0x20
-vpt_nl:
-    cmp     r0, #32
-    blt     vpt_adv
-    cmp     r0, #126
-    bgt     vpt_adv
-    sub     r0, r0, #32
-    ldr     r1, =_FONT_PTRS
-    lsl     r0, r0, #2
-    ldr     r0, [r1, r0]
-    cmp     r0, #0
-    beq     vpt_adv
-    mov     r1, r9
-    mov     r2, r5
-    mov     r3, r7
-    push    {r10, r11}
-    bl      vpt_draw_glyph
-    add     sp, sp, #8
-vpt_adv:
-    mov     r0, #7
-    mul     r0, r0, r7
-    asr     r0, r0, #1
-    add     r9, r9, r0
-    b       vpt_loop
-vpt_done:
-    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
-    .ltorg
-
-@ vpt_draw_glyph — internal: draw one glyph at (char_x, char_y) with scale
-.type vpt_draw_glyph, %function
-.thumb_func
-vpt_draw_glyph:
-    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
-    mov     r4, r0              @ glyph_ptr
-    mov     r5, r1              @ char_x
-    mov     r6, r2              @ char_y
-    mov     r7, r3              @ scale
-    ldr     r8, [sp, #36]       @ bx_ptr (PRINT_BEAM_X)
-    ldr     r9, [sp, #40]       @ by_ptr (PRINT_BEAM_Y)
-    ldr     r10, [r8]           @ beam_x
-    ldr     r11, [r9]           @ beam_y
-vdg_loop:
-    ldrb    r0, [r4]
-    cmp     r0, #0
-    beq     vdg_done
-    ldrb    r1, [r4, #1]        @ gx
-    ldrb    r2, [r4, #2]        @ gy
-    add     r4, r4, #3
-    push    {r0}               @ save cmd
-    mul     r1, r1, r7
-    asr     r1, r1, #1
-    add     r1, r1, r5
-    mul     r2, r2, r7
-    asr     r2, r2, #1
-    add     r2, r2, r6
-    sub     r0, r1, r10         @ dx
-    sub     r3, r2, r11         @ dy
-    mov     r10, r1
-    mov     r11, r2
-    pop     {r1}               @ restore cmd
-    push    {r0, r3}           @ save dx, dy
-    cmp     r1, #1
-    bne     vdg_draw
-    pop     {r0, r1}
-    bl      dv_move_to
-    b       vdg_loop
-vdg_draw:
-    pop     {r0, r1}
-    bl      dv_draw_delta
-    b       vdg_loop
-vdg_done:
-    str     r10, [r8]           @ update PRINT_BEAM_X
-    str     r11, [r9]           @ update PRINT_BEAM_Y
-    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
-    .ltorg
-
-@ vpy_print_number(r0=x, r1=y, r2=value) — range -9999..9999
-.global vpy_print_number
-.type vpy_print_number, %function
-.thumb_func
-vpy_print_number:
-    push    {r4, r5, r6, r7, r8, lr}
-    mov     r4, r0
-    mov     r5, r1
-    mov     r6, r2
-    sub     sp, sp, #8
-    mov     r7, sp
-    mov     r8, r7
-    cmp     r6, #0
-    bge     vpn_pos
-    mov     r0, #45
-    strb    r0, [r8]
-    add     r8, r8, #1
-    neg     r6, r6
-vpn_pos:
-    ldr     r0, =9999
-    cmp     r6, r0
-    ble     vpn_clamp
-    mov     r6, r0
-vpn_clamp:
-    ldr     r0, =1000
-    sdiv    r1, r6, r0
-    mul     r0, r0, r1
-    sub     r6, r6, r0
-    add     r1, r1, #48
-    strb    r1, [r8]
-    mov     r0, #100
-    sdiv    r1, r6, r0
-    mul     r0, r0, r1
-    sub     r6, r6, r0
-    add     r1, r1, #48
-    strb    r1, [r8, #1]
-    mov     r0, #10
-    sdiv    r1, r6, r0
-    mul     r0, r0, r1
-    sub     r6, r6, r0
-    add     r1, r1, #48
-    strb    r1, [r8, #2]
-    add     r1, r6, #48
-    strb    r1, [r8, #3]
-    mov     r0, #0
-    strb    r0, [r8, #4]
-    mov     r0, r4
-    mov     r1, r5
-    mov     r2, r7
-    bl      vpy_print_text
-    add     sp, sp, #8
-    pop     {r4, r5, r6, r7, r8, pc}
-    .ltorg
-
-@ vpy_j1_x() → r0 = cached J1 X axis (-127..127)
-.global vpy_j1_x
-.type vpy_j1_x, %function
-.thumb_func
-vpy_j1_x:
-    ldr     r0, =J1_AXIS_X
-    ldr     r0, [r0]
-    bx      lr
-
-@ vpy_j1_y() → r0 = cached J1 Y axis (-127..127)
-.global vpy_j1_y
-.type vpy_j1_y, %function
-.thumb_func
-vpy_j1_y:
-    ldr     r0, =J1_AXIS_Y
-    ldr     r0, [r0]
-    bx      lr
-
-.global vpy_j1_btn1
-.type vpy_j1_btn1, %function
-.thumb_func
-vpy_j1_btn1:
-    ldr     r0, =BTN_STATE_J1
-    ldr     r0, [r0]
-    ubfx    r0, r0, #4, #1
-    eor     r0, r0, #1
-    bx      lr
-
-.global vpy_j1_btn2
-.type vpy_j1_btn2, %function
-.thumb_func
-vpy_j1_btn2:
-    ldr     r0, =BTN_STATE_J1
-    ldr     r0, [r0]
-    ubfx    r0, r0, #5, #1
-    eor     r0, r0, #1
-    bx      lr
-
-.global vpy_j1_btn3
-.type vpy_j1_btn3, %function
-.thumb_func
-vpy_j1_btn3:
-    ldr     r0, =BTN_STATE_J1
-    ldr     r0, [r0]
-    ubfx    r0, r0, #6, #1
-    eor     r0, r0, #1
-    bx      lr
-
-.global vpy_j1_btn4
-.type vpy_j1_btn4, %function
-.thumb_func
-vpy_j1_btn4:
-    ldr     r0, =BTN_STATE_J1
-    ldr     r0, [r0]
-    ubfx    r0, r0, #7, #1
-    eor     r0, r0, #1
-    bx      lr
-
-@ vpy_j2_x() → r0 = cached J2 X axis (-127..127)
-.global vpy_j2_x
-.type vpy_j2_x, %function
-.thumb_func
-vpy_j2_x:
-    ldr     r0, =J2_AXIS_X
-    ldr     r0, [r0]
-    bx      lr
-
-@ vpy_j2_y() → r0 = cached J2 Y axis (-127..127)
-.global vpy_j2_y
-.type vpy_j2_y, %function
-.thumb_func
-vpy_j2_y:
-    ldr     r0, =J2_AXIS_Y
-    ldr     r0, [r0]
-    bx      lr
-
-.global vpy_j2_btn1
-.type vpy_j2_btn1, %function
-.thumb_func
-vpy_j2_btn1:
-    ldr     r0, =BTN_STATE_J2
-    ldr     r0, [r0]
-    ubfx    r0, r0, #0, #1
-    eor     r0, r0, #1
-    bx      lr
-
-.global vpy_j2_btn2
-.type vpy_j2_btn2, %function
-.thumb_func
-vpy_j2_btn2:
-    ldr     r0, =BTN_STATE_J2
-    ldr     r0, [r0]
-    ubfx    r0, r0, #1, #1
-    eor     r0, r0, #1
-    bx      lr
-
-.global vpy_j2_btn3
-.type vpy_j2_btn3, %function
-.thumb_func
-vpy_j2_btn3:
-    ldr     r0, =BTN_STATE_J2
-    ldr     r0, [r0]
-    ubfx    r0, r0, #2, #1
-    eor     r0, r0, #1
-    bx      lr
-
-.global vpy_j2_btn4
-.type vpy_j2_btn4, %function
-.thumb_func
-vpy_j2_btn4:
-    ldr     r0, =BTN_STATE_J2
-    ldr     r0, [r0]
-    ubfx    r0, r0, #3, #1
-    eor     r0, r0, #1
-    bx      lr
-
-@ psg_write(r0=reg, r1=data) — write AY-3-8912 PSG register
-.global psg_write
-.type psg_write, %function
-.thumb_func
-psg_write:
-    push    {r4, r5, lr}
-    mov     r4, r0              @ reg
-    mov     r5, r1              @ data
-    mov     r0, #0xD001
-    mov     r1, r4
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x19
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x01
-    bl      bus_write
-    mov     r0, #0xD001
-    mov     r1, r5
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x11
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x01
-    bl      bus_write
-    pop     {r4, r5, pc}
-    .ltorg
-
-@ psg_read(r0=reg) → r0 = PSG register value
-.global psg_read
-.type psg_read, %function
-.thumb_func
-psg_read:
-    push    {r4, lr}
-    mov     r4, r0              @ reg
-    mov     r0, #0xD001
-    mov     r1, r4
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x19
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x01
-    bl      bus_write
-    mov     r0, #0xD003
-    mov     r1, #0x00
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x09
-    bl      bus_write
-    mov     r0, #0xD001
-    bl      bus_read
-    push    {r0}               @ save result
-    mov     r0, #0xD000
-    mov     r1, #0x01
-    bl      bus_write
-    mov     r0, #0xD003
-    mov     r1, #0xFF
-    bl      bus_write
-    pop     {r0}               @ return value
-    pop     {r4, pc}
-    .ltorg
-
-@ vpy_update_buttons() — cache buttons and joystick axes (safe: called in WAIT_RECAL window)
-.global vpy_update_buttons
-.type vpy_update_buttons, %function
-.thumb_func
-vpy_update_buttons:
-    push    {r4, lr}
-    mov     r0, #0xD002
-    mov     r1, #0x0F
-    bl      bus_write
-    mov     r0, #0xD000
-    bl      bus_read
-    ldr     r1, =BTN_STATE_J1
-    str     r0, [r1]
-    mov     r0, #0xD002
-    mov     r1, #0xFF
-    bl      bus_write
-    mov     r0, #14
-    bl      psg_read
-    ldr     r1, =BTN_STATE_J2
-    str     r0, [r1]
-    mov     r0, #0xD000
-    mov     r1, #0x01
-    bl      bus_write
-    mov     r0, #0xD001
-    bl      bus_read
-    sxtb    r4, r0
-    ldr     r0, =J1_AXIS_X
-    str     r4, [r0]
-    mov     r0, #0xD000
-    mov     r1, #0x03
-    bl      bus_write
-    mov     r0, #0xD001
-    bl      bus_read
-    sxtb    r4, r0
-    ldr     r0, =J1_AXIS_Y
-    str     r4, [r0]
-    mov     r0, #0xD000
-    mov     r1, #0x00
-    bl      bus_write
-    mov     r0, #0xD001
-    bl      bus_read
-    sxtb    r4, r0
-    ldr     r0, =J2_AXIS_X
-    str     r4, [r0]
-    mov     r0, #0xD000
-    mov     r1, #0x02
-    bl      bus_write
-    mov     r0, #0xD001
-    bl      bus_read
-    sxtb    r4, r0
-    ldr     r0, =J2_AXIS_Y
-    str     r4, [r0]
-    mov     r0, #0xD000
-    mov     r1, #0x01
-    bl      bus_write
-    pop     {r4, pc}
-    .ltorg
-
-.global vpy_abs
-.type vpy_abs, %function
-.thumb_func
-vpy_abs:
-    cmp     r0, #0
-    it      lt
-    neglt   r0, r0
-    bx      lr
-
-.global vpy_min
-.type vpy_min, %function
-.thumb_func
-vpy_min:
-    cmp     r0, r1
-    it      gt
-    movgt   r0, r1
-    bx      lr
-
-.global vpy_max
-.type vpy_max, %function
-.thumb_func
-vpy_max:
-    cmp     r0, r1
-    it      lt
-    movlt   r0, r1
-    bx      lr
-
-.global vpy_clamp
-.type vpy_clamp, %function
-.thumb_func
-vpy_clamp:
-    cmp     r0, r1
-    it      lt
-    movlt   r0, r1
-    cmp     r0, r2
-    it      gt
-    movgt   r0, r2
-    bx      lr
-
-@ vpy_sin(r0=angle) → r0 = sin(angle*2π/128)*127 as signed i8
-.global vpy_sin
-.type vpy_sin, %function
-.thumb_func
-vpy_sin:
-    and     r0, r0, #0x7F
-    ldr     r1, =_SIN_TABLE
-    ldrb    r0, [r1, r0]
-    sxtb    r0, r0
-    bx      lr
-    .ltorg
-
-@ vpy_cos(r0=angle) → r0 = cos(angle*2π/128)*127 as signed i8
-.global vpy_cos
-.type vpy_cos, %function
-.thumb_func
-vpy_cos:
-    add     r0, r0, #32
-    and     r0, r0, #0x7F
-    ldr     r1, =_SIN_TABLE
-    ldrb    r0, [r1, r0]
-    sxtb    r0, r0
-    bx      lr
-    .ltorg
-
-@ vpy_sqrt(r0=n) → r0 = floor(sqrt(n))
-.global vpy_sqrt
-.type vpy_sqrt, %function
-.thumb_func
-vpy_sqrt:
-    cmp     r0, #0
-    beq     vsqrt_zero
-    push    {r4, r5, r6}
-    mov     r4, r0              @ n
-    mov     r5, #0              @ lo
-    ldr     r6, =46340         @ hi (floor(sqrt(2^31-1)))
-    cmp     r4, r6
-    blt     vsqrt_loop
-    mov     r0, r6
-    pop     {r4, r5, r6}
-    bx      lr
-vsqrt_loop:
-    add     r0, r5, r6
-    lsr     r0, r0, #1  @ mid = (lo+hi)/2
-    mul     r2, r0, r0           @ mid*mid
-    cmp     r2, r4
-    beq     vsqrt_exact
-    bgt     vsqrt_high
-    mov     r5, r0
-    add     r5, r5, #1
-    cmp     r5, r6
-    blt     vsqrt_loop
-    b       vsqrt_done
-vsqrt_high:
-    mov     r6, r0
-    cmp     r5, r6
-    blt     vsqrt_loop
-vsqrt_done:
-    mov     r0, r5
-    sub     r0, r0, #1
-    pop     {r4, r5, r6}
-    bx      lr
-vsqrt_exact:
-    pop     {r4, r5, r6}
-    bx      lr
-vsqrt_zero:
-    bx      lr
-    .ltorg
-
-@ vpy_rand() → r0 = pseudo-random 0-32767 (LCG)
-.global vpy_rand
-.type vpy_rand, %function
-.thumb_func
-vpy_rand:
-    push    {r4, r5, lr}
-    ldr     r4, =RAND_SEED
-    ldr     r0, [r4]
-    ldr     r5, =1664525
-    mul     r0, r0, r5
-    ldr     r5, =1013904223
-    add     r0, r0, r5
-    str     r0, [r4]            @ save seed
-    lsr     r0, r0, #16
-    bic     r0, r0, #0x8000      @ clear bit15 (0x8000 is valid Thumb2 immediate)
-    pop     {r4, r5, pc}
-    .ltorg
-
-@ vpy_rand_range(r0=lo, r1=hi) → r0 = random in [lo, hi]
-.global vpy_rand_range
-.type vpy_rand_range, %function
-.thumb_func
-vpy_rand_range:
-    push    {r4, r5, lr}
-    mov     r4, r0              @ lo
-    sub     r5, r1, r0
-    add     r5, r5, #1
-    bl      vpy_rand
-    sdiv    r1, r0, r5
-    mul     r1, r1, r5
-    sub     r0, r0, r1
-    add     r0, r0, r4          @ + lo
-    pop     {r4, r5, pc}
-    .ltorg
-
-@ vpy_peek(r0=vectrex_addr) → r0 = byte at that address
-.global vpy_peek
-.type vpy_peek, %function
-.thumb_func
-vpy_peek:
-    push    {lr}
-    bl      bus_read
-    pop     {pc}
-    .ltorg
-
-@ vpy_poke(r0=vectrex_addr, r1=val)
-.global vpy_poke
-.type vpy_poke, %function
-.thumb_func
-vpy_poke:
-    push    {lr}
-    bl      bus_write
-    pop     {pc}
-    .ltorg
-
-@ vpy_wait(r0=frames) — busy-wait N frames via wait_recal
-.global vpy_wait
-.type vpy_wait, %function
-.thumb_func
-vpy_wait:
-    push    {r4, lr}
-    mov     r4, r0
-vwt_loop:
-    cmp     r4, #0
-    beq     vwt_done
-    bl      vpy_wait_recal
-    sub     r4, r4, #1
-    b       vwt_loop
-vwt_done:
-    pop     {r4, pc}
-    .ltorg
-
-@ vpy_beep(r0=freq_period, r1=duration_frames) — non-blocking PSG tone on channel A
-.global vpy_beep
-.type vpy_beep, %function
-.thumb_func
-vpy_beep:
-    push    {r4, r5, lr}
-    mov     r4, r0              @ freq period (reg 0)
-    mov     r5, r1              @ duration
-    mov     r0, #0
-    mov     r1, r4
-    bl      psg_write
-    mov     r0, #1
-    mov     r1, #0
-    bl      psg_write
-    mov     r0, #7
-    mov     r1, #0x3E
-    bl      psg_write
-    mov     r0, #8
-    mov     r1, #15
-    bl      psg_write
-    ldr     r0, =BEEP_FRAMES_LEFT
-    str     r5, [r0]
-    pop     {r4, r5, pc}
-    .ltorg
-
-@ vpy_beep_update() — decrement beep timer; mute channel A when done
-.global vpy_beep_update
-.type vpy_beep_update, %function
-.thumb_func
-vpy_beep_update:
-    push    {r4, lr}
-    ldr     r4, =BEEP_FRAMES_LEFT
-    ldr     r0, [r4]
-    cmp     r0, #0
-    beq     vbu_done
-    sub     r0, r0, #1
-    str     r0, [r4]
-    bne     vbu_done
-    mov     r0, #8
-    mov     r1, #0
-    bl      psg_write
-    mov     r0, #7
-    mov     r1, #0x3F
-    bl      psg_write
-vbu_done:
-    pop     {r4, pc}
-    .ltorg
-
-@ vpy_len — fallback, returns 0 (len(arr) on static arrays resolved at compile time)
-.global vpy_len
-.type vpy_len, %function
-.thumb_func
-vpy_len:
-    mov     r0, #0
-    bx      lr
-
-@ vpy_play_music(r0=music_data_ptr)
-.global vpy_play_music
-.type vpy_play_music, %function
-.thumb_func
-vpy_play_music:
-    push    {r4, lr}
-    mov     r4, r0
-    ldr     r1, =PSG_MUSIC_START
-    ldr     r1, [r1]
-    cmp     r4, r1
-    beq     vpm_already
-    bl      vpy_stop_music
-    ldr     r1, =PSG_MUSIC_START
-    str     r4, [r1]
-    add     r0, r4, #8
-    ldr     r1, =PSG_MUSIC_PTR
-    str     r0, [r1]
-    ldr     r1, =PSG_IS_PLAYING
-    mov     r0, #1
-    str     r0, [r1]
-    ldr     r1, =PSG_DELAY_FRAMES
-    mov     r0, #0
-    str     r0, [r1]
-vpm_already:
-    pop     {r4, pc}
-    .ltorg
-
-@ vpy_stop_music() — stop playback and silence all PSG channels
-.global vpy_stop_music
-.type vpy_stop_music, %function
-.thumb_func
-vpy_stop_music:
-    push    {lr}
-    ldr     r0, =PSG_IS_PLAYING
-    mov     r1, #0
-    str     r1, [r0]
-    mov     r0, #8
-    mov     r1, #0
-    bl      psg_write
-    mov     r0, #9
-    mov     r1, #0
-    bl      psg_write
-    mov     r0, #10
-   mov     r1, #0
-    bl      psg_write
-    mov     r0, #7
-    mov     r1, #0x3F
- bl      psg_write
-    pop     {pc}
-    .ltorg
-
-@ vpy_music_update() — advance PSG music sequencer by one frame
-.global vpy_music_update
-.type vpy_music_update, %function
-.thumb_func
-vpy_music_update:
-    push    {r4, r5, r6, r7, lr}
-    ldr     r0, =PSG_IS_PLAYING
-    ldr     r0, [r0]
-    cmp     r0, #0
-    beq     vmu_done
-    ldr     r4, =PSG_DELAY_FRAMES
-    ldr     r0, [r4]
-    cmp     r0, #0
-    beq     vmu_process
-    sub     r0, r0, #1
-    str     r0, [r4]
-    b       vmu_done
-vmu_process:
-    ldr     r5, =PSG_MUSIC_PTR
-    ldr     r5, [r5]
-    ldrb    r6, [r5, #1]         @ num_writes
-    cmp     r6, #0
-    beq     vmu_end
-    cmp     r6, #0xFF
-    beq     vmu_loop
-    add     r7, r5, #2
-vmu_write_loop:
-    cmp     r6, #0
-    beq     vmu_after_writes
-    ldrb    r0, [r7]
-    ldrb    r1, [r7, #1]
-    push    {r6, r7}
-    bl      psg_write
-    pop     {r6, r7}
-    add     r7, r7, #2
-    sub     r6, r6, #1
-    b       vmu_write_loop
-vmu_after_writes:
-    ldr     r0, =PSG_MUSIC_PTR
-    str     r7, [r0]
-    ldrb    r0, [r7]
-    str     r0, [r4]
-    b       vmu_done
-vmu_end:
-    bl      vpy_stop_music
-    b       vmu_done
-vmu_loop:
-    ldr     r0, =PSG_MUSIC_START
-    ldr     r0, [r0]
-    ldr     r1, [r0, #4]         @ loop_event_offset
-    add     r1, r0, r1
-    ldr     r0, =PSG_MUSIC_PTR
-    str     r1, [r0]
-    ldrb    r0, [r1]
-    str     r0, [r4]
-vmu_done:
-    pop     {r4, r5, r6, r7, pc}
-    .ltorg
-
-@ vpy_play_sfx(r0=sfx_data_ptr)
-.global vpy_play_sfx
-.type vpy_play_sfx, %function
-.thumb_func
-vpy_play_sfx:
-    push    {lr}
-    ldr     r1, =PSG_SFX_PTR
-    add     r2, r0, #4
-    str     r2, [r1]
-    ldr     r1, =PSG_SFX_ACTIVE
-    mov     r2, #1
-    str     r2, [r1]
-    ldr     r1, =PSG_SFX_DELAY
-    mov     r2, #0
-    str     r2, [r1]
-    pop     {pc}
-    .ltorg
-
-@ vpy_audio_update() — advance SFX sequencer by one frame
-.global vpy_audio_update
-.type vpy_audio_update, %function
-.thumb_func
-vpy_audio_update:
-    push    {r4, r5, r6, r7, lr}
-    ldr     r0, =PSG_SFX_ACTIVE
-    ldr     r0, [r0]
-    cmp     r0, #0
-    beq     vau_done
-    ldr     r4, =PSG_SFX_DELAY
-    ldr     r0, [r4]
-    cmp     r0, #0
-    beq     vau_proc
-    sub     r0, r0, #1
-    str     r0, [r4]
-    b       vau_done
-vau_proc:
-    ldr     r5, =PSG_SFX_PTR
-    ldr     r5, [r5]
-    ldrb    r6, [r5, #1]         @ num_writes
-    cmp     r6, #0
-    beq     vau_end
-    add     r7, r5, #2
-vau_wl:
-    cmp     r6, #0
-    beq     vau_aw
-    ldrb    r0, [r7]
-    ldrb    r1, [r7, #1]
-    cmp     r0, #7
-    bne     vau_do_write
-    push    {r1, r6, r7}    @ save sfx_mixer, loop vars
-    bl      psg_read         @ r0=7 already → returns Regs[7]
-    pop     {r1, r6, r7}    @ restore sfx_mixer to r1; r0=cur_mixer
-    and     r0, r0, #0xDB   @ keep non-C bits from music (0xDB=~0x24)
-    and     r1, r1, #0x24   @ keep only C bits from SFX
-    orr     r1, r0, r1      @ r1 = merged mixer
-    mov     r0, #7          @ reg = 7
-vau_do_write:
-    push    {r6, r7}
-    bl      psg_write
-    pop     {r6, r7}
-    add     r7, r7, #2
-    sub     r6, r6, #1
-    b       vau_wl
-vau_aw:
-    ldr     r0, =PSG_SFX_PTR
-    str     r7, [r0]
-    ldrb    r0, [r7]
-    str     r0, [r4]
-    b       vau_done
-vau_end:
-    ldr     r0, =PSG_SFX_ACTIVE
-    mov     r1, #0
-    str     r1, [r0]
-vau_done:
-    pop     {r4, r5, r6, r7, pc}
-    .ltorg
-
-@ --- NOTE_PERIOD_TABLE: MIDI 24-107 → AY period (84 hwords) ---
-.section .rodata
-.balign 2
-.global NOTE_PERIOD_TABLE
-NOTE_PERIOD_TABLE:
-    .hword 2697, 2546, 2403, 2268, 2141, 2020, 1907, 1800
-    .hword 1699, 1604, 1514, 1429, 1348, 1273, 1201, 1134
-    .hword 1070, 1010, 954, 900, 849, 802, 757, 714
-    .hword 674, 636, 601, 567, 535, 505, 477, 450
-    .hword 425, 401, 378, 357, 337, 318, 300, 283
-    .hword 268, 253, 238, 225, 212, 200, 189, 179
-    .hword 169, 159, 150, 142, 134, 126, 119, 113
-    .hword 106, 100, 95, 89, 84, 80, 75, 71
-    .hword 67, 63, 60, 56, 53, 50, 47, 45
-    .hword 42, 40, 38, 35, 33, 32, 30, 28
-    .hword 27, 25, 24, 22
-
-.section .text
-.align 2
-
-@ vpy_play_note(r0=instr_ptr, r1=channel 0-2, r2=note MIDI 24-107)
-.global vpy_play_note
-.type vpy_play_note, %function
-.thumb_func
-vpy_play_note:
-    push    {r4, r5, r6, r7, lr}
-    mov     r4, r0          @ r4 = instr_ptr
-    mov     r5, r1          @ r5 = channel
-    mov     r6, r2          @ r6 = note
-    @ clamp note to 24-107
-    cmp     r6, #24
-    it      lt
-    movlt   r6, #24
-    cmp     r6, #107
-    it      gt
-    movgt   r6, #107
-    @ r7 = &NOTE_STATE[channel]
-    ldr     r0, =NOTE_STATE
-    mov     r1, #32
-    mul     r7, r5, r1
-    add     r7, r0, r7
-    @ fill channel state
-    mov     r0, #1
-    str     r0, [r7, #0]    @ active = 1
-    ldrb    r0, [r4, #0]
-    str     r0, [r7, #4]    @ frames_left = duration_frames
-    str     r6, [r7, #8]    @ base_note
-    str     r4, [r7, #12]   @ instr_ptr
-    mov     r0, #0
-    str     r0, [r7, #16]   @ arp_pos = 0
-    ldrb    r0, [r4, #3]
-    str     r0, [r7, #20]   @ arp_timer = arp_speed_frames
-    str     r5, [r7, #28]   @ channel_id
-    @ compute period from note
-    sub     r0, r6, #24     @ r0 = note - 24 (index)
-    lsl     r0, r0, #1      @ r0 = index * 2 (hword offset)
-    ldr     r1, =NOTE_PERIOD_TABLE
-    ldrh    r2, [r1, r0]    @ r2 = period
-    str     r2, [r7, #24]   @ save period in state
-    @ write period to PSG (reg_lo = channel*2, reg_hi = channel*2+1)
-    lsl     r0, r5, #1      @ reg_lo = channel * 2
-    mov     r1, r2
-    and     r1, r1, #0xFF   @ period_lo
-    push    {r2, r5, r7}
-    bl      psg_write
-    pop     {r2, r5, r7}
-    lsl     r0, r5, #1
-    add     r0, r0, #1      @ reg_hi
-    mov     r1, r2
-    lsr     r1, r1, #8      @ period_hi
-    push    {r5, r7}
-    bl      psg_write
-    pop     {r5, r7}
-    @ write volume to PSG (vol reg = channel + 8)
-    ldr     r4, [r7, #12]   @ reload instr_ptr
-    ldrb    r1, [r4, #1]    @ volume
-    add     r0, r5, #8      @ vol reg = channel + 8
-    push    {r5, r7}
-    bl      psg_write
-    pop     {r5, r7}
-    @ update PSG_MIXER_SHADOW: enable tone ch, disable noise ch
-    ldr     r0, =PSG_MIXER_SHADOW
-    ldr     r1, [r0]
-    mov     r2, #1
-    lsl     r2, r2, r5      @ tone bit for channel
-    bic     r1, r1, r2      @ clear = enable tone
-    add     r3, r5, #3
-    mov     r2, #1
-    lsl     r2, r2, r3      @ noise bit
-    orr     r1, r1, r2      @ set = disable noise
-    str     r1, [r0]        @ update shadow
-    mov     r1, r1          @ r1 = shadow value already loaded above
-    ldr     r1, =PSG_MIXER_SHADOW
-    ldr     r1, [r1]
-    mov     r0, #7
-    push    {r5, r7}
-    bl      psg_write
-    pop     {r5, r7}
-    pop     {r4, r5, r6, r7, pc}
-    .ltorg
-
-@ vpy_note_update() — advance note engine one frame (3 channels)
-.global vpy_note_update
-.type vpy_note_update, %function
-.thumb_func
-vpy_note_update:
-    push    {r4, r5, r6, r7, r8, lr}
-    mov     r4, #0              @ r4 = channel index
-.Lvnu_loop:
-    cmp     r4, #3
-    bge     .Lvnu_done
-    ldr     r5, =NOTE_STATE
-    mov     r6, #32
-    mul     r7, r4, r6
-    add     r5, r5, r7      @ r5 = &NOTE_STATE[channel]
-    ldr     r6, [r5, #0]    @ active
-    cmp     r6, #0
-    beq     .Lvnu_next
-    ldr     r6, [r5, #4]    @ frames_left
-    subs    r6, r6, #1
-    str     r6, [r5, #4]
-    bne     .Lvnu_arp
-    @ note expired: mute channel
-    mov     r0, #0
-    str     r0, [r5, #0]    @ active = 0
-    ldr     r6, [r5, #28]   @ channel_id
-    add     r0, r6, #8      @ vol reg = channel_id + 8
-    mov     r1, #0
-    push    {r4, r5}
-    bl      psg_write
-    pop     {r4, r5}
-    b       .Lvnu_next
-.Lvnu_arp:
-    ldr     r6, [r5, #12]   @ instr_ptr
-    ldrb    r7, [r6, #2]    @ arpeggio_count
-    cmp     r7, #0
-    beq     .Lvnu_next
-    ldr     r8, [r5, #20]   @ arp_timer
-    subs    r8, r8, #1
-    str     r8, [r5, #20]
-    bne     .Lvnu_next
-    ldrb    r8, [r6, #3]    @ arpeggio_speed_frames
-    str     r8, [r5, #20]
-    ldr     r8, [r5, #16]   @ arp_pos
-    add     r8, r8, #1
-    cmp     r8, r7
-    it      ge
-    movge   r8, #0
-    str     r8, [r5, #16]
-    ldr     r0, [r5, #8]    @ base_note
-    add     r1, r6, #4      @ ptr to arpeggio_intervals[0]
-    ldrsb   r1, [r1, r8]    @ signed interval at arp_pos
-    add     r0, r0, r1      @ new_note
-    cmp     r0, #24
-    it      lt
-    movlt   r0, #24
-    cmp     r0, #107
-    it      gt
-    movgt   r0, #107
-    sub     r0, r0, #24     @ index into table
-    lsl     r0, r0, #1      @ hword offset
-    ldr     r1, =NOTE_PERIOD_TABLE
-    ldrh    r2, [r1, r0]    @ period
-    ldr     r3, [r5, #28]   @ channel_id
-    lsl     r0, r3, #1      @ reg_lo = channel_id * 2
-    mov     r1, r2
-    and     r1, r1, #0xFF
-    push    {r2, r3, r4, r5}
-    bl      psg_write
-    pop     {r2, r3, r4, r5}
-    lsl     r0, r3, #1
-    add     r0, r0, #1      @ reg_hi
-    mov     r1, r2
-    lsr     r1, r1, #8
-    push    {r3, r4, r5}
-    bl      psg_write
-    pop     {r3, r4, r5}
-.Lvnu_next:
-    add     r4, r4, #1
-    b       .Lvnu_loop
-.Lvnu_done:
-    pop     {r4, r5, r6, r7, r8, pc}
-    .ltorg
-
-.global vpy_set_camera_x
-.type vpy_set_camera_x, %function
-.thumb_func
-vpy_set_camera_x:
-    ldr     r1, =CAMERA_X
-    str     r0, [r1]
-    bx      lr
-
-.global vpy_set_camera_y
-.type vpy_set_camera_y, %function
-.thumb_func
-vpy_set_camera_y:
-    ldr     r1, =CAMERA_Y
-    str     r0, [r1]
-    bx      lr
-
-.global vpy_get_camera_x
-.type vpy_get_camera_x, %function
-.thumb_func
-vpy_get_camera_x:
-    ldr     r0, =CAMERA_X
-    ldr     r0, [r0]
-    bx      lr
-
-.global vpy_get_camera_y
-.type vpy_get_camera_y, %function
-.thumb_func
-vpy_get_camera_y:
-    ldr     r0, =CAMERA_Y
-    ldr     r0, [r0]
-    bx      lr
-
-.global vpy_get_scroll_limit_left
-.type vpy_get_scroll_limit_left, %function
-.thumb_func
-vpy_get_scroll_limit_left:
-    ldr     r0, =SCROLL_LIMIT_LEFT
-    ldr     r0, [r0]
-    bx      lr
-
-.global vpy_get_scroll_limit_right
-.type vpy_get_scroll_limit_right, %function
-.thumb_func
-vpy_get_scroll_limit_right:
-    ldr     r0, =SCROLL_LIMIT_RIGHT
-    ldr     r0, [r0]
-    bx      lr
-
-.global vpy_get_scroll_limit_top
-.type vpy_get_scroll_limit_top, %function
-.thumb_func
-vpy_get_scroll_limit_top:
-    ldr     r0, =SCROLL_LIMIT_TOP
-    ldr     r0, [r0]
-    bx      lr
-
-.global vpy_get_scroll_limit_bottom
-.type vpy_get_scroll_limit_bottom, %function
-.thumb_func
-vpy_get_scroll_limit_bottom:
-    ldr     r0, =SCROLL_LIMIT_BOTTOM
-    ldr     r0, [r0]
-    bx      lr
-
-.global vpy_set_text_size
-.type vpy_set_text_size, %function
-.thumb_func
-vpy_set_text_size:
-    lsl     r1, r0, #1
-    add     r1, r1, r0
-    add     r1, r1, #4
-    lsr     r1, r1, #3
-    cmp     r1, #1
-    bhs     vsts_ok
-    mov     r1, #1
-vsts_ok:
-    ldr     r0, =TEXT_SIZE
-    str     r1, [r0]
-    bx      lr
-
-.global vpy_set_text_color
-.type vpy_set_text_color, %function
-.thumb_func
-vpy_set_text_color:
-    ldr     r1, =TEXT_COLOR
-    str     r0, [r1]
-    bx      lr
-
-.global vpy_debug_print
-.type vpy_debug_print, %function
-.thumb_func
-vpy_debug_print:
-    ldr     r1, =DBGVAL
-    str     r0, [r1]
-    bx      lr
-
-.global vpy_debug_print_labeled
-.type vpy_debug_print_labeled, %function
-.thumb_func
-vpy_debug_print_labeled:
-    ldr     r1, =DBGVAL
-    str     r0, [r1]
-    bx      lr
-
-.global vpy_debug_print_str
-.type vpy_debug_print_str, %function
-.thumb_func
-vpy_debug_print_str:
-    bx      lr
-
-@ vpy_load_level(r0=level_data_ptr)
-.global vpy_load_level
-.type vpy_load_level, %function
-.thumb_func
-vpy_load_level:
-    push    {r4, r5, r6, r7, r8, lr}  @ 6 regs = 24 bytes, 8-aligned
-    mov     r4, r0
-    ldr     r1, =LEVEL_DATA_PTR
-    str     r0, [r1]
-    ldr     r1, =CAMERA_X
-    mov     r2, #0
-    str     r2, [r1]
-    ldr     r1, =CAMERA_Y
-    str     r2, [r1]
-    ldrb    r5, [r4, #9]              @ gpCount
-    ldr     r1, =LEVEL_GP_COUNT
-    str     r5, [r1]
-    cmp     r5, #0
-    beq.w   vll_done
-    ldr     r6, [r4, #16]             @ gpObjectsPtr
-    ldr     r7, =LEVEL_GP_BUF
-vll_gp_loop:
-    ldrsh   r0, [r6, #0]              @ world_x
-    ldrsh   r1, [r6, #2]              @ world_y
-    strh    r0, [r7, #0]
-    strh    r1, [r7, #2]
-    ldrsb   r0, [r6, #14]             @ vel_x_init
-    ldrsb   r1, [r6, #15]             @ vel_y_init
-    strb    r0, [r7, #4]
-    strb    r1, [r7, #5]
-    mov     r0, #1
-    strb    r0, [r7, #6]  @ alive=1
-    mov     r0, #0
-    strb    r0, [r7, #7]  @ pad=0
-    add     r6, r6, #20    @ next ROM obj (20 bytes)
-    add     r7, r7, #8
-    subs    r5, r5, #1
-    bne     vll_gp_loop
-vll_done:
-    ldrsh   r0, [r4, #24]             @ scrollLimit left
-    ldr     r1, =SCROLL_LIMIT_LEFT
-    str     r0, [r1]
-    ldrsh   r0, [r4, #26]             @ scrollLimit right
-    ldr     r1, =SCROLL_LIMIT_RIGHT
-    str     r0, [r1]
-    ldrsh   r0, [r4, #28]             @ scrollLimit top
-    ldr     r1, =SCROLL_LIMIT_TOP
-    str     r0, [r1]
-    ldrsh   r0, [r4, #30]             @ scrollLimit bottom
-    ldr     r1, =SCROLL_LIMIT_BOTTOM
-    str     r0, [r1]
-    pop     {r4, r5, r6, r7, r8, pc}
-    .ltorg
-
-@ vpy_show_level()
-.global vpy_show_level
-.type vpy_show_level, %function
-.thumb_func
-vpy_show_level:
-    push    {r4, r5, r6, r7, r8, lr}  @ 6 regs = 24 bytes, 8-aligned
-    ldr     r4, =LEVEL_DATA_PTR
-    ldr     r4, [r4]
-    cmp     r4, #0
-    beq.w   vsl_done
-    ldrb    r5, [r4, #8]              @ bgCount
-    cmp     r5, #0
-    beq.w   vsl_skip_bg
-    ldr     r6, [r4, #12]             @ bgObjectsPtr
-    bl      vsl_draw_static
-vsl_skip_bg:
-    ldr     r5, =LEVEL_GP_COUNT
-    ldr     r5, [r5]
-    cmp     r5, #0
-    beq.w   vsl_skip_gp
-    ldr     r6, [r4, #16]             @ gpObjectsPtr (ROM)
-    ldr     r7, =LEVEL_GP_BUF
-    ldr     r8, =CAMERA_X
-vsl_gp_loop:
-    ldrb    r3, [r6, #7]              @ obj type (1=enemy)
-    cmp     r3, #1
-    beq     vsl_gp_next               @ enemies drawn by DRAW_ENEMIES
-    ldrb    r0, [r7, #6]              @ alive
-    cmp     r0, #0
-    beq.w   vsl_gp_next
-    ldrsh   r0, [r7, #0]              @ world_x
-    ldrsh   r1, [r7, #2]              @ world_y
-    ldr     r2, [r8]
-    sub     r0, r0, r2  @ screen_x
-    ldr     r2, [r8, #4]
-    sub     r1, r1, r2  @ screen_y (CAMERA_Y=CAMERA_X+4)
-    movs    r2, r0
-    bpl     vsl_gp_cx_ok
-    neg     r2, r0
-vsl_gp_cx_ok:
-    cmp     r2, #160
-    bgt     vsl_gp_next
-    movs    r2, r1
-    bpl     vsl_gp_cy_ok
-    neg     r2, r1
-vsl_gp_cy_ok:
-    cmp     r2, #160
-    bgt     vsl_gp_next
-    ldrb    r2, [r6, #5]              @ intensity
-    cmp     r2, #0
-    bne     vsl_gp_havei
-    mov     r2, #127
-vsl_gp_havei:
-    mov     r3, #0
-    push    {r2, r3}            @ [sp]=intensity, align+8
-    mov     r2, r1
-    mov     r1, r0
-    ldr     r0, [r6, #8]  @ vector_ptr
-    mov     r3, #0
-    bl      vpy_draw_vector_ex
-    add     sp, sp, #8
-vsl_gp_next:
-    add     r6, r6, #20    @ next ROM obj (20 bytes)
-    add     r7, r7, #8
-    subs    r5, r5, #1
-    bne     vsl_gp_loop
-vsl_skip_gp:
-    ldrb    r5, [r4, #10]             @ fgCount
-    cmp     r5, #0
-    beq.w   vsl_done
-    ldr     r6, [r4, #20]             @ fgObjectsPtr
-    bl      vsl_draw_static
-vsl_done:
-    pop     {r4, r5, r6, r7, r8, pc}
-    .ltorg
-
-@ vsl_draw_static — internal
-vsl_draw_static:
-    push    {r4, r5, r6, r7, r8, lr}  @ 24 bytes
-    mov     r4, r5                    @ count
-    mov     r5, r6                    @ ROM ptr
-    ldr     r6, =CAMERA_X
-    ldr     r6, [r6]
-    ldr     r7, =CAMERA_Y
-    ldr     r7, [r7]
-vsd_loop:
-    cmp     r4, #0
-    beq.w   vsd_done
-    ldrsh   r0, [r5, #0]
-    ldrsh   r1, [r5, #2]
-    sub     r0, r0, r6
-    sub     r1, r1, r7
-    movs    r8, r0
-    bpl     vsd_cx_ok
-    neg     r8, r0
-vsd_cx_ok:
-    cmp     r8, #160
-    bgt     vsd_next
-    movs    r8, r1
-    bpl     vsd_cy_ok
-    neg     r8, r1
-vsd_cy_ok:
-    cmp     r8, #160
-    bgt     vsd_next
-    ldrb    r2, [r5, #5]
-    cmp     r2, #0
-    bne     vsd_havei
-    mov     r2, #127
-vsd_havei:
-    mov     r3, #0
-    push    {r2, r3}
-    mov     r2, r1
-    mov     r1, r0
-    ldr     r0, [r5, #8]
-    mov     r3, #0
-    bl      vpy_draw_vector_ex
-    add     sp, sp, #8
-vsd_next:
-    add     r5, r5, #20    @ next ROM obj (20 bytes)
-    subs    r4, r4, #1
-    b       vsd_loop
-vsd_done:
-    pop     {r4, r5, r6, r7, r8, pc}
-    .ltorg
-
-@ vpy_update_level()
-.global vpy_update_level
-.type vpy_update_level, %function
-.thumb_func
-vpy_update_level:
-    push    {r4, r5, r6, r7, r8, r9, r10, lr}  @ 8 regs = 32 bytes, 8-aligned
-    ldr     r4, =LEVEL_DATA_PTR
-    ldr     r4, [r4]
-    cmp     r4, #0
-    beq.w   vul_done
-    ldrsh   r6, [r4, #0]              @ xMin
-    ldrsh   r7, [r4, #2]              @ xMax
-    ldrsh   r8, [r4, #4]              @ yMin
-    ldrsh   r9, [r4, #6]              @ yMax
-    ldr     r5, =LEVEL_GP_COUNT
-    ldr     r5, [r5]
-    cmp     r5, #0
-    beq.w   vul_done
-    ldr     r10, [r4, #16]            @ gpObjectsPtr (ROM, for flags)
-    ldr     r4, =LEVEL_GP_BUF
-vul_loop:
-    ldrb    r0, [r4, #6]              @ alive
-    cmp     r0, #0
-    beq.w   vul_next
-    ldrb    r0, [r10, #6]             @ ROM flags
-    tst     r0, #0x02
-    beq     vul_nograv
-    ldrsb   r1, [r4, #5]              @ vel_y
-    sub     r1, r1, #1
-    cmp     r1, #-127
-    bge     vul_vy_ok
-    mov     r1, #-127
-vul_vy_ok:
-    strb    r1, [r4, #5]
-vul_nograv:
-    ldrsh   r1, [r4, #0]              @ world_x
-    ldrsb   r2, [r4, #4]              @ vel_x
-    add     r1, r1, r2
-    cmp     r1, r6
-    bge     vul_x_min_ok
-    mov     r1, r6
-    mov     r2, #0
-    strb    r2, [r4, #4]
-vul_x_min_ok:
-    cmp     r1, r7
-    ble     vul_x_max_ok
-    mov     r1, r7
-    mov     r2, #0
-    strb    r2, [r4, #4]
-vul_x_max_ok:
-    strh    r1, [r4, #0]
-    ldrsh   r1, [r4, #2]              @ world_y
-    ldrsb   r2, [r4, #5]              @ vel_y
-    add     r1, r1, r2
-    cmp     r1, r8
-    bge     vul_y_min_ok
-    mov     r1, r8
-    mov     r2, #0
-    strb    r2, [r4, #5]
-vul_y_min_ok:
-    cmp     r1, r9
-    ble     vul_y_max_ok
-    mov     r1, r9
-    mov     r2, #0
-    strb    r2, [r4, #5]
-vul_y_max_ok:
-    strh    r1, [r4, #2]
-vul_next:
-    add     r4, r4, #8
-    add     r10, r10, #20  @ next ROM obj (20 bytes)
-    subs    r5, r5, #1
-    bne     vul_loop
-vul_done:
-    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
-    .ltorg
-
-@ vpy_get_level_width() -> r0
-.global vpy_get_level_width
-.type vpy_get_level_width, %function
-.thumb_func
-vpy_get_level_width:
-    ldr     r0, =LEVEL_DATA_PTR
-    ldr     r0, [r0]
-    cmp     r0, #0
-    beq.w   vglw_null
-    ldrsh   r1, [r0, #2]              @ xMax
-    ldrsh   r0, [r0, #0]              @ xMin
-    sub     r0, r1, r0
-    bx      lr
-vglw_null:
-    mov     r0, #0
-    bx      lr
-    .ltorg
-
-@ vpy_get_level_height() -> r0
-.global vpy_get_level_height
-.type vpy_get_level_height, %function
-.thumb_func
-vpy_get_level_height:
-    ldr     r0, =LEVEL_DATA_PTR
-    ldr     r0, [r0]
-    cmp     r0, #0
-    beq.w   vglh_null
-    ldrsh   r1, [r0, #6]              @ yMax
-    ldrsh   r0, [r0, #4]              @ yMin
-    sub     r0, r1, r0
-    bx      lr
-vglh_null:
-    mov     r0, #0
-    bx      lr
-    .ltorg
-
-@ vpy_get_level_tile(r0=x, r1=y) -> index or -1
-.global vpy_get_level_tile
-.type vpy_get_level_tile, %function
-.thumb_func
-vpy_get_level_tile:
-    push    {r4, r5, r6, lr}           @ 4 regs = 16 bytes, 8-aligned
-    mov     r4, r0                    @ query_x
-    mov     r5, r1                    @ query_y
-    ldr     r6, =LEVEL_GP_COUNT
-    ldr     r6, [r6]
-    ldr     r0, =LEVEL_GP_BUF
-    mov     r1, #0                    @ index
-vglt_loop:
-    cmp     r1, r6
-    bge     vglt_notfound
-    ldrb    r2, [r0, #6]
-    cmp     r2, #0
-    beq.w   vglt_next
-    ldrsh   r2, [r0, #0]              @ world_x
-    sub     r2, r2, r4
-    movs    r3, r2
-    bpl     vglt_dx_ok
-    neg     r2, r2
-vglt_dx_ok:
-    cmp     r2, #16
-    bgt     vglt_next
-    ldrsh   r2, [r0, #2]              @ world_y
-    sub     r2, r2, r5
-    movs    r3, r2
-    bpl     vglt_dy_ok
-    neg     r2, r2
-vglt_dy_ok:
-    cmp     r2, #16
-    bgt     vglt_next
-    mov     r0, r1                    @ return index
-    pop     {r4, r5, r6, pc}
-vglt_next:
-    add     r0, r0, #8
-    add     r1, r1, #1
-    b       vglt_loop
-vglt_notfound:
-    mvn     r0, #0            @ return -1
-    pop     {r4, r5, r6, pc}
-    .ltorg
-
-@ vpy_level_collision_x(r0=px, r1=py, r2=hw, r3=hy) -> push-out dx
-.global vpy_level_collision_x
-.type vpy_level_collision_x, %function
-.thumb_func
-vpy_level_collision_x:
-    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 9 regs + pad = 40 bytes, 8-aligned
-    mov     r4, r0                    @ px
-    mov     r5, r1                    @ py
-    mov     r6, r2                    @ half_w (player)
-    mov     r11, r3                   @ half_h (player) — Y-overlap threshold
-    ldr     r7, =LEVEL_DATA_PTR
-    ldr     r7, [r7]
-    cmp     r7, #0
-    beq.w   vlcx_done_zero
-    ldr     r8, =LEVEL_GP_COUNT
-    ldr     r8, [r8]
-    cmp     r8, #0
-    beq.w   vlcx_done_zero
-    ldr     r9, [r7, #16]             @ gpObjectsPtr (ROM)
-    ldr     r7, =LEVEL_GP_BUF
-    mov     r10, #0                   @ best_dx
-vlcx_loop:
-    cmp     r8, #0
-    beq.w   vlcx_done
-    ldrb    r0, [r7, #6]
-    cmp     r0, #0
-    beq.w   vlcx_next
-    ldrb    r0, [r9, #6]
-    tst     r0, #0x10
-    beq     vlcx_next
-    ldrsh   r1, [r7, #2]              @ obj world_y
-    ldrb    r3, [r9, #13]             @ obj half_h
-    sub     r2, r5, r1                @ dy = py - obj_y
-    movs    r2, r2
-    bpl     vlcx_dychk
-    neg     r2, r2
-vlcx_dychk:
-    add     r3, r3, r11
-    cmp     r2, r3
-    bge     vlcx_next
-    ldrb    r0, [r9, #12]             @ obj half_w
-    ldrsh   r1, [r7, #0]              @ obj world_x
-    sub     r1, r4, r1                @ dx_raw = px - obj_x
-    add     r3, r6, r0                @ total_hw = player_hw + obj_hw
-    movs    r2, r1
-    bpl     vlcx_dxpos
-    neg     r2, r1
-vlcx_dxpos:
-    cmp     r2, r3
-    bge     vlcx_next
-    sub     r3, r3, r2                @ overlap = total_hw - |dx|
-    cmp     r1, #0
-    bge     vlcx_pos
-    neg     r3, r3
-vlcx_pos:
-    mov     r10, r3
-vlcx_next:
-    add     r7, r7, #8
-    add     r9, r9, #20    @ next ROM obj (20 bytes)
-    subs    r8, r8, #1
-    b       vlcx_loop
-vlcx_done:
-    mov     r0, r10
-    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
-    .ltorg
-vlcx_done_zero:
-    mov     r0, #0
-    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
-    .ltorg
-
-@ vpy_level_collision_y(r0=px, r1=py, r2=hh) -> floor_center_y
-.global vpy_level_collision_y
-.type vpy_level_collision_y, %function
-.thumb_func
-vpy_level_collision_y:
-    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 9 regs
-    mov     r4, r0                    @ px
-    sub     r5, r1, r2                @ player_feet = py - hh
-    mov     r6, r2                    @ half_h (player)
-    ldr     r7, =LEVEL_DATA_PTR
-    ldr     r7, [r7]
-    ldr     r10, =-32767              @ best_floor_top sentinel
-    cmp     r7, #0
-    beq.w   vlcy_finish
-    ldr     r8, =LEVEL_GP_COUNT
-    ldr     r8, [r8]
-    cmp     r8, #0
-    beq.w   vlcy_finish
-    ldr     r9, [r7, #16]             @ gpObjectsPtr (ROM)
-    ldr     r7, =LEVEL_GP_BUF
-vlcy_loop:
-    cmp     r8, #0
-    beq.w   vlcy_finish
-    ldrb    r1, [r7, #6]
-    cmp     r1, #0
-    beq.w   vlcy_next
-    ldrb    r1, [r9, #6]
-    tst     r1, #0x10
-    beq     vlcy_next
-    ldrb    r1, [r9, #12]             @ obj half_w
-    ldrsh   r2, [r7, #0]              @ obj world_x
-    sub     r2, r4, r2                @ dx = px - obj_x
-    movs    r3, r2
-    bpl     vlcy_dxok
-    neg     r3, r2
-vlcy_dxok:
-    cmp     r3, r1
-    bgt     vlcy_next
-    ldr     r11, [r9, #16]            @ coll_mesh_ptr
-    cmp     r11, #0
-    beq     vlcy_aabb
-    ldrsh   r0, [r7, #0]              @ obj_world_x
-    sub     r0, r4, r0                @ local_px = px - obj_world_x
-    ldrsh   r1, [r7, #2]              @ obj_world_y
-    push    {r0, r1}                  @ [sp]=local_px [sp+4]=obj_world_y
-    ldr     r12, [r11], #4            @ seg_count; r11 → first segment
-vlcy_seg_loop:
-    cmp     r12, #0
-    beq     vlcy_seg_done
-    ldrsh   r0, [r11]                 @ x1
-    ldrsh   r1, [r11, #2]             @ y1
-    ldrsh   r2, [r11, #4]             @ x2
-    ldrsh   r3, [r11, #6]             @ y2
-    add     r11, r11, #8
-    subs    r12, r12, #1
-    cmp     r1, r3
-    bne     vlcy_seg_loop @ skip non-horizontal
-    ldr     r14, [sp]                 @ local_px
-    cmp     r0, r2
-    blt     vlcy_seg_x1lt
-    cmp     r14, r2
-    blt     vlcy_seg_loop
-    cmp     r14, r0
-    bgt     vlcy_seg_loop
-    b       vlcy_seg_y
-vlcy_seg_x1lt:
-    cmp     r14, r0
-    blt     vlcy_seg_loop
-    cmp     r14, r2
-    bgt     vlcy_seg_loop
-vlcy_seg_y:
-    ldr     r14, [sp, #4]             @ obj_world_y
-    add     r3, r1, r14               @ world_seg_y = y1 + obj_world_y
-    cmp     r3, r5
-    bgt     vlcy_seg_loop
-    cmp     r3, r10
-    ble     vlcy_seg_loop
-    mov     r10, r3
-    b       vlcy_seg_loop
-vlcy_seg_done:
-    pop     {r0, r1}
-    b       vlcy_next
-vlcy_aabb:
-    ldrsh   r2, [r7, #2]              @ obj world_y
-    ldrb    r3, [r9, #13]             @ obj half_h
-    add     r2, r2, r3                @ obj_top = world_y + half_h
-    cmp     r2, r5
-    bgt     vlcy_next
-    cmp     r10, r2
-    bge     vlcy_next
-    mov     r10, r2
-vlcy_next:
-    add     r7, r7, #8
-    add     r9, r9, #20    @ next ROM obj (20 bytes)
-    subs    r8, r8, #1
-    b       vlcy_loop
-vlcy_finish:
-    ldr     r1, =-32767
-    cmp     r10, r1
-    beq     vlcy_no_floor
-    add     r0, r10, r6               @ floor_top + half_h
-    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
-vlcy_no_floor:
-    mov     r0, #-128
-    add     r0, r0, r6
-    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
-    .ltorg
-
-@ ─── MSG_DEF / PRINT_MSG ─────────────────────────────────────
-
-.global vpy_msg_def
-.type vpy_msg_def, %function
-.thumb_func
-vpy_msg_def:
-    bx      lr
-
-@ vpy_print_msg(r0=id): renders message at pre-defined (x,y)
-.global vpy_print_msg
-.type vpy_print_msg, %function
-.thumb_func
-vpy_print_msg:
-    bx      lr
-
-@ vpy_draw_anim(r0 = ARM ptr to _ANIM_NAME data block, r1 = ox, r2 = oy)
-.global vpy_draw_anim
-.type vpy_draw_anim, %function
-.thumb_func
-vpy_draw_anim:
-    push    {r4, r5, r6, r7, r8, r9, r10, r11, r12, lr}
-    mov     r4, r0                      @ anim header ptr
-    mov     r10, r1                     @ save ox
-    mov     r11, r2                     @ save oy
-    ldr     r5, =VPY_ANIM_STATE_BUF
-    ldrb    r6, [r5]                    @ frame_idx
-    ldrb    r7, [r5, #1]                @ ticks_left (0=uninitialized)
-    ldrb    r8, [r4, #2]                @ base_ref_count
-    cmp     r8, #0
-    beq     dar_tick
-    add     r9, r4, #4                  @ first base_ref word-ptr
-dar_base_loop:
-    push    {r8, r9}
-    ldr     r0, [r9]                    @ ARM ptr to vec data
-    mov     r1, r10                     @ ox
-    mov     r2, r11                     @ oy
-    bl      vpy_draw_vector
-    pop     {r8, r9}
-    add     r9, r9, #4
-    subs    r8, r8, #1
-    bne     dar_base_loop
-dar_tick:
-    cmp     r7, #0
-    beq     dar_init_frame
-    subs    r7, r7, #1
-    bgt     dar_draw
-    ldrb    r8, [r4]                    @ frame_count
-    add     r6, r6, #1
-    cmp     r6, r8
-    blt     dar_no_wrap
-    ldrb    r9, [r4, #1]                @ loop flag
-    cmp     r9, #0
-    beq     dar_freeze
-    mov     r6, #0
-dar_no_wrap:
-    strb    r6, [r5]
-dar_init_frame:
-    ldrb    r8, [r4, #3]                @ frame_table_offset
-    lsl     r9, r6, #2                  @ frame_idx * 4
-    add     r9, r9, r8
-    ldr     r9, [r4, r9]                @ ARM ptr to frame data
-    ldrb    r7, [r9]                    @ duration_ticks
-    cmp     r7, #0
-    it      le
-    movle   r7, #1
-    strb    r7, [r5, #1]
-    b       dar_draw_vecs
-dar_freeze:
-    sub     r6, r6, #1
-    strb    r6, [r5]
-    mov     r7, #1
-    strb    r7, [r5, #1]
-    b       dar_draw_frame
-dar_draw:
-    strb    r7, [r5, #1]
-dar_draw_frame:
-    ldrb    r8, [r4, #3]                @ frame_table_offset
-    lsl     r9, r6, #2
-    add     r9, r9, r8
-    ldr     r9, [r4, r9]                @ ARM ptr to frame data
-dar_draw_vecs:
-    ldrb    r8, [r9, #1]                @ vec_ref_count
-    cmp     r8, #0
-    beq     dar_done
-    add     r9, r9, #4                  @ skip duration+count+2-byte pad
-    mov     r6, r8
-dar_vec_loop:
-    push    {r6, r9}
-    ldr     r0, [r9]                    @ ARM ptr to vec data
-    mov     r1, r10                     @ ox
-    mov     r2, r11                     @ oy
-    bl      vpy_draw_vector
-    pop     {r6, r9}
-    add     r9, r9, #4
-    subs    r6, r6, #1
-    bne     dar_vec_loop
-dar_done:
-    pop     {r4, r5, r6, r7, r8, r9, r10, r11, r12, pc}
     .ltorg
 
 @ --- User variables (RAM) ---
@@ -3863,6 +409,21 @@ dar_done:
 .thumb_func
 game_main:
     push    {r4, r5, r6, r7, lr}
+    @ zero runtime RAM (RP2350 SRAM is not zero-initialised)
+    ldr     r0, =TMPVAL              @ runtime RAM base
+    ldr     r1, =USER_RAM_START      @ end of system RAM (exclusive)
+    mov     r2, #0
+gm_zero_loop:
+    str     r2, [r0], #4
+    cmp     r0, r1
+    blo     gm_zero_loop
+    @ default drawing state (SRAM is not zero-initialised)
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    mov     r0, #0
+    strb    r0, [r1]
+    ldr     r1, =TEXT_SIZE
+    mov     r0, #3
+    str     r0, [r1]
     @ initialize globals
     @ init PSG_MIXER_SHADOW (all channels disabled)
     ldr     r1, =PSG_MIXER_SHADOW
@@ -3875,10 +436,9 @@ game_main:
     @ main() body
 game_main_loop:
     bl      vpy_wait_recal
-    bl      vpy_update_buttons
-    bl      vpy_beep_update
-    bl      vpy_music_update
-    bl      vpy_audio_update
+    ldr     r0, =VPY_BRIGHTNESS_OVERRIDE
+    mov     r1, #0
+    strb    r1, [r0]
     ldr     r0, =_PLATFORM_VECTORS    @ asset 'platform'
     push    {r0}
     ldr     r0, =-50
@@ -3912,10 +472,10 @@ game_main_loop:
 @ Asset data
 @ ============================================================
 
-@ --- angkor_bg (192 path(s)) ---
+@ --- angkor_bg (163 path(s)) ---
 .global _ANGKOR_BG_VECTORS
 _ANGKOR_BG_VECTORS:
-    .word   192               @ path_count
+    .word   163               @ path_count
     .word   _ANGKOR_BG_PATH0      @ ptr path 0
     .word   _ANGKOR_BG_PATH1      @ ptr path 1
     .word   _ANGKOR_BG_PATH2      @ ptr path 2
@@ -4079,189 +639,68 @@ _ANGKOR_BG_VECTORS:
     .word   _ANGKOR_BG_PATH160      @ ptr path 160
     .word   _ANGKOR_BG_PATH161      @ ptr path 161
     .word   _ANGKOR_BG_PATH162      @ ptr path 162
-    .word   _ANGKOR_BG_PATH163      @ ptr path 163
-    .word   _ANGKOR_BG_PATH164      @ ptr path 164
-    .word   _ANGKOR_BG_PATH165      @ ptr path 165
-    .word   _ANGKOR_BG_PATH166      @ ptr path 166
-    .word   _ANGKOR_BG_PATH167      @ ptr path 167
-    .word   _ANGKOR_BG_PATH168      @ ptr path 168
-    .word   _ANGKOR_BG_PATH169      @ ptr path 169
-    .word   _ANGKOR_BG_PATH170      @ ptr path 170
-    .word   _ANGKOR_BG_PATH171      @ ptr path 171
-    .word   _ANGKOR_BG_PATH172      @ ptr path 172
-    .word   _ANGKOR_BG_PATH173      @ ptr path 173
-    .word   _ANGKOR_BG_PATH174      @ ptr path 174
-    .word   _ANGKOR_BG_PATH175      @ ptr path 175
-    .word   _ANGKOR_BG_PATH176      @ ptr path 176
-    .word   _ANGKOR_BG_PATH177      @ ptr path 177
-    .word   _ANGKOR_BG_PATH178      @ ptr path 178
-    .word   _ANGKOR_BG_PATH179      @ ptr path 179
-    .word   _ANGKOR_BG_PATH180      @ ptr path 180
-    .word   _ANGKOR_BG_PATH181      @ ptr path 181
-    .word   _ANGKOR_BG_PATH182      @ ptr path 182
-    .word   _ANGKOR_BG_PATH183      @ ptr path 183
-    .word   _ANGKOR_BG_PATH184      @ ptr path 184
-    .word   _ANGKOR_BG_PATH185      @ ptr path 185
-    .word   _ANGKOR_BG_PATH186      @ ptr path 186
-    .word   _ANGKOR_BG_PATH187      @ ptr path 187
-    .word   _ANGKOR_BG_PATH188      @ ptr path 188
-    .word   _ANGKOR_BG_PATH189      @ ptr path 189
-    .word   _ANGKOR_BG_PATH190      @ ptr path 190
-    .word   _ANGKOR_BG_PATH191      @ ptr path 191
 
 _ANGKOR_BG_PATH0:
     .byte   127               @ intensity
-    .byte   0xCA, 0xA0, 0x00, 0x00  @ y=-54, x=-96, hdr
-    .byte   0xFF, 0x0D, 0x00  @ line dy=13, dx=0
-    .byte   0xFF, 0x00, 0x4C  @ line dy=0, dx=76
+    .byte   0xFC, 0x00, 0x00, 0x00  @ y=-4, x=0, hdr (simplified: -4 pts)
+    .byte   0xFF, 0xF5, 0xF5  @ line dy=-11, dx=-11
+    .byte   0xFF, 0x00, 0xFD  @ line dy=0, dx=-3
+    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
+    .byte   0xFF, 0xFE, 0xFB  @ line dy=-2, dx=-5
+    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
+    .byte   0xFF, 0x00, 0x08  @ line dy=0, dx=8
     .byte   0x02            @ end marker
 
 _ANGKOR_BG_PATH1:
     .byte   127               @ intensity
-    .byte   0xD2, 0xA0, 0x00, 0x00  @ y=-46, x=-96, hdr
-    .byte   0xFF, 0x00, 0x4C  @ line dy=0, dx=76
+    .byte   0xE3, 0xF5, 0x00, 0x00  @ y=-29, x=-11, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x00, 0xFB  @ line dy=0, dx=-5
+    .byte   0xFF, 0xF7, 0x00  @ line dy=-9, dx=0
+    .byte   0xFF, 0x00, 0x05  @ line dy=0, dx=5
+    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
     .byte   0x02            @ end marker
 
 _ANGKOR_BG_PATH2:
     .byte   127               @ intensity
-    .byte   0xD8, 0xEC, 0x00, 0x00  @ y=-40, x=-20, hdr
-    .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
-    .byte   0xFF, 0x00, 0x07  @ line dy=0, dx=7
-    .byte   0xFF, 0xFF, 0x02  @ line dy=-1, dx=2
-    .byte   0xFF, 0x09, 0x00  @ line dy=9, dx=0
-    .byte   0xFF, 0x00, 0xF7  @ line dy=0, dx=-9
+    .byte   0xF2, 0xF6, 0x00, 0x00  @ y=-14, x=-10, hdr (simplified: -2 pts)
+    .byte   0xFF, 0x02, 0xFD  @ line dy=2, dx=-3
+    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
+    .byte   0xFF, 0x02, 0x04  @ line dy=2, dx=4
+    .byte   0xFF, 0x03, 0x01  @ line dy=3, dx=1
+    .byte   0xFF, 0x00, 0x04  @ line dy=0, dx=4
+    .byte   0xFF, 0x03, 0x04  @ line dy=3, dx=4
+    .byte   0xFF, 0x00, 0xF5  @ line dy=0, dx=-11
     .byte   0x02            @ end marker
 
 _ANGKOR_BG_PATH3:
     .byte   127               @ intensity
-    .byte   0xD8, 0xEE, 0x00, 0x00  @ y=-40, x=-18, hdr
-    .byte   0xFF, 0x0F, 0x00  @ line dy=15, dx=0
+    .byte   0x01, 0xF5, 0x00, 0x00  @ y=1, x=-11, hdr
     .byte   0x02            @ end marker
 
 _ANGKOR_BG_PATH4:
     .byte   127               @ intensity
-    .byte   0xE3, 0xEE, 0x00, 0x00  @ y=-29, x=-18, hdr
-    .byte   0xFF, 0x00, 0xB6  @ line dy=0, dx=-74
+    .byte   0xFD, 0xF5, 0x00, 0x00  @ y=-3, x=-11, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x00, 0xE3  @ line dy=0, dx=-29
+    .byte   0xFF, 0x09, 0x00  @ line dy=9, dx=0
+    .byte   0xFF, 0x00, 0x1D  @ line dy=0, dx=29
+    .byte   0xFF, 0xF7, 0x00  @ line dy=-9, dx=0
     .byte   0x02            @ end marker
 
 _ANGKOR_BG_PATH5:
     .byte   127               @ intensity
-    .byte   0xE3, 0xA4, 0x00, 0x00  @ y=-29, x=-92, hdr
-    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
+    .byte   0x06, 0xF5, 0x00, 0x00  @ y=6, x=-11, hdr (simplified: -2 pts)
+    .byte   0xFF, 0x01, 0x04  @ line dy=1, dx=4
+    .byte   0xFF, 0x05, 0x03  @ line dy=5, dx=3
     .byte   0x02            @ end marker
 
 _ANGKOR_BG_PATH6:
     .byte   127               @ intensity
-    .byte   0xE9, 0xA4, 0x00, 0x00  @ y=-23, x=-92, hdr
-    .byte   0xFF, 0x00, 0x49  @ line dy=0, dx=73
+    .byte   0x0B, 0xFB, 0x00, 0x00  @ y=11, x=-5, hdr
+    .byte   0xFF, 0x00, 0xD3  @ line dy=0, dx=-45
+    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
     .byte   0x02            @ end marker
 
 _ANGKOR_BG_PATH7:
-    .byte   127               @ intensity
-    .byte   0xE7, 0xF5, 0x00, 0x00  @ y=-25, x=-11, hdr
-    .byte   0xFF, 0x00, 0xF8  @ line dy=0, dx=-8
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0xFF, 0x01, 0x02  @ line dy=1, dx=2
-    .byte   0xFF, 0x01, 0x03  @ line dy=1, dx=3
-    .byte   0xFF, 0x02, 0xFF  @ line dy=2, dx=-1
-    .byte   0xFF, 0x02, 0x01  @ line dy=2, dx=1
-    .byte   0xFF, 0x00, 0x03  @ line dy=0, dx=3
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH8:
-    .byte   127               @ intensity
-    .byte   0xFC, 0x00, 0x00, 0x00  @ y=-4, x=0, hdr
-    .byte   0xFF, 0xF5, 0xF5  @ line dy=-11, dx=-11
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH9:
-    .byte   127               @ intensity
-    .byte   0xE3, 0xA5, 0x00, 0x00  @ y=-29, x=-91, hdr
-    .byte   0xFF, 0xF4, 0x00  @ line dy=-12, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH10:
-    .byte   127               @ intensity
-    .byte   0xE3, 0xB1, 0x00, 0x00  @ y=-29, x=-79, hdr
-    .byte   0xFF, 0xF4, 0x00  @ line dy=-12, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH11:
-    .byte   127               @ intensity
-    .byte   0xE3, 0xBE, 0x00, 0x00  @ y=-29, x=-66, hdr
-    .byte   0xFF, 0xF4, 0x00  @ line dy=-12, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH12:
-    .byte   127               @ intensity
-    .byte   0xE3, 0xCA, 0x00, 0x00  @ y=-29, x=-54, hdr
-    .byte   0xFF, 0xF4, 0x00  @ line dy=-12, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH13:
-    .byte   127               @ intensity
-    .byte   0xE3, 0xD8, 0x00, 0x00  @ y=-29, x=-40, hdr
-    .byte   0xFF, 0xF4, 0x00  @ line dy=-12, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH14:
-    .byte   127               @ intensity
-    .byte   0xE9, 0xA9, 0x00, 0x00  @ y=-23, x=-87, hdr
-    .byte   0xFF, 0x0E, 0x00  @ line dy=14, dx=0
-    .byte   0xFF, 0x00, 0x31  @ line dy=0, dx=49
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH15:
-    .byte   127               @ intensity
-    .byte   0xF7, 0xBB, 0x00, 0x00  @ y=-9, x=-69, hdr
-    .byte   0xFF, 0xF2, 0x00  @ line dy=-14, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH16:
-    .byte   127               @ intensity
-    .byte   0xF0, 0xA9, 0x00, 0x00  @ y=-16, x=-87, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH17:
-    .byte   127               @ intensity
-    .byte   0xF0, 0xBB, 0x00, 0x00  @ y=-16, x=-69, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH18:
-    .byte   127               @ intensity
-    .byte   0xFD, 0xDA, 0x00, 0x00  @ y=-3, x=-38, hdr
-    .byte   0xFF, 0xEC, 0x00  @ line dy=-20, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH19:
-    .byte   127               @ intensity
-    .byte   0xF7, 0xB3, 0x00, 0x00  @ y=-9, x=-77, hdr
-    .byte   0xFF, 0x10, 0x00  @ line dy=16, dx=0
-    .byte   0xFF, 0x00, 0x1B  @ line dy=0, dx=27
-    .byte   0xFF, 0xF0, 0x00  @ line dy=-16, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH20:
-    .byte   127               @ intensity
-    .byte   0x07, 0xB4, 0x00, 0x00  @ y=7, x=-76, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0xFF, 0x02, 0xFD  @ line dy=2, dx=-3
-    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH21:
-    .byte   127               @ intensity
-    .byte   0x07, 0xB8, 0x00, 0x00  @ y=7, x=-72, hdr
-    .byte   0xFF, 0x07, 0x00  @ line dy=7, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH22:
-    .byte   127               @ intensity
-    .byte   0x07, 0xC7, 0x00, 0x00  @ y=7, x=-57, hdr
-    .byte   0xFF, 0x07, 0x00  @ line dy=7, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH23:
     .byte   127               @ intensity
     .byte   0x07, 0xCB, 0x00, 0x00  @ y=7, x=-53, hdr
     .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
@@ -4269,658 +708,401 @@ _ANGKOR_BG_PATH23:
     .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH24:
+_ANGKOR_BG_PATH8:
     .byte   127               @ intensity
-    .byte   0x0C, 0xB1, 0x00, 0x00  @ y=12, x=-79, hdr
-    .byte   0xFF, 0x02, 0x05  @ line dy=2, dx=5
-    .byte   0xFF, 0x00, 0x10  @ line dy=0, dx=16
-    .byte   0xFF, 0x00, 0x03  @ line dy=0, dx=3
-    .byte   0xFF, 0xFE, 0x05  @ line dy=-2, dx=5
+    .byte   0x14, 0xCC, 0x00, 0x00  @ y=20, x=-52, hdr (simplified: -1 pts)
+    .byte   0xFF, 0xFE, 0xFE  @ line dy=-2, dx=-2
+    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH25:
+_ANGKOR_BG_PATH9:
     .byte   127               @ intensity
-    .byte   0x0E, 0xB9, 0x00, 0x00  @ y=14, x=-71, hdr
+    .byte   0x0E, 0xC7, 0x00, 0x00  @ y=14, x=-57, hdr
+    .byte   0xFF, 0xF9, 0x00  @ line dy=-7, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH10:
+    .byte   127               @ intensity
+    .byte   0x07, 0xC6, 0x00, 0x00  @ y=7, x=-58, hdr
+    .byte   0xFF, 0xF0, 0x00  @ line dy=-16, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH11:
+    .byte   127               @ intensity
+    .byte   0xF7, 0xCE, 0x00, 0x00  @ y=-9, x=-50, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x10, 0x00  @ line dy=16, dx=0
+    .byte   0xFF, 0x00, 0xE5  @ line dy=0, dx=-27
+    .byte   0xFF, 0xF0, 0x00  @ line dy=-16, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH12:
+    .byte   127               @ intensity
+    .byte   0xF7, 0xB9, 0x00, 0x00  @ y=-9, x=-71, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x10, 0x00  @ line dy=16, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH13:
+    .byte   127               @ intensity
+    .byte   0x07, 0xB8, 0x00, 0x00  @ y=7, x=-72, hdr
+    .byte   0xFF, 0x07, 0x00  @ line dy=7, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH14:
+    .byte   127               @ intensity
+    .byte   0x0E, 0xB9, 0x00, 0x00  @ y=14, x=-71, hdr (simplified: -1 pts)
     .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
     .byte   0xFF, 0x00, 0x0E  @ line dy=0, dx=14
     .byte   0xFF, 0xFE, 0x05  @ line dy=-2, dx=5
     .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH26:
+_ANGKOR_BG_PATH15:
+    .byte   127               @ intensity
+    .byte   0x1C, 0xCB, 0x00, 0x00  @ y=28, x=-53, hdr (simplified: -1 pts)
+    .byte   0xFF, 0xFE, 0xFE  @ line dy=-2, dx=-2
+    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH16:
     .byte   127               @ intensity
     .byte   0x16, 0xC6, 0x00, 0x00  @ y=22, x=-58, hdr
     .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH27:
+_ANGKOR_BG_PATH17:
     .byte   127               @ intensity
-    .byte   0x16, 0xB9, 0x00, 0x00  @ y=22, x=-71, hdr
-    .byte   0xFF, 0x00, 0xFF  @ line dy=0, dx=-1
-    .byte   0xFF, 0xFE, 0xFB  @ line dy=-2, dx=-5
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH28:
-    .byte   127               @ intensity
-    .byte   0x14, 0xCC, 0x00, 0x00  @ y=20, x=-52, hdr
-    .byte   0xFF, 0xFE, 0xFE  @ line dy=-2, dx=-2
-    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH29:
-    .byte   127               @ intensity
-    .byte   0x14, 0xB3, 0x00, 0x00  @ y=20, x=-77, hdr
-    .byte   0xFF, 0xFE, 0x02  @ line dy=-2, dx=2
-    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH30:
-    .byte   127               @ intensity
-    .byte   0x16, 0xBA, 0x00, 0x00  @ y=22, x=-70, hdr
+    .byte   0x16, 0xC5, 0x00, 0x00  @ y=22, x=-59, hdr
     .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
-    .byte   0xFF, 0x00, 0x0B  @ line dy=0, dx=11
+    .byte   0xFF, 0x00, 0xF5  @ line dy=0, dx=-11
     .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH31:
+_ANGKOR_BG_PATH18:
     .byte   127               @ intensity
-    .byte   0x1E, 0xBA, 0x00, 0x00  @ y=30, x=-70, hdr
+    .byte   0x16, 0xB9, 0x00, 0x00  @ y=22, x=-71, hdr (simplified: -1 pts)
     .byte   0xFF, 0xFE, 0xFA  @ line dy=-2, dx=-6
     .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH32:
+_ANGKOR_BG_PATH19:
     .byte   127               @ intensity
     .byte   0x1C, 0xB4, 0x00, 0x00  @ y=28, x=-76, hdr
     .byte   0xFF, 0xFE, 0x02  @ line dy=-2, dx=2
     .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH33:
+_ANGKOR_BG_PATH20:
     .byte   127               @ intensity
-    .byte   0x1E, 0xC5, 0x00, 0x00  @ y=30, x=-59, hdr
-    .byte   0xFF, 0xFE, 0x06  @ line dy=-2, dx=6
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH34:
-    .byte   127               @ intensity
-    .byte   0x1C, 0xCB, 0x00, 0x00  @ y=28, x=-53, hdr
-    .byte   0xFF, 0xFE, 0xFE  @ line dy=-2, dx=-2
+    .byte   0x14, 0xB3, 0x00, 0x00  @ y=20, x=-77, hdr (simplified: -1 pts)
+    .byte   0xFF, 0xFE, 0x02  @ line dy=-2, dx=2
     .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH35:
+_ANGKOR_BG_PATH21:
     .byte   127               @ intensity
-    .byte   0x1E, 0xB9, 0x00, 0x00  @ y=30, x=-71, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0xFF, 0x01, 0xFE  @ line dy=1, dx=-2
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH36:
-    .byte   127               @ intensity
-    .byte   0x23, 0xB7, 0x00, 0x00  @ y=35, x=-73, hdr
-    .byte   0xFF, 0x01, 0x04  @ line dy=1, dx=4
-    .byte   0xFF, 0x00, 0x09  @ line dy=0, dx=9
-    .byte   0xFF, 0xFF, 0x04  @ line dy=-1, dx=4
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH37:
-    .byte   127               @ intensity
-    .byte   0x1E, 0xC6, 0x00, 0x00  @ y=30, x=-58, hdr
-    .byte   0xFF, 0x02, 0x00  @ line dy=2, dx=0
-    .byte   0xFF, 0x03, 0x02  @ line dy=3, dx=2
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH38:
-    .byte   127               @ intensity
-    .byte   0x24, 0xBC, 0x00, 0x00  @ y=36, x=-68, hdr
+    .byte   0x12, 0xB1, 0x00, 0x00  @ y=18, x=-79, hdr
     .byte   0xFF, 0xFA, 0x00  @ line dy=-6, dx=0
+    .byte   0xFF, 0xFE, 0x03  @ line dy=-2, dx=3
+    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH39:
+_ANGKOR_BG_PATH22:
     .byte   127               @ intensity
-    .byte   0x1E, 0xC3, 0x00, 0x00  @ y=30, x=-61, hdr
-    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
+    .byte   0x0C, 0xB1, 0x00, 0x00  @ y=12, x=-79, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x02, 0x05  @ line dy=2, dx=5
+    .byte   0xFF, 0x00, 0x13  @ line dy=0, dx=19
+    .byte   0xFF, 0xFE, 0x05  @ line dy=-2, dx=5
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH40:
+_ANGKOR_BG_PATH23:
     .byte   127               @ intensity
-    .byte   0x24, 0xB9, 0x00, 0x00  @ y=36, x=-71, hdr
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0xFF, 0x00, 0x0D  @ line dy=0, dx=13
-    .byte   0xFF, 0xFB, 0x00  @ line dy=-5, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH41:
-    .byte   127               @ intensity
-    .byte   0x29, 0xBA, 0x00, 0x00  @ y=41, x=-70, hdr
+    .byte   0x07, 0xC2, 0x00, 0x00  @ y=7, x=-62, hdr
     .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0xFF, 0x00, 0x0B  @ line dy=0, dx=11
+    .byte   0xFF, 0x02, 0xFD  @ line dy=2, dx=-3
+    .byte   0xFF, 0xFE, 0xFD  @ line dy=-2, dx=-3
     .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH42:
+_ANGKOR_BG_PATH24:
     .byte   127               @ intensity
-    .byte   0x2D, 0xBC, 0x00, 0x00  @ y=45, x=-68, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0xFF, 0x00, 0x07  @ line dy=0, dx=7
-    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH43:
-    .byte   127               @ intensity
-    .byte   0x30, 0xBD, 0x00, 0x00  @ y=48, x=-67, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH44:
-    .byte   127               @ intensity
-    .byte   0x30, 0xC2, 0x00, 0x00  @ y=48, x=-62, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH45:
-    .byte   127               @ intensity
-    .byte   0x33, 0xB7, 0x00, 0x00  @ y=51, x=-73, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH46:
-    .byte   127               @ intensity
-    .byte   0x33, 0xC2, 0x00, 0x00  @ y=51, x=-62, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH47:
-    .byte   127               @ intensity
-    .byte   0x30, 0xBD, 0x00, 0x00  @ y=48, x=-67, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0xFF, 0x00, 0x05  @ line dy=0, dx=5
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH48:
-    .byte   127               @ intensity
-    .byte   0x30, 0xC2, 0x00, 0x00  @ y=48, x=-62, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH49:
-    .byte   127               @ intensity
-    .byte   0x07, 0xB9, 0x00, 0x00  @ y=7, x=-71, hdr
-    .byte   0xFF, 0xF0, 0x00  @ line dy=-16, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH50:
-    .byte   127               @ intensity
-    .byte   0xF7, 0xC6, 0x00, 0x00  @ y=-9, x=-58, hdr
-    .byte   0xFF, 0x10, 0x00  @ line dy=16, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH51:
-    .byte   127               @ intensity
-    .byte   0x04, 0xBC, 0x00, 0x00  @ y=4, x=-68, hdr
+    .byte   0x04, 0xBC, 0x00, 0x00  @ y=4, x=-68, hdr (simplified: -1 pts)
     .byte   0xFF, 0x00, 0x07  @ line dy=0, dx=7
     .byte   0xFF, 0xF7, 0x00  @ line dy=-9, dx=0
     .byte   0xFF, 0x00, 0xF9  @ line dy=0, dx=-7
     .byte   0xFF, 0x09, 0x00  @ line dy=9, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH52:
+_ANGKOR_BG_PATH25:
     .byte   127               @ intensity
-    .byte   0x07, 0xBC, 0x00, 0x00  @ y=7, x=-68, hdr
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0xFF, 0x02, 0x03  @ line dy=2, dx=3
-    .byte   0xFF, 0xFE, 0x03  @ line dy=-2, dx=3
-    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
+    .byte   0xF7, 0xBB, 0x00, 0x00  @ y=-9, x=-69, hdr (simplified: -1 pts)
+    .byte   0xFF, 0xF2, 0x00  @ line dy=-14, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH53:
+_ANGKOR_BG_PATH26:
     .byte   127               @ intensity
-    .byte   0xE3, 0xE5, 0x00, 0x00  @ y=-29, x=-27, hdr
+    .byte   0xE3, 0xBE, 0x00, 0x00  @ y=-29, x=-66, hdr (simplified: -1 pts)
     .byte   0xFF, 0xF4, 0x00  @ line dy=-12, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH54:
+_ANGKOR_BG_PATH27:
     .byte   127               @ intensity
-    .byte   0xEC, 0xF5, 0x00, 0x00  @ y=-20, x=-11, hdr
-    .byte   0xFF, 0xEE, 0x00  @ line dy=-18, dx=0
-    .byte   0xFF, 0x00, 0xFB  @ line dy=0, dx=-5
+    .byte   0xD7, 0xCA, 0x00, 0x00  @ y=-41, x=-54, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x0C, 0x00  @ line dy=12, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH28:
+    .byte   127               @ intensity
+    .byte   0xE3, 0xD8, 0x00, 0x00  @ y=-29, x=-40, hdr (simplified: -1 pts)
+    .byte   0xFF, 0xF4, 0x00  @ line dy=-12, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH29:
+    .byte   127               @ intensity
+    .byte   0xD7, 0xE5, 0x00, 0x00  @ y=-41, x=-27, hdr
+    .byte   0xFF, 0x0C, 0x00  @ line dy=12, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH30:
+    .byte   127               @ intensity
+    .byte   0xE3, 0xEE, 0x00, 0x00  @ y=-29, x=-18, hdr (simplified: -2 pts)
+    .byte   0xFF, 0x00, 0xB6  @ line dy=0, dx=-74
+    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
+    .byte   0xFF, 0x00, 0x49  @ line dy=0, dx=73
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH31:
+    .byte   127               @ intensity
+    .byte   0xE7, 0xEE, 0x00, 0x00  @ y=-25, x=-18, hdr (simplified: -2 pts)
+    .byte   0xFF, 0xF1, 0x00  @ line dy=-15, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH32:
+    .byte   127               @ intensity
+    .byte   0xD8, 0xEC, 0x00, 0x00  @ y=-40, x=-20, hdr (simplified: -2 pts)
+    .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
+    .byte   0xFF, 0xFF, 0x09  @ line dy=-1, dx=9
     .byte   0xFF, 0x09, 0x00  @ line dy=9, dx=0
-    .byte   0xFF, 0x00, 0x05  @ line dy=0, dx=5
+    .byte   0xFF, 0x00, 0xF7  @ line dy=0, dx=-9
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH55:
+_ANGKOR_BG_PATH33:
     .byte   127               @ intensity
-    .byte   0xF3, 0xFC, 0x00, 0x00  @ y=-13, x=-4, hdr
-    .byte   0xFF, 0xFC, 0xFD  @ line dy=-4, dx=-3
-    .byte   0xFF, 0xE9, 0x00  @ line dy=-23, dx=0
-    .byte   0xFF, 0x00, 0x07  @ line dy=0, dx=7
+    .byte   0xD7, 0xEC, 0x00, 0x00  @ y=-41, x=-20, hdr (simplified: -2 pts)
+    .byte   0xFF, 0x00, 0xB4  @ line dy=0, dx=-76
+    .byte   0xFF, 0xF3, 0x00  @ line dy=-13, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH56:
+_ANGKOR_BG_PATH34:
     .byte   127               @ intensity
-    .byte   0xF3, 0xFC, 0x00, 0x00  @ y=-13, x=-4, hdr
-    .byte   0xFF, 0x01, 0x04  @ line dy=1, dx=4
+    .byte   0xD2, 0xA0, 0x00, 0x00  @ y=-46, x=-96, hdr
+    .byte   0xFF, 0x00, 0x4C  @ line dy=0, dx=76
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH57:
+_ANGKOR_BG_PATH35:
     .byte   127               @ intensity
-    .byte   0xF2, 0xA9, 0x00, 0x00  @ y=-14, x=-87, hdr
-    .byte   0xFF, 0x00, 0x4A  @ line dy=0, dx=74
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH58:
-    .byte   127               @ intensity
-    .byte   0xD0, 0xEC, 0x00, 0x00  @ y=-48, x=-20, hdr
+    .byte   0xD0, 0xEC, 0x00, 0x00  @ y=-48, x=-20, hdr (simplified: -1 pts)
     .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
     .byte   0xFF, 0xF2, 0x00  @ line dy=-14, dx=0
     .byte   0xFF, 0x00, 0x0B  @ line dy=0, dx=11
     .byte   0xFF, 0x0E, 0x00  @ line dy=14, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH59:
+_ANGKOR_BG_PATH36:
     .byte   127               @ intensity
-    .byte   0xD4, 0xF7, 0x00, 0x00  @ y=-44, x=-9, hdr
-    .byte   0xFF, 0x00, 0x09  @ line dy=0, dx=9
+    .byte   0xD0, 0xF2, 0x00, 0x00  @ y=-48, x=-14, hdr
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH60:
+_ANGKOR_BG_PATH37:
     .byte   127               @ intensity
-    .byte   0xD1, 0x00, 0x00, 0x00  @ y=-47, x=0, hdr
-    .byte   0xFF, 0x00, 0xF6  @ line dy=0, dx=-10
+    .byte   0xD1, 0xF6, 0x00, 0x00  @ y=-47, x=-10, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x00, 0x14  @ line dy=0, dx=20
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH61:
+_ANGKOR_BG_PATH38:
     .byte   127               @ intensity
-    .byte   0xCC, 0xF4, 0x00, 0x00  @ y=-52, x=-12, hdr
-    .byte   0xFF, 0x00, 0x0C  @ line dy=0, dx=12
+    .byte   0xD4, 0x09, 0x00, 0x00  @ y=-44, x=9, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x00, 0xEE  @ line dy=0, dx=-18
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH62:
+_ANGKOR_BG_PATH39:
     .byte   127               @ intensity
-    .byte   0xC7, 0x00, 0x00, 0x00  @ y=-57, x=0, hdr
-    .byte   0xFF, 0x00, 0xF3  @ line dy=0, dx=-13
+    .byte   0xCC, 0xF4, 0x00, 0x00  @ y=-52, x=-12, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x00, 0x18  @ line dy=0, dx=24
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH63:
-    .byte   127               @ intensity
-    .byte   0xC0, 0xF2, 0x00, 0x00  @ y=-64, x=-14, hdr
-    .byte   0xFF, 0x00, 0x0E  @ line dy=0, dx=14
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH64:
-    .byte   127               @ intensity
-    .byte   0xFD, 0xF5, 0x00, 0x00  @ y=-3, x=-11, hdr
-    .byte   0xFF, 0x00, 0xE3  @ line dy=0, dx=-29
-    .byte   0xFF, 0x09, 0x00  @ line dy=9, dx=0
-    .byte   0xFF, 0x00, 0x1D  @ line dy=0, dx=29
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH65:
-    .byte   127               @ intensity
-    .byte   0xFD, 0xF5, 0x00, 0x00  @ y=-3, x=-11, hdr
-    .byte   0xFF, 0x09, 0x00  @ line dy=9, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH66:
-    .byte   127               @ intensity
-    .byte   0x07, 0xCE, 0x00, 0x00  @ y=7, x=-50, hdr
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0xFF, 0x00, 0x2D  @ line dy=0, dx=45
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH67:
-    .byte   127               @ intensity
-    .byte   0xF4, 0x00, 0x00, 0x00  @ y=-12, x=0, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH68:
-    .byte   127               @ intensity
-    .byte   0xFC, 0x00, 0x00, 0x00  @ y=-4, x=0, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH69:
+_ANGKOR_BG_PATH40:
     .byte   127               @ intensity
     .byte   0xD0, 0x0E, 0x00, 0x00  @ y=-48, x=14, hdr
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH70:
+_ANGKOR_BG_PATH41:
     .byte   127               @ intensity
-    .byte   0xC1, 0x0F, 0x00, 0x00  @ y=-63, x=15, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH71:
-    .byte   127               @ intensity
-    .byte   0x01, 0xF5, 0x00, 0x00  @ y=1, x=-11, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH72:
-    .byte   127               @ intensity
-    .byte   0x06, 0xF0, 0x00, 0x00  @ y=6, x=-16, hdr
-    .byte   0xFF, 0x0A, 0x00  @ line dy=10, dx=0
-    .byte   0xFF, 0x00, 0x0A  @ line dy=0, dx=10
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH73:
-    .byte   127               @ intensity
-    .byte   0x0C, 0xFA, 0x00, 0x00  @ y=12, x=-6, hdr
-    .byte   0xFF, 0x00, 0x06  @ line dy=0, dx=6
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH74:
-    .byte   127               @ intensity
-    .byte   0x12, 0xFA, 0x00, 0x00  @ y=18, x=-6, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH75:
-    .byte   127               @ intensity
-    .byte   0x0C, 0xFA, 0x00, 0x00  @ y=12, x=-6, hdr
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0xFF, 0x01  @ line dy=-1, dx=1
-    .byte   0xFF, 0x00, 0x03  @ line dy=0, dx=3
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH76:
-    .byte   127               @ intensity
-    .byte   0x10, 0xF5, 0x00, 0x00  @ y=16, x=-11, hdr
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0xFF, 0x03, 0xFD  @ line dy=3, dx=-3
-    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH77:
-    .byte   127               @ intensity
-    .byte   0x10, 0xF8, 0x00, 0x00  @ y=16, x=-8, hdr
-    .byte   0xFF, 0x0A, 0x00  @ line dy=10, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH78:
-    .byte   127               @ intensity
-    .byte   0x18, 0xF2, 0x00, 0x00  @ y=24, x=-14, hdr
-    .byte   0xFF, 0x02, 0x05  @ line dy=2, dx=5
-    .byte   0xFF, 0x00, 0x09  @ line dy=0, dx=9
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH79:
-    .byte   127               @ intensity
-    .byte   0x1A, 0xF9, 0x00, 0x00  @ y=26, x=-7, hdr
-    .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
-    .byte   0xFF, 0xFF, 0xFA  @ line dy=-1, dx=-6
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH80:
-    .byte   127               @ intensity
-    .byte   0x21, 0xF3, 0x00, 0x00  @ y=33, x=-13, hdr
-    .byte   0xFF, 0xFC, 0x03  @ line dy=-4, dx=3
-    .byte   0xFF, 0xFE, 0x00  @ line dy=-2, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH81:
-    .byte   127               @ intensity
-    .byte   0x22, 0xF9, 0x00, 0x00  @ y=34, x=-7, hdr
-    .byte   0xFF, 0x00, 0x07  @ line dy=0, dx=7
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH82:
-    .byte   127               @ intensity
-    .byte   0x22, 0xFB, 0x00, 0x00  @ y=34, x=-5, hdr
-    .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
-    .byte   0xFF, 0x00, 0x05  @ line dy=0, dx=5
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH83:
-    .byte   127               @ intensity
-    .byte   0x2A, 0xFC, 0x00, 0x00  @ y=42, x=-4, hdr
-    .byte   0xFF, 0x07, 0x00  @ line dy=7, dx=0
-    .byte   0xFF, 0x00, 0x04  @ line dy=0, dx=4
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH84:
-    .byte   127               @ intensity
-    .byte   0x31, 0xFC, 0x00, 0x00  @ y=49, x=-4, hdr
-    .byte   0xFF, 0xFF, 0xFC  @ line dy=-1, dx=-4
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH85:
-    .byte   127               @ intensity
-    .byte   0x30, 0xF8, 0x00, 0x00  @ y=48, x=-8, hdr
-    .byte   0xFF, 0xFD, 0x02  @ line dy=-3, dx=2
-    .byte   0xFF, 0xFE, 0x00  @ line dy=-2, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH86:
-    .byte   127               @ intensity
-    .byte   0x2A, 0xFB, 0x00, 0x00  @ y=42, x=-5, hdr
-    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
-    .byte   0xFF, 0xFE, 0xFC  @ line dy=-2, dx=-4
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH87:
-    .byte   127               @ intensity
-    .byte   0x28, 0xF5, 0x00, 0x00  @ y=40, x=-11, hdr
-    .byte   0xFF, 0xFE, 0x02  @ line dy=-2, dx=2
-    .byte   0xFF, 0xFE, 0x00  @ line dy=-2, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH88:
-    .byte   127               @ intensity
-    .byte   0x31, 0xFA, 0x00, 0x00  @ y=49, x=-6, hdr
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0xFF, 0x00, 0x06  @ line dy=0, dx=6
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH89:
-    .byte   127               @ intensity
-    .byte   0x36, 0xFB, 0x00, 0x00  @ y=54, x=-5, hdr
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0xFF, 0x00, 0x05  @ line dy=0, dx=5
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH90:
-    .byte   127               @ intensity
-    .byte   0x3A, 0xFD, 0x00, 0x00  @ y=58, x=-3, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0xFF, 0x00, 0x03  @ line dy=0, dx=3
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH91:
-    .byte   127               @ intensity
-    .byte   0x3D, 0xFE, 0x00, 0x00  @ y=61, x=-2, hdr
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH92:
-    .byte   127               @ intensity
-    .byte   0x11, 0xFD, 0x00, 0x00  @ y=17, x=-3, hdr
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0xFF, 0x00, 0x03  @ line dy=0, dx=3
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH93:
-    .byte   127               @ intensity
-    .byte   0x06, 0xF5, 0x00, 0x00  @ y=6, x=-11, hdr
-    .byte   0xFF, 0x01, 0x01  @ line dy=1, dx=1
-    .byte   0xFF, 0x00, 0x03  @ line dy=0, dx=3
-    .byte   0xFF, 0x02, 0x02  @ line dy=2, dx=2
-    .byte   0xFF, 0x03, 0x01  @ line dy=3, dx=1
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH94:
-    .byte   127               @ intensity
-    .byte   0x01, 0xF5, 0x00, 0x00  @ y=1, x=-11, hdr
+    .byte   0xD0, 0x0F, 0x00, 0x00  @ y=-48, x=15, hdr (simplified: -1 pts)
+    .byte   0xFF, 0xF2, 0x00  @ line dy=-14, dx=0
     .byte   0xFF, 0x00, 0x0B  @ line dy=0, dx=11
+    .byte   0xFF, 0x0E, 0x00  @ line dy=14, dx=0
+    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH95:
+_ANGKOR_BG_PATH42:
     .byte   127               @ intensity
-    .byte   0xF2, 0xF6, 0x00, 0x00  @ y=-14, x=-10, hdr
-    .byte   0xFF, 0x02, 0xFD  @ line dy=2, dx=-3
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0xFF, 0x02, 0x02  @ line dy=2, dx=2
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0x03, 0x01  @ line dy=3, dx=1
-    .byte   0xFF, 0x00, 0x04  @ line dy=0, dx=4
-    .byte   0xFF, 0x03, 0x04  @ line dy=3, dx=4
+    .byte   0xD2, 0x14, 0x00, 0x00  @ y=-46, x=20, hdr
+    .byte   0xFF, 0x00, 0x4C  @ line dy=0, dx=76
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH96:
+_ANGKOR_BG_PATH43:
     .byte   127               @ intensity
-    .byte   0xCA, 0x60, 0x00, 0x00  @ y=-54, x=96, hdr
-    .byte   0xFF, 0x0D, 0x00  @ line dy=13, dx=0
-    .byte   0xFF, 0x00, 0xB4  @ line dy=0, dx=-76
+    .byte   0xD7, 0x5B, 0x00, 0x00  @ y=-41, x=91, hdr
+    .byte   0xFF, 0x0C, 0x00  @ line dy=12, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH97:
+_ANGKOR_BG_PATH44:
     .byte   127               @ intensity
-    .byte   0xD2, 0x60, 0x00, 0x00  @ y=-46, x=96, hdr
-    .byte   0xFF, 0x00, 0xB4  @ line dy=0, dx=-76
+    .byte   0xE3, 0x5C, 0x00, 0x00  @ y=-29, x=92, hdr (simplified: -2 pts)
+    .byte   0xFF, 0x00, 0xB6  @ line dy=0, dx=-74
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH98:
+_ANGKOR_BG_PATH45:
     .byte   127               @ intensity
-    .byte   0xD8, 0x14, 0x00, 0x00  @ y=-40, x=20, hdr
+    .byte   0xE7, 0x12, 0x00, 0x00  @ y=-25, x=18, hdr (simplified: -2 pts)
+    .byte   0xFF, 0xF1, 0x00  @ line dy=-15, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH46:
+    .byte   127               @ intensity
+    .byte   0xD8, 0x14, 0x00, 0x00  @ y=-40, x=20, hdr (simplified: -2 pts)
     .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
-    .byte   0xFF, 0x00, 0xF9  @ line dy=0, dx=-7
-    .byte   0xFF, 0xFF, 0xFE  @ line dy=-1, dx=-2
+    .byte   0xFF, 0xFF, 0xF7  @ line dy=-1, dx=-9
     .byte   0xFF, 0x09, 0x00  @ line dy=9, dx=0
     .byte   0xFF, 0x00, 0x09  @ line dy=0, dx=9
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH99:
+_ANGKOR_BG_PATH47:
     .byte   127               @ intensity
-    .byte   0xD8, 0x12, 0x00, 0x00  @ y=-40, x=18, hdr
-    .byte   0xFF, 0x0F, 0x00  @ line dy=15, dx=0
+    .byte   0xD7, 0x14, 0x00, 0x00  @ y=-41, x=20, hdr (simplified: -2 pts)
+    .byte   0xFF, 0x00, 0x4C  @ line dy=0, dx=76
+    .byte   0xFF, 0xF3, 0x00  @ line dy=-13, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH100:
+_ANGKOR_BG_PATH48:
     .byte   127               @ intensity
-    .byte   0xE3, 0x12, 0x00, 0x00  @ y=-29, x=18, hdr
-    .byte   0xFF, 0x00, 0x4A  @ line dy=0, dx=74
+    .byte   0xD7, 0x4F, 0x00, 0x00  @ y=-41, x=79, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x0C, 0x00  @ line dy=12, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH101:
+_ANGKOR_BG_PATH49:
     .byte   127               @ intensity
-    .byte   0xE3, 0x5C, 0x00, 0x00  @ y=-29, x=92, hdr
-    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH102:
-    .byte   127               @ intensity
-    .byte   0xE9, 0x5C, 0x00, 0x00  @ y=-23, x=92, hdr
-    .byte   0xFF, 0x00, 0xB7  @ line dy=0, dx=-73
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH103:
-    .byte   127               @ intensity
-    .byte   0xE7, 0x0B, 0x00, 0x00  @ y=-25, x=11, hdr
-    .byte   0xFF, 0x00, 0x08  @ line dy=0, dx=8
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0xFF, 0x01, 0xFE  @ line dy=1, dx=-2
-    .byte   0xFF, 0x01, 0xFD  @ line dy=1, dx=-3
-    .byte   0xFF, 0x02, 0x01  @ line dy=2, dx=1
-    .byte   0xFF, 0x02, 0xFF  @ line dy=2, dx=-1
-    .byte   0xFF, 0x00, 0xFD  @ line dy=0, dx=-3
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH104:
-    .byte   127               @ intensity
-    .byte   0xFC, 0x00, 0x00, 0x00  @ y=-4, x=0, hdr
-    .byte   0xFF, 0xF5, 0x0B  @ line dy=-11, dx=11
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH105:
-    .byte   127               @ intensity
-    .byte   0xE3, 0x5B, 0x00, 0x00  @ y=-29, x=91, hdr
-    .byte   0xFF, 0xF4, 0x00  @ line dy=-12, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH106:
-    .byte   127               @ intensity
-    .byte   0xE3, 0x4F, 0x00, 0x00  @ y=-29, x=79, hdr
-    .byte   0xFF, 0xF4, 0x00  @ line dy=-12, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH107:
-    .byte   127               @ intensity
-    .byte   0xE3, 0x42, 0x00, 0x00  @ y=-29, x=66, hdr
-    .byte   0xFF, 0xF4, 0x00  @ line dy=-12, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH108:
-    .byte   127               @ intensity
-    .byte   0xE3, 0x36, 0x00, 0x00  @ y=-29, x=54, hdr
-    .byte   0xFF, 0xF4, 0x00  @ line dy=-12, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH109:
-    .byte   127               @ intensity
-    .byte   0xE3, 0x28, 0x00, 0x00  @ y=-29, x=40, hdr
-    .byte   0xFF, 0xF4, 0x00  @ line dy=-12, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH110:
-    .byte   127               @ intensity
-    .byte   0xE9, 0x57, 0x00, 0x00  @ y=-23, x=87, hdr
+    .byte   0xE9, 0x57, 0x00, 0x00  @ y=-23, x=87, hdr (simplified: -1 pts)
     .byte   0xFF, 0x0E, 0x00  @ line dy=14, dx=0
     .byte   0xFF, 0x00, 0xCF  @ line dy=0, dx=-49
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH111:
-    .byte   127               @ intensity
-    .byte   0xF7, 0x45, 0x00, 0x00  @ y=-9, x=69, hdr
-    .byte   0xFF, 0xF2, 0x00  @ line dy=-14, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH112:
-    .byte   127               @ intensity
-    .byte   0xEC, 0x57, 0x00, 0x00  @ y=-20, x=87, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH113:
-    .byte   127               @ intensity
-    .byte   0xF0, 0x26, 0x00, 0x00  @ y=-16, x=38, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH114:
+_ANGKOR_BG_PATH50:
     .byte   127               @ intensity
     .byte   0xFD, 0x26, 0x00, 0x00  @ y=-3, x=38, hdr
     .byte   0xFF, 0xEC, 0x00  @ line dy=-20, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH115:
+_ANGKOR_BG_PATH51:
     .byte   127               @ intensity
-    .byte   0xF7, 0x4D, 0x00, 0x00  @ y=-9, x=77, hdr
-    .byte   0xFF, 0x10, 0x00  @ line dy=16, dx=0
-    .byte   0xFF, 0x00, 0xE5  @ line dy=0, dx=-27
-    .byte   0xFF, 0xF0, 0x00  @ line dy=-16, dx=0
+    .byte   0xE3, 0x28, 0x00, 0x00  @ y=-29, x=40, hdr (simplified: -1 pts)
+    .byte   0xFF, 0xF4, 0x00  @ line dy=-12, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH116:
+_ANGKOR_BG_PATH52:
     .byte   127               @ intensity
-    .byte   0x07, 0x4C, 0x00, 0x00  @ y=7, x=76, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0xFF, 0x02, 0x03  @ line dy=2, dx=3
-    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
+    .byte   0xD7, 0x1B, 0x00, 0x00  @ y=-41, x=27, hdr
+    .byte   0xFF, 0x0C, 0x00  @ line dy=12, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH117:
+_ANGKOR_BG_PATH53:
     .byte   127               @ intensity
-    .byte   0x07, 0x48, 0x00, 0x00  @ y=7, x=72, hdr
-    .byte   0xFF, 0x07, 0x00  @ line dy=7, dx=0
+    .byte   0xE9, 0x13, 0x00, 0x00  @ y=-23, x=19, hdr
+    .byte   0xFF, 0x00, 0x49  @ line dy=0, dx=73
+    .byte   0xFF, 0xFA, 0x00  @ line dy=-6, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH118:
+_ANGKOR_BG_PATH54:
     .byte   127               @ intensity
-    .byte   0x07, 0x39, 0x00, 0x00  @ y=7, x=57, hdr
-    .byte   0xFF, 0x07, 0x00  @ line dy=7, dx=0
+    .byte   0xEC, 0x57, 0x00, 0x00  @ y=-20, x=87, hdr
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH119:
+_ANGKOR_BG_PATH55:
+    .byte   127               @ intensity
+    .byte   0xF2, 0x57, 0x00, 0x00  @ y=-14, x=87, hdr
+    .byte   0xFF, 0x00, 0xB6  @ line dy=0, dx=-74
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH56:
+    .byte   127               @ intensity
+    .byte   0xF1, 0x0B, 0x00, 0x00  @ y=-15, x=11, hdr (simplified: -4 pts)
+    .byte   0xFF, 0x00, 0x03  @ line dy=0, dx=3
+    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
+    .byte   0xFF, 0xFE, 0x05  @ line dy=-2, dx=5
+    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
+    .byte   0xFF, 0x00, 0xF8  @ line dy=0, dx=-8
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH57:
+    .byte   127               @ intensity
+    .byte   0xE3, 0x0B, 0x00, 0x00  @ y=-29, x=11, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x00, 0x05  @ line dy=0, dx=5
+    .byte   0xFF, 0xF7, 0x00  @ line dy=-9, dx=0
+    .byte   0xFF, 0x00, 0xFB  @ line dy=0, dx=-5
+    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH58:
+    .byte   127               @ intensity
+    .byte   0xF1, 0x0B, 0x00, 0x00  @ y=-15, x=11, hdr
+    .byte   0xFF, 0x0B, 0xF5  @ line dy=11, dx=-11
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH59:
+    .byte   127               @ intensity
+    .byte   0xFC, 0x00, 0x00, 0x00  @ y=-4, x=0, hdr
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH60:
+    .byte   127               @ intensity
+    .byte   0xFC, 0x00, 0x00, 0x00  @ y=-4, x=0, hdr
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH61:
+    .byte   127               @ intensity
+    .byte   0x01, 0x00, 0x00, 0x00  @ y=1, x=0, hdr
+    .byte   0xFF, 0x00, 0x0B  @ line dy=0, dx=11
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH62:
+    .byte   127               @ intensity
+    .byte   0x01, 0x0B, 0x00, 0x00  @ y=1, x=11, hdr
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH63:
+    .byte   127               @ intensity
+    .byte   0xFD, 0x0B, 0x00, 0x00  @ y=-3, x=11, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x00, 0x1D  @ line dy=0, dx=29
+    .byte   0xFF, 0x09, 0x00  @ line dy=9, dx=0
+    .byte   0xFF, 0x00, 0xE3  @ line dy=0, dx=-29
+    .byte   0xFF, 0xF7, 0x00  @ line dy=-9, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH64:
+    .byte   127               @ intensity
+    .byte   0x06, 0x0B, 0x00, 0x00  @ y=6, x=11, hdr (simplified: -2 pts)
+    .byte   0xFF, 0x01, 0xFC  @ line dy=1, dx=-4
+    .byte   0xFF, 0x05, 0xFD  @ line dy=5, dx=-3
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH65:
+    .byte   127               @ intensity
+    .byte   0x0B, 0x05, 0x00, 0x00  @ y=11, x=5, hdr
+    .byte   0xFF, 0x00, 0x2D  @ line dy=0, dx=45
+    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH66:
     .byte   127               @ intensity
     .byte   0x07, 0x35, 0x00, 0x00  @ y=7, x=53, hdr
     .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
@@ -4928,359 +1110,190 @@ _ANGKOR_BG_PATH119:
     .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH120:
+_ANGKOR_BG_PATH67:
     .byte   127               @ intensity
-    .byte   0x0C, 0x4F, 0x00, 0x00  @ y=12, x=79, hdr
-    .byte   0xFF, 0x02, 0xFB  @ line dy=2, dx=-5
-    .byte   0xFF, 0x00, 0xF0  @ line dy=0, dx=-16
-    .byte   0xFF, 0x00, 0xFD  @ line dy=0, dx=-3
-    .byte   0xFF, 0xFE, 0xFB  @ line dy=-2, dx=-5
+    .byte   0x14, 0x34, 0x00, 0x00  @ y=20, x=52, hdr (simplified: -1 pts)
+    .byte   0xFF, 0xFE, 0x02  @ line dy=-2, dx=2
+    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH121:
+_ANGKOR_BG_PATH68:
     .byte   127               @ intensity
-    .byte   0x0E, 0x47, 0x00, 0x00  @ y=14, x=71, hdr
+    .byte   0x0E, 0x39, 0x00, 0x00  @ y=14, x=57, hdr
+    .byte   0xFF, 0xF9, 0x00  @ line dy=-7, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH69:
+    .byte   127               @ intensity
+    .byte   0x07, 0x3A, 0x00, 0x00  @ y=7, x=58, hdr
+    .byte   0xFF, 0xF0, 0x00  @ line dy=-16, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH70:
+    .byte   127               @ intensity
+    .byte   0xF7, 0x32, 0x00, 0x00  @ y=-9, x=50, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x10, 0x00  @ line dy=16, dx=0
+    .byte   0xFF, 0x00, 0x1B  @ line dy=0, dx=27
+    .byte   0xFF, 0xF0, 0x00  @ line dy=-16, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH71:
+    .byte   127               @ intensity
+    .byte   0xF7, 0x47, 0x00, 0x00  @ y=-9, x=71, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x10, 0x00  @ line dy=16, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH72:
+    .byte   127               @ intensity
+    .byte   0x07, 0x48, 0x00, 0x00  @ y=7, x=72, hdr
+    .byte   0xFF, 0x07, 0x00  @ line dy=7, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH73:
+    .byte   127               @ intensity
+    .byte   0x0E, 0x47, 0x00, 0x00  @ y=14, x=71, hdr (simplified: -1 pts)
     .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
     .byte   0xFF, 0x00, 0xF2  @ line dy=0, dx=-14
     .byte   0xFF, 0xFE, 0xFB  @ line dy=-2, dx=-5
     .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH122:
+_ANGKOR_BG_PATH74:
+    .byte   127               @ intensity
+    .byte   0x1C, 0x35, 0x00, 0x00  @ y=28, x=53, hdr (simplified: -1 pts)
+    .byte   0xFF, 0xFE, 0x02  @ line dy=-2, dx=2
+    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH75:
     .byte   127               @ intensity
     .byte   0x16, 0x3A, 0x00, 0x00  @ y=22, x=58, hdr
     .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH123:
+_ANGKOR_BG_PATH76:
     .byte   127               @ intensity
-    .byte   0x16, 0x47, 0x00, 0x00  @ y=22, x=71, hdr
-    .byte   0xFF, 0x00, 0x01  @ line dy=0, dx=1
-    .byte   0xFF, 0xFE, 0x05  @ line dy=-2, dx=5
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH124:
-    .byte   127               @ intensity
-    .byte   0x14, 0x34, 0x00, 0x00  @ y=20, x=52, hdr
-    .byte   0xFF, 0xFE, 0x02  @ line dy=-2, dx=2
-    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH125:
-    .byte   127               @ intensity
-    .byte   0x14, 0x4D, 0x00, 0x00  @ y=20, x=77, hdr
-    .byte   0xFF, 0xFE, 0xFE  @ line dy=-2, dx=-2
-    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH126:
-    .byte   127               @ intensity
-    .byte   0x16, 0x46, 0x00, 0x00  @ y=22, x=70, hdr
+    .byte   0x16, 0x3B, 0x00, 0x00  @ y=22, x=59, hdr
     .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
-    .byte   0xFF, 0x00, 0xF5  @ line dy=0, dx=-11
+    .byte   0xFF, 0x00, 0x0B  @ line dy=0, dx=11
     .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH127:
+_ANGKOR_BG_PATH77:
     .byte   127               @ intensity
-    .byte   0x1E, 0x46, 0x00, 0x00  @ y=30, x=70, hdr
+    .byte   0x16, 0x47, 0x00, 0x00  @ y=22, x=71, hdr (simplified: -1 pts)
     .byte   0xFF, 0xFE, 0x06  @ line dy=-2, dx=6
     .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH128:
+_ANGKOR_BG_PATH78:
     .byte   127               @ intensity
     .byte   0x1C, 0x4C, 0x00, 0x00  @ y=28, x=76, hdr
     .byte   0xFF, 0xFE, 0xFE  @ line dy=-2, dx=-2
     .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH129:
+_ANGKOR_BG_PATH79:
     .byte   127               @ intensity
-    .byte   0x1E, 0x3B, 0x00, 0x00  @ y=30, x=59, hdr
-    .byte   0xFF, 0xFE, 0xFA  @ line dy=-2, dx=-6
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH130:
-    .byte   127               @ intensity
-    .byte   0x1C, 0x35, 0x00, 0x00  @ y=28, x=53, hdr
-    .byte   0xFF, 0xFE, 0x02  @ line dy=-2, dx=2
+    .byte   0x14, 0x4D, 0x00, 0x00  @ y=20, x=77, hdr (simplified: -1 pts)
+    .byte   0xFF, 0xFE, 0xFE  @ line dy=-2, dx=-2
     .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH131:
+_ANGKOR_BG_PATH80:
     .byte   127               @ intensity
-    .byte   0x1E, 0x47, 0x00, 0x00  @ y=30, x=71, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0xFF, 0x01, 0x02  @ line dy=1, dx=2
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH132:
-    .byte   127               @ intensity
-    .byte   0x23, 0x49, 0x00, 0x00  @ y=35, x=73, hdr
-    .byte   0xFF, 0x01, 0xFC  @ line dy=1, dx=-4
-    .byte   0xFF, 0x00, 0xF7  @ line dy=0, dx=-9
-    .byte   0xFF, 0xFF, 0xFC  @ line dy=-1, dx=-4
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH133:
-    .byte   127               @ intensity
-    .byte   0x1E, 0x3A, 0x00, 0x00  @ y=30, x=58, hdr
-    .byte   0xFF, 0x02, 0x00  @ line dy=2, dx=0
-    .byte   0xFF, 0x03, 0xFE  @ line dy=3, dx=-2
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH134:
-    .byte   127               @ intensity
-    .byte   0x24, 0x44, 0x00, 0x00  @ y=36, x=68, hdr
+    .byte   0x12, 0x4F, 0x00, 0x00  @ y=18, x=79, hdr
     .byte   0xFF, 0xFA, 0x00  @ line dy=-6, dx=0
+    .byte   0xFF, 0xFE, 0xFD  @ line dy=-2, dx=-3
+    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH135:
+_ANGKOR_BG_PATH81:
     .byte   127               @ intensity
-    .byte   0x1E, 0x3D, 0x00, 0x00  @ y=30, x=61, hdr
-    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
+    .byte   0x0C, 0x4F, 0x00, 0x00  @ y=12, x=79, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x02, 0xFB  @ line dy=2, dx=-5
+    .byte   0xFF, 0x00, 0xED  @ line dy=0, dx=-19
+    .byte   0xFF, 0xFE, 0xFB  @ line dy=-2, dx=-5
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH136:
+_ANGKOR_BG_PATH82:
     .byte   127               @ intensity
-    .byte   0x24, 0x47, 0x00, 0x00  @ y=36, x=71, hdr
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0xFF, 0x00, 0xF3  @ line dy=0, dx=-13
-    .byte   0xFF, 0xFB, 0x00  @ line dy=-5, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH137:
-    .byte   127               @ intensity
-    .byte   0x29, 0x46, 0x00, 0x00  @ y=41, x=70, hdr
+    .byte   0x07, 0x3E, 0x00, 0x00  @ y=7, x=62, hdr
     .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0xFF, 0x00, 0xF5  @ line dy=0, dx=-11
+    .byte   0xFF, 0x02, 0x03  @ line dy=2, dx=3
+    .byte   0xFF, 0xFE, 0x03  @ line dy=-2, dx=3
     .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH138:
+_ANGKOR_BG_PATH83:
     .byte   127               @ intensity
-    .byte   0x2D, 0x44, 0x00, 0x00  @ y=45, x=68, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0xFF, 0x00, 0xF9  @ line dy=0, dx=-7
-    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH139:
-    .byte   127               @ intensity
-    .byte   0x30, 0x43, 0x00, 0x00  @ y=48, x=67, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH140:
-    .byte   127               @ intensity
-    .byte   0x30, 0x3E, 0x00, 0x00  @ y=48, x=62, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH141:
-    .byte   127               @ intensity
-    .byte   0x33, 0x49, 0x00, 0x00  @ y=51, x=73, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH142:
-    .byte   127               @ intensity
-    .byte   0x33, 0x3E, 0x00, 0x00  @ y=51, x=62, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH143:
-    .byte   127               @ intensity
-    .byte   0x30, 0x43, 0x00, 0x00  @ y=48, x=67, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0xFF, 0x00, 0xFB  @ line dy=0, dx=-5
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH144:
-    .byte   127               @ intensity
-    .byte   0x30, 0x3E, 0x00, 0x00  @ y=48, x=62, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH145:
-    .byte   127               @ intensity
-    .byte   0x07, 0x47, 0x00, 0x00  @ y=7, x=71, hdr
-    .byte   0xFF, 0xF0, 0x00  @ line dy=-16, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH146:
-    .byte   127               @ intensity
-    .byte   0xF7, 0x3A, 0x00, 0x00  @ y=-9, x=58, hdr
-    .byte   0xFF, 0x10, 0x00  @ line dy=16, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH147:
-    .byte   127               @ intensity
-    .byte   0x04, 0x44, 0x00, 0x00  @ y=4, x=68, hdr
+    .byte   0x04, 0x44, 0x00, 0x00  @ y=4, x=68, hdr (simplified: -1 pts)
     .byte   0xFF, 0x00, 0xF9  @ line dy=0, dx=-7
     .byte   0xFF, 0xF7, 0x00  @ line dy=-9, dx=0
     .byte   0xFF, 0x00, 0x07  @ line dy=0, dx=7
     .byte   0xFF, 0x09, 0x00  @ line dy=9, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH148:
+_ANGKOR_BG_PATH84:
     .byte   127               @ intensity
-    .byte   0x07, 0x44, 0x00, 0x00  @ y=7, x=68, hdr
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0xFF, 0x02, 0xFD  @ line dy=2, dx=-3
-    .byte   0xFF, 0xFE, 0xFD  @ line dy=-2, dx=-3
-    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
+    .byte   0xF7, 0x45, 0x00, 0x00  @ y=-9, x=69, hdr (simplified: -1 pts)
+    .byte   0xFF, 0xF2, 0x00  @ line dy=-14, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH149:
+_ANGKOR_BG_PATH85:
     .byte   127               @ intensity
-    .byte   0xE3, 0x1B, 0x00, 0x00  @ y=-29, x=27, hdr
+    .byte   0xE3, 0x42, 0x00, 0x00  @ y=-29, x=66, hdr (simplified: -1 pts)
     .byte   0xFF, 0xF4, 0x00  @ line dy=-12, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH150:
+_ANGKOR_BG_PATH86:
     .byte   127               @ intensity
-    .byte   0xEC, 0x0B, 0x00, 0x00  @ y=-20, x=11, hdr
-    .byte   0xFF, 0xEE, 0x00  @ line dy=-18, dx=0
-    .byte   0xFF, 0x00, 0x05  @ line dy=0, dx=5
-    .byte   0xFF, 0x09, 0x00  @ line dy=9, dx=0
-    .byte   0xFF, 0x00, 0xFB  @ line dy=0, dx=-5
+    .byte   0xD7, 0x36, 0x00, 0x00  @ y=-41, x=54, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x0C, 0x00  @ line dy=12, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH151:
+_ANGKOR_BG_PATH87:
     .byte   127               @ intensity
-    .byte   0xF3, 0x04, 0x00, 0x00  @ y=-13, x=4, hdr
-    .byte   0xFF, 0xFC, 0x03  @ line dy=-4, dx=3
-    .byte   0xFF, 0xE9, 0x00  @ line dy=-23, dx=0
-    .byte   0xFF, 0x00, 0xF9  @ line dy=0, dx=-7
+    .byte   0xF0, 0x26, 0x00, 0x00  @ y=-16, x=38, hdr
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH152:
+_ANGKOR_BG_PATH88:
     .byte   127               @ intensity
-    .byte   0xF3, 0x04, 0x00, 0x00  @ y=-13, x=4, hdr
-    .byte   0xFF, 0x01, 0xFC  @ line dy=1, dx=-4
+    .byte   0xF2, 0x0A, 0x00, 0x00  @ y=-14, x=10, hdr (simplified: -2 pts)
+    .byte   0xFF, 0x02, 0x03  @ line dy=2, dx=3
+    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
+    .byte   0xFF, 0x02, 0xFC  @ line dy=2, dx=-4
+    .byte   0xFF, 0x03, 0xFF  @ line dy=3, dx=-1
+    .byte   0xFF, 0x00, 0xFC  @ line dy=0, dx=-4
+    .byte   0xFF, 0x03, 0xFC  @ line dy=3, dx=-4
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH153:
+_ANGKOR_BG_PATH89:
     .byte   127               @ intensity
-    .byte   0xF2, 0x57, 0x00, 0x00  @ y=-14, x=87, hdr
-    .byte   0xFF, 0x00, 0xB6  @ line dy=0, dx=-74
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH154:
-    .byte   127               @ intensity
-    .byte   0xD0, 0x14, 0x00, 0x00  @ y=-48, x=20, hdr
-    .byte   0xFF, 0x00, 0x06  @ line dy=0, dx=6
-    .byte   0xFF, 0xF2, 0x00  @ line dy=-14, dx=0
-    .byte   0xFF, 0x00, 0xF5  @ line dy=0, dx=-11
-    .byte   0xFF, 0x0E, 0x00  @ line dy=14, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH155:
-    .byte   127               @ intensity
-    .byte   0xD4, 0x09, 0x00, 0x00  @ y=-44, x=9, hdr
-    .byte   0xFF, 0x00, 0xF7  @ line dy=0, dx=-9
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH156:
-    .byte   127               @ intensity
-    .byte   0xD1, 0x00, 0x00, 0x00  @ y=-47, x=0, hdr
-    .byte   0xFF, 0x00, 0x0A  @ line dy=0, dx=10
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH157:
-    .byte   127               @ intensity
-    .byte   0xCC, 0x0C, 0x00, 0x00  @ y=-52, x=12, hdr
-    .byte   0xFF, 0x00, 0xF4  @ line dy=0, dx=-12
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH158:
-    .byte   127               @ intensity
-    .byte   0xC7, 0x00, 0x00, 0x00  @ y=-57, x=0, hdr
-    .byte   0xFF, 0x00, 0x0D  @ line dy=0, dx=13
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH159:
-    .byte   127               @ intensity
-    .byte   0xC0, 0x0E, 0x00, 0x00  @ y=-64, x=14, hdr
-    .byte   0xFF, 0x00, 0xF2  @ line dy=0, dx=-14
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH160:
-    .byte   127               @ intensity
-    .byte   0xFD, 0x0B, 0x00, 0x00  @ y=-3, x=11, hdr
-    .byte   0xFF, 0x00, 0x1D  @ line dy=0, dx=29
-    .byte   0xFF, 0x09, 0x00  @ line dy=9, dx=0
-    .byte   0xFF, 0x00, 0xE3  @ line dy=0, dx=-29
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH161:
-    .byte   127               @ intensity
-    .byte   0xFD, 0x0B, 0x00, 0x00  @ y=-3, x=11, hdr
-    .byte   0xFF, 0x09, 0x00  @ line dy=9, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH162:
-    .byte   127               @ intensity
-    .byte   0x07, 0x32, 0x00, 0x00  @ y=7, x=50, hdr
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0xFF, 0x00, 0xD3  @ line dy=0, dx=-45
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH163:
-    .byte   127               @ intensity
-    .byte   0xF4, 0x00, 0x00, 0x00  @ y=-12, x=0, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH164:
-    .byte   127               @ intensity
-    .byte   0xFC, 0x00, 0x00, 0x00  @ y=-4, x=0, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH165:
-    .byte   127               @ intensity
-    .byte   0xD0, 0xF2, 0x00, 0x00  @ y=-48, x=-14, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH166:
-    .byte   127               @ intensity
-    .byte   0xC1, 0xF1, 0x00, 0x00  @ y=-63, x=-15, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH167:
-    .byte   127               @ intensity
-    .byte   0x01, 0x0B, 0x00, 0x00  @ y=1, x=11, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH168:
-    .byte   127               @ intensity
-    .byte   0x06, 0x10, 0x00, 0x00  @ y=6, x=16, hdr
-    .byte   0xFF, 0x0A, 0x00  @ line dy=10, dx=0
-    .byte   0xFF, 0x00, 0xF6  @ line dy=0, dx=-10
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH169:
-    .byte   127               @ intensity
-    .byte   0x0C, 0x06, 0x00, 0x00  @ y=12, x=6, hdr
+    .byte   0x0C, 0x00, 0x00, 0x00  @ y=12, x=0, hdr (simplified: -7 pts)
+    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
+    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
+    .byte   0xFF, 0x00, 0x0C  @ line dy=0, dx=12
+    .byte   0xFF, 0xFB, 0x00  @ line dy=-5, dx=0
     .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH170:
+_ANGKOR_BG_PATH90:
     .byte   127               @ intensity
-    .byte   0x12, 0x06, 0x00, 0x00  @ y=18, x=6, hdr
+    .byte   0x11, 0xFD, 0x00, 0x00  @ y=17, x=-3, hdr (simplified: -3 pts)
+    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
+    .byte   0xFF, 0x00, 0x06  @ line dy=0, dx=6
+    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH171:
+_ANGKOR_BG_PATH91:
     .byte   127               @ intensity
-    .byte   0x0C, 0x06, 0x00, 0x00  @ y=12, x=6, hdr
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
-    .byte   0xFF, 0xFF, 0xFF  @ line dy=-1, dx=-1
-    .byte   0xFF, 0x00, 0xFD  @ line dy=0, dx=-3
+    .byte   0x10, 0x06, 0x00, 0x00  @ y=16, x=6, hdr
+    .byte   0xFF, 0x00, 0x0A  @ line dy=0, dx=10
+    .byte   0xFF, 0xF6, 0x00  @ line dy=-10, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH172:
+_ANGKOR_BG_PATH92:
     .byte   127               @ intensity
     .byte   0x10, 0x0B, 0x00, 0x00  @ y=16, x=11, hdr
     .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
@@ -5288,146 +1301,586 @@ _ANGKOR_BG_PATH172:
     .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH173:
+_ANGKOR_BG_PATH93:
     .byte   127               @ intensity
-    .byte   0x10, 0x08, 0x00, 0x00  @ y=16, x=8, hdr
-    .byte   0xFF, 0x0A, 0x00  @ line dy=10, dx=0
+    .byte   0x21, 0x0D, 0x00, 0x00  @ y=33, x=13, hdr (simplified: -2 pts)
+    .byte   0xFF, 0xFA, 0xFD  @ line dy=-6, dx=-3
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH174:
+_ANGKOR_BG_PATH94:
     .byte   127               @ intensity
-    .byte   0x18, 0x0E, 0x00, 0x00  @ y=24, x=14, hdr
-    .byte   0xFF, 0x02, 0xFB  @ line dy=2, dx=-5
-    .byte   0xFF, 0x00, 0xF7  @ line dy=0, dx=-9
+    .byte   0x1A, 0x08, 0x00, 0x00  @ y=26, x=8, hdr
+    .byte   0xFF, 0xF6, 0x00  @ line dy=-10, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH175:
+_ANGKOR_BG_PATH95:
     .byte   127               @ intensity
-    .byte   0x1A, 0x07, 0x00, 0x00  @ y=26, x=7, hdr
+    .byte   0x12, 0x06, 0x00, 0x00  @ y=18, x=6, hdr
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH96:
+    .byte   127               @ intensity
+    .byte   0x1A, 0x07, 0x00, 0x00  @ y=26, x=7, hdr (simplified: -1 pts)
     .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
     .byte   0xFF, 0xFF, 0x06  @ line dy=-1, dx=6
     .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH176:
+_ANGKOR_BG_PATH97:
     .byte   127               @ intensity
-    .byte   0x21, 0x0D, 0x00, 0x00  @ y=33, x=13, hdr
-    .byte   0xFF, 0xFC, 0xFD  @ line dy=-4, dx=-3
-    .byte   0xFF, 0xFE, 0x00  @ line dy=-2, dx=0
+    .byte   0x28, 0x0B, 0x00, 0x00  @ y=40, x=11, hdr (simplified: -2 pts)
+    .byte   0xFF, 0xFC, 0xFE  @ line dy=-4, dx=-2
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH177:
+_ANGKOR_BG_PATH98:
     .byte   127               @ intensity
-    .byte   0x22, 0x07, 0x00, 0x00  @ y=34, x=7, hdr
-    .byte   0xFF, 0x00, 0xF9  @ line dy=0, dx=-7
+    .byte   0x22, 0x07, 0x00, 0x00  @ y=34, x=7, hdr (simplified: -3 pts)
+    .byte   0xFF, 0x00, 0xF2  @ line dy=0, dx=-14
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH178:
+_ANGKOR_BG_PATH99:
     .byte   127               @ intensity
-    .byte   0x22, 0x05, 0x00, 0x00  @ y=34, x=5, hdr
+    .byte   0x22, 0xFB, 0x00, 0x00  @ y=34, x=-5, hdr (simplified: -3 pts)
     .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
-    .byte   0xFF, 0x00, 0xFB  @ line dy=0, dx=-5
+    .byte   0xFF, 0x00, 0x0A  @ line dy=0, dx=10
+    .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH179:
+_ANGKOR_BG_PATH100:
     .byte   127               @ intensity
-    .byte   0x2A, 0x04, 0x00, 0x00  @ y=42, x=4, hdr
-    .byte   0xFF, 0x07, 0x00  @ line dy=7, dx=0
-    .byte   0xFF, 0x00, 0xFC  @ line dy=0, dx=-4
+    .byte   0x2A, 0x05, 0x00, 0x00  @ y=42, x=5, hdr (simplified: -2 pts)
+    .byte   0xFF, 0xFE, 0x06  @ line dy=-2, dx=6
+    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH180:
+_ANGKOR_BG_PATH101:
+    .byte   127               @ intensity
+    .byte   0x30, 0x08, 0x00, 0x00  @ y=48, x=8, hdr (simplified: -2 pts)
+    .byte   0xFF, 0xFB, 0xFE  @ line dy=-5, dx=-2
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH102:
+    .byte   127               @ intensity
+    .byte   0x2A, 0x04, 0x00, 0x00  @ y=42, x=4, hdr (simplified: -3 pts)
+    .byte   0xFF, 0x07, 0x00  @ line dy=7, dx=0
+    .byte   0xFF, 0x00, 0xF8  @ line dy=0, dx=-8
+    .byte   0xFF, 0xF9, 0x00  @ line dy=-7, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH103:
+    .byte   127               @ intensity
+    .byte   0x2A, 0xFB, 0x00, 0x00  @ y=42, x=-5, hdr (simplified: -2 pts)
+    .byte   0xFF, 0xFE, 0xFA  @ line dy=-2, dx=-6
+    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH104:
+    .byte   127               @ intensity
+    .byte   0x30, 0xF8, 0x00, 0x00  @ y=48, x=-8, hdr (simplified: -2 pts)
+    .byte   0xFF, 0xFB, 0x02  @ line dy=-5, dx=2
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH105:
+    .byte   127               @ intensity
+    .byte   0x28, 0xF5, 0x00, 0x00  @ y=40, x=-11, hdr (simplified: -2 pts)
+    .byte   0xFF, 0xFC, 0x02  @ line dy=-4, dx=2
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH106:
+    .byte   127               @ intensity
+    .byte   0x25, 0xF3, 0x00, 0x00  @ y=37, x=-13, hdr (simplified: -1 pts)
+    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
+    .byte   0xFF, 0x01, 0x06  @ line dy=1, dx=6
+    .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH107:
+    .byte   127               @ intensity
+    .byte   0x1A, 0xF8, 0x00, 0x00  @ y=26, x=-8, hdr
+    .byte   0xFF, 0xF6, 0x00  @ line dy=-10, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH108:
+    .byte   127               @ intensity
+    .byte   0x10, 0xFA, 0x00, 0x00  @ y=16, x=-6, hdr
+    .byte   0xFF, 0x00, 0xF6  @ line dy=0, dx=-10
+    .byte   0xFF, 0xF6, 0x00  @ line dy=-10, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH109:
+    .byte   127               @ intensity
+    .byte   0x10, 0xF5, 0x00, 0x00  @ y=16, x=-11, hdr
+    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
+    .byte   0xFF, 0x03, 0xFD  @ line dy=3, dx=-3
+    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH110:
+    .byte   127               @ intensity
+    .byte   0x21, 0xF3, 0x00, 0x00  @ y=33, x=-13, hdr (simplified: -2 pts)
+    .byte   0xFF, 0xFA, 0x03  @ line dy=-6, dx=3
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH111:
+    .byte   127               @ intensity
+    .byte   0x18, 0xF2, 0x00, 0x00  @ y=24, x=-14, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x02, 0x05  @ line dy=2, dx=5
+    .byte   0xFF, 0x00, 0x12  @ line dy=0, dx=18
+    .byte   0xFF, 0xFE, 0x05  @ line dy=-2, dx=5
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH112:
+    .byte   127               @ intensity
+    .byte   0x12, 0xFA, 0x00, 0x00  @ y=18, x=-6, hdr
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH113:
+    .byte   127               @ intensity
+    .byte   0xF4, 0x00, 0x00, 0x00  @ y=-12, x=0, hdr (simplified: -5 pts)
+    .byte   0xFF, 0xFF, 0xFC  @ line dy=-1, dx=-4
+    .byte   0xFF, 0xFC, 0xFD  @ line dy=-4, dx=-3
+    .byte   0xFF, 0xE9, 0x00  @ line dy=-23, dx=0
+    .byte   0xFF, 0x00, 0x0E  @ line dy=0, dx=14
+    .byte   0xFF, 0x17, 0x00  @ line dy=23, dx=0
+    .byte   0xFF, 0x04, 0xFD  @ line dy=4, dx=-3
+    .byte   0xFF, 0x01, 0xFC  @ line dy=1, dx=-4
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH114:
+    .byte   127               @ intensity
+    .byte   0xF2, 0xF3, 0x00, 0x00  @ y=-14, x=-13, hdr
+    .byte   0xFF, 0x00, 0xB6  @ line dy=0, dx=-74
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH115:
+    .byte   127               @ intensity
+    .byte   0xF0, 0xA9, 0x00, 0x00  @ y=-16, x=-87, hdr
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH116:
+    .byte   127               @ intensity
+    .byte   0xE9, 0xA9, 0x00, 0x00  @ y=-23, x=-87, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x0E, 0x00  @ line dy=14, dx=0
+    .byte   0xFF, 0x00, 0x31  @ line dy=0, dx=49
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH117:
+    .byte   127               @ intensity
+    .byte   0xFD, 0xDA, 0x00, 0x00  @ y=-3, x=-38, hdr
+    .byte   0xFF, 0xEC, 0x00  @ line dy=-20, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH118:
+    .byte   127               @ intensity
+    .byte   0xF0, 0xBB, 0x00, 0x00  @ y=-16, x=-69, hdr
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH119:
+    .byte   127               @ intensity
+    .byte   0xE3, 0xB1, 0x00, 0x00  @ y=-29, x=-79, hdr (simplified: -1 pts)
+    .byte   0xFF, 0xF4, 0x00  @ line dy=-12, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH120:
+    .byte   127               @ intensity
+    .byte   0xD7, 0xA5, 0x00, 0x00  @ y=-41, x=-91, hdr
+    .byte   0xFF, 0x0C, 0x00  @ line dy=12, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH121:
+    .byte   127               @ intensity
+    .byte   0x1E, 0xB9, 0x00, 0x00  @ y=30, x=-71, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
+    .byte   0xFF, 0x01, 0xFE  @ line dy=1, dx=-2
+    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH122:
+    .byte   127               @ intensity
+    .byte   0x24, 0xB9, 0x00, 0x00  @ y=36, x=-71, hdr
+    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
+    .byte   0xFF, 0x00, 0x0D  @ line dy=0, dx=13
+    .byte   0xFF, 0xFB, 0x00  @ line dy=-5, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH123:
+    .byte   127               @ intensity
+    .byte   0x23, 0xC8, 0x00, 0x00  @ y=35, x=-56, hdr (simplified: -2 pts)
+    .byte   0xFF, 0x00, 0xEF  @ line dy=0, dx=-17
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH124:
+    .byte   127               @ intensity
+    .byte   0x21, 0xB4, 0x00, 0x00  @ y=33, x=-76, hdr
+    .byte   0xFF, 0xFB, 0x00  @ line dy=-5, dx=0
+    .byte   0xFF, 0x02, 0x06  @ line dy=2, dx=6
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH125:
+    .byte   127               @ intensity
+    .byte   0x1E, 0xBC, 0x00, 0x00  @ y=30, x=-68, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH126:
+    .byte   127               @ intensity
+    .byte   0x29, 0xBA, 0x00, 0x00  @ y=41, x=-70, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
+    .byte   0xFF, 0x00, 0x0B  @ line dy=0, dx=11
+    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH127:
+    .byte   127               @ intensity
+    .byte   0x27, 0xC8, 0x00, 0x00  @ y=39, x=-56, hdr (simplified: -3 pts)
+    .byte   0xFF, 0xF7, 0xFE  @ line dy=-9, dx=-2
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH128:
+    .byte   127               @ intensity
+    .byte   0x1E, 0xC5, 0x00, 0x00  @ y=30, x=-59, hdr (simplified: -1 pts)
+    .byte   0xFF, 0xFE, 0x06  @ line dy=-2, dx=6
+    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH129:
+    .byte   127               @ intensity
+    .byte   0x1E, 0xC3, 0x00, 0x00  @ y=30, x=-61, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH130:
+    .byte   127               @ intensity
+    .byte   0x2D, 0xC3, 0x00, 0x00  @ y=45, x=-61, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
+    .byte   0xFF, 0x00, 0xF9  @ line dy=0, dx=-7
+    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH131:
+    .byte   127               @ intensity
+    .byte   0x30, 0xBD, 0x00, 0x00  @ y=48, x=-67, hdr
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH132:
+    .byte   127               @ intensity
+    .byte   0x30, 0xBD, 0x00, 0x00  @ y=48, x=-67, hdr
+    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
+    .byte   0xFF, 0x00, 0x05  @ line dy=0, dx=5
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH133:
+    .byte   127               @ intensity
+    .byte   0x33, 0xC2, 0x00, 0x00  @ y=51, x=-62, hdr
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH134:
+    .byte   127               @ intensity
+    .byte   0x33, 0xC2, 0x00, 0x00  @ y=51, x=-62, hdr (simplified: -1 pts)
+    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH135:
+    .byte   127               @ intensity
+    .byte   0x30, 0xC2, 0x00, 0x00  @ y=48, x=-62, hdr
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH136:
+    .byte   127               @ intensity
+    .byte   0x33, 0xB7, 0x00, 0x00  @ y=51, x=-73, hdr
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH137:
+    .byte   127               @ intensity
+    .byte   0x33, 0xF8, 0x00, 0x00  @ y=51, x=-8, hdr
+    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
+    .byte   0xFF, 0x01, 0x04  @ line dy=1, dx=4
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH138:
+    .byte   127               @ intensity
+    .byte   0x31, 0xFA, 0x00, 0x00  @ y=49, x=-6, hdr (simplified: -3 pts)
+    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
+    .byte   0xFF, 0x00, 0x0C  @ line dy=0, dx=12
+    .byte   0xFF, 0xFB, 0x00  @ line dy=-5, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH139:
     .byte   127               @ intensity
     .byte   0x31, 0x04, 0x00, 0x00  @ y=49, x=4, hdr
     .byte   0xFF, 0xFF, 0x04  @ line dy=-1, dx=4
     .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH181:
+_ANGKOR_BG_PATH140:
     .byte   127               @ intensity
-    .byte   0x30, 0x08, 0x00, 0x00  @ y=48, x=8, hdr
-    .byte   0xFF, 0xFD, 0xFE  @ line dy=-3, dx=-2
-    .byte   0xFF, 0xFE, 0x00  @ line dy=-2, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH182:
-    .byte   127               @ intensity
-    .byte   0x2A, 0x05, 0x00, 0x00  @ y=42, x=5, hdr
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0xFE, 0x04  @ line dy=-2, dx=4
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH183:
-    .byte   127               @ intensity
-    .byte   0x28, 0x0B, 0x00, 0x00  @ y=40, x=11, hdr
-    .byte   0xFF, 0xFE, 0xFE  @ line dy=-2, dx=-2
-    .byte   0xFF, 0xFE, 0x00  @ line dy=-2, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH184:
-    .byte   127               @ intensity
-    .byte   0x31, 0x06, 0x00, 0x00  @ y=49, x=6, hdr
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_PATH185:
-    .byte   127               @ intensity
-    .byte   0x36, 0x05, 0x00, 0x00  @ y=54, x=5, hdr
+    .byte   0x36, 0x05, 0x00, 0x00  @ y=54, x=5, hdr (simplified: -3 pts)
     .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
+    .byte   0xFF, 0x00, 0xF6  @ line dy=0, dx=-10
+    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH141:
+    .byte   127               @ intensity
+    .byte   0x3A, 0xFD, 0x00, 0x00  @ y=58, x=-3, hdr (simplified: -3 pts)
+    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
+    .byte   0xFF, 0x00, 0x06  @ line dy=0, dx=6
+    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH142:
+    .byte   127               @ intensity
+    .byte   0x3D, 0x02, 0x00, 0x00  @ y=61, x=2, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
+    .byte   0xFF, 0x00, 0xFC  @ line dy=0, dx=-4
+    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH143:
+    .byte   127               @ intensity
+    .byte   0x27, 0x38, 0x00, 0x00  @ y=39, x=56, hdr (simplified: -3 pts)
+    .byte   0xFF, 0xF7, 0x02  @ line dy=-9, dx=2
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH144:
+    .byte   127               @ intensity
+    .byte   0x1E, 0x3B, 0x00, 0x00  @ y=30, x=59, hdr (simplified: -1 pts)
+    .byte   0xFF, 0xFE, 0xFA  @ line dy=-2, dx=-6
+    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH145:
+    .byte   127               @ intensity
+    .byte   0x23, 0x38, 0x00, 0x00  @ y=35, x=56, hdr (simplified: -2 pts)
+    .byte   0xFF, 0x00, 0x11  @ line dy=0, dx=17
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH146:
+    .byte   127               @ intensity
+    .byte   0x24, 0x47, 0x00, 0x00  @ y=36, x=71, hdr
+    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
+    .byte   0xFF, 0x00, 0xF3  @ line dy=0, dx=-13
+    .byte   0xFF, 0xFB, 0x00  @ line dy=-5, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH147:
+    .byte   127               @ intensity
+    .byte   0x24, 0x3D, 0x00, 0x00  @ y=36, x=61, hdr (simplified: -1 pts)
+    .byte   0xFF, 0xFA, 0x00  @ line dy=-6, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH148:
+    .byte   127               @ intensity
+    .byte   0x1E, 0x44, 0x00, 0x00  @ y=30, x=68, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH149:
+    .byte   127               @ intensity
+    .byte   0x29, 0x46, 0x00, 0x00  @ y=41, x=70, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
+    .byte   0xFF, 0x00, 0xF5  @ line dy=0, dx=-11
+    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH150:
+    .byte   127               @ intensity
+    .byte   0x2D, 0x3D, 0x00, 0x00  @ y=45, x=61, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
+    .byte   0xFF, 0x00, 0x07  @ line dy=0, dx=7
+    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH151:
+    .byte   127               @ intensity
+    .byte   0x30, 0x43, 0x00, 0x00  @ y=48, x=67, hdr
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH152:
+    .byte   127               @ intensity
+    .byte   0x30, 0x43, 0x00, 0x00  @ y=48, x=67, hdr
+    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
     .byte   0xFF, 0x00, 0xFB  @ line dy=0, dx=-5
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH186:
+_ANGKOR_BG_PATH153:
     .byte   127               @ intensity
-    .byte   0x3A, 0x03, 0x00, 0x00  @ y=58, x=3, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0xFF, 0x00, 0xFD  @ line dy=0, dx=-3
+    .byte   0x33, 0x3E, 0x00, 0x00  @ y=51, x=62, hdr
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH187:
+_ANGKOR_BG_PATH154:
     .byte   127               @ intensity
-    .byte   0x3D, 0x02, 0x00, 0x00  @ y=61, x=2, hdr
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
+    .byte   0x33, 0x3E, 0x00, 0x00  @ y=51, x=62, hdr (simplified: -1 pts)
+    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH188:
+_ANGKOR_BG_PATH155:
     .byte   127               @ intensity
-    .byte   0x11, 0x03, 0x00, 0x00  @ y=17, x=3, hdr
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0xFF, 0x00, 0xFD  @ line dy=0, dx=-3
+    .byte   0x30, 0x3E, 0x00, 0x00  @ y=48, x=62, hdr
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH189:
+_ANGKOR_BG_PATH156:
     .byte   127               @ intensity
-    .byte   0x06, 0x0B, 0x00, 0x00  @ y=6, x=11, hdr
-    .byte   0xFF, 0x01, 0xFF  @ line dy=1, dx=-1
-    .byte   0xFF, 0x00, 0xFD  @ line dy=0, dx=-3
-    .byte   0xFF, 0x02, 0xFE  @ line dy=2, dx=-2
-    .byte   0xFF, 0x03, 0xFF  @ line dy=3, dx=-1
+    .byte   0x33, 0x49, 0x00, 0x00  @ y=51, x=73, hdr
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH190:
+_ANGKOR_BG_PATH157:
     .byte   127               @ intensity
-    .byte   0x01, 0x0B, 0x00, 0x00  @ y=1, x=11, hdr
-    .byte   0xFF, 0x00, 0xF5  @ line dy=0, dx=-11
+    .byte   0x27, 0x49, 0x00, 0x00  @ y=39, x=73, hdr (simplified: -1 pts)
+    .byte   0xFF, 0xFB, 0x00  @ line dy=-5, dx=0
+    .byte   0xFF, 0xFF, 0xFE  @ line dy=-1, dx=-2
+    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
     .byte   0x02            @ end marker
 
-_ANGKOR_BG_PATH191:
+_ANGKOR_BG_PATH158:
     .byte   127               @ intensity
-    .byte   0xF2, 0x0A, 0x00, 0x00  @ y=-14, x=10, hdr
-    .byte   0xFF, 0x02, 0x03  @ line dy=2, dx=3
+    .byte   0x1E, 0x46, 0x00, 0x00  @ y=30, x=70, hdr
+    .byte   0xFF, 0xFE, 0x06  @ line dy=-2, dx=6
     .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0xFF, 0x02, 0xFE  @ line dy=2, dx=-2
-    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
-    .byte   0xFF, 0x03, 0xFF  @ line dy=3, dx=-1
-    .byte   0xFF, 0x00, 0xFC  @ line dy=0, dx=-4
-    .byte   0xFF, 0x03, 0xFC  @ line dy=3, dx=-4
     .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH159:
+    .byte   127               @ intensity
+    .byte   0xC7, 0x0D, 0x00, 0x00  @ y=-57, x=13, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x00, 0xE6  @ line dy=0, dx=-26
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH160:
+    .byte   127               @ intensity
+    .byte   0xC1, 0xF1, 0x00, 0x00  @ y=-63, x=-15, hdr
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH161:
+    .byte   127               @ intensity
+    .byte   0xC0, 0xF2, 0x00, 0x00  @ y=-64, x=-14, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x00, 0x1C  @ line dy=0, dx=28
+    .byte   0x02            @ end marker
+
+_ANGKOR_BG_PATH162:
+    .byte   127               @ intensity
+    .byte   0xC1, 0x0F, 0x00, 0x00  @ y=-63, x=15, hdr
+    .byte   0x02            @ end marker
+
+@ --- ANGKOR_BG_VEC (libvpy position-independent .vec image) ---
+.section .rodata._ANGKOR_BG_VEC,"a",%progbits
+    .balign 4
+.global _ANGKOR_BG_VEC
+_ANGKOR_BG_VEC:
+    .byte   0x8D, 0x00, 0x7F, 0xFC, 0x00, 0x00, 0x00, 0xFF, 0xF5, 0xF5, 0xFF, 0x00, 0xFD, 0xFF, 0xFC, 0x00
+    .byte   0xFF, 0xFE, 0xFB, 0xFF, 0xFC, 0x00, 0xFF, 0x00, 0x08, 0x02, 0x7F, 0xE3, 0xF5, 0x00, 0x00, 0xFF
+    .byte   0x00, 0xFB, 0xFF, 0xF7, 0x00, 0xFF, 0x00, 0x05, 0xFF, 0x12, 0x00, 0x02, 0x7F, 0xF2, 0xF6, 0x00
+    .byte   0x00, 0xFF, 0x02, 0xFD, 0xFF, 0x05, 0x00, 0xFF, 0x02, 0x04, 0xFF, 0x03, 0x01, 0xFF, 0x00, 0x04
+    .byte   0xFF, 0x03, 0x04, 0xFF, 0x00, 0xF5, 0x02, 0x7F, 0xFD, 0xF5, 0x00, 0x00, 0xFF, 0x00, 0xE3, 0xFF
+    .byte   0x09, 0x00, 0xFF, 0x00, 0x1D, 0xFF, 0xF7, 0x00, 0x02, 0x7F, 0x06, 0xF5, 0x00, 0x00, 0xFF, 0x01
+    .byte   0x04, 0xFF, 0x05, 0x03, 0x02, 0x7F, 0x0B, 0xFB, 0x00, 0x00, 0xFF, 0x00, 0xD3, 0xFF, 0xFC, 0x00
+    .byte   0x02, 0x7F, 0x07, 0xCB, 0x00, 0x00, 0xFF, 0x03, 0x00, 0xFF, 0x02, 0x03, 0xFF, 0x06, 0x00, 0x02
+    .byte   0x7F, 0x14, 0xCC, 0x00, 0x00, 0xFF, 0xFE, 0xFE, 0xFF, 0xFD, 0x00, 0x02, 0x7F, 0x0E, 0xC7, 0x00
+    .byte   0x00, 0xFF, 0xF9, 0x00, 0x02, 0x7F, 0x07, 0xC6, 0x00, 0x00, 0xFF, 0xF0, 0x00, 0x02, 0x7F, 0xF7
+    .byte   0xCE, 0x00, 0x00, 0xFF, 0x10, 0x00, 0xFF, 0x00, 0xE5, 0xFF, 0xF0, 0x00, 0x02, 0x7F, 0xF7, 0xB9
+    .byte   0x00, 0x00, 0xFF, 0x10, 0x00, 0x02, 0x7F, 0x07, 0xB8, 0x00, 0x00, 0xFF, 0x07, 0x00, 0x02, 0x7F
+    .byte   0x0E, 0xB9, 0x00, 0x00, 0xFF, 0x08, 0x00, 0xFF, 0x00, 0x0E, 0xFF, 0xFE, 0x05, 0xFF, 0x05, 0x00
+    .byte   0x02, 0x7F, 0x1C, 0xCB, 0x00, 0x00, 0xFF, 0xFE, 0xFE, 0xFF, 0xFD, 0x00, 0x02, 0x7F, 0x16, 0xC6
+    .byte   0x00, 0x00, 0xFF, 0xF8, 0x00, 0x02, 0x7F, 0x16, 0xC5, 0x00, 0x00, 0xFF, 0x08, 0x00, 0xFF, 0x00
+    .byte   0xF5, 0xFF, 0xF8, 0x00, 0x02, 0x7F, 0x16, 0xB9, 0x00, 0x00, 0xFF, 0xFE, 0xFA, 0xFF, 0x05, 0x00
+    .byte   0x02, 0x7F, 0x1C, 0xB4, 0x00, 0x00, 0xFF, 0xFE, 0x02, 0xFF, 0xFD, 0x00, 0x02, 0x7F, 0x14, 0xB3
+    .byte   0x00, 0x00, 0xFF, 0xFE, 0x02, 0xFF, 0xFD, 0x00, 0x02, 0x7F, 0x12, 0xB1, 0x00, 0x00, 0xFF, 0xFA
+    .byte   0x00, 0xFF, 0xFE, 0x03, 0xFF, 0xFD, 0x00, 0x02, 0x7F, 0x0C, 0xB1, 0x00, 0x00, 0xFF, 0x02, 0x05
+    .byte   0xFF, 0x00, 0x13, 0xFF, 0xFE, 0x05, 0x02, 0x7F, 0x07, 0xC2, 0x00, 0x00, 0xFF, 0x04, 0x00, 0xFF
+    .byte   0x02, 0xFD, 0xFF, 0xFE, 0xFD, 0xFF, 0xFC, 0x00, 0x02, 0x7F, 0x04, 0xBC, 0x00, 0x00, 0xFF, 0x00
+    .byte   0x07, 0xFF, 0xF7, 0x00, 0xFF, 0x00, 0xF9, 0xFF, 0x09, 0x00, 0x02, 0x7F, 0xF7, 0xBB, 0x00, 0x00
+    .byte   0xFF, 0xF2, 0x00, 0x02, 0x7F, 0xE3, 0xBE, 0x00, 0x00, 0xFF, 0xF4, 0x00, 0x02, 0x7F, 0xD7, 0xCA
+    .byte   0x00, 0x00, 0xFF, 0x0C, 0x00, 0x02, 0x7F, 0xE3, 0xD8, 0x00, 0x00, 0xFF, 0xF4, 0x00, 0x02, 0x7F
+    .byte   0xD7, 0xE5, 0x00, 0x00, 0xFF, 0x0C, 0x00, 0x02, 0x7F, 0xE3, 0xEE, 0x00, 0x00, 0xFF, 0x00, 0xB6
+    .byte   0xFF, 0x06, 0x00, 0xFF, 0x00, 0x49, 0x02, 0x7F, 0xE7, 0xEE, 0x00, 0x00, 0xFF, 0xF1, 0x00, 0x02
+    .byte   0x7F, 0xD8, 0xEC, 0x00, 0x00, 0xFF, 0xF8, 0x00, 0xFF, 0xFF, 0x09, 0xFF, 0x09, 0x00, 0xFF, 0x00
+    .byte   0xF7, 0x02, 0x7F, 0xD7, 0xEC, 0x00, 0x00, 0xFF, 0x00, 0xB4, 0xFF, 0xF3, 0x00, 0x02, 0x7F, 0xD2
+    .byte   0xA0, 0x00, 0x00, 0xFF, 0x00, 0x4C, 0x02, 0x7F, 0xD0, 0xEC, 0x00, 0x00, 0xFF, 0x00, 0xFA, 0xFF
+    .byte   0xF2, 0x00, 0xFF, 0x00, 0x0B, 0xFF, 0x0E, 0x00, 0x02, 0x7F, 0xD1, 0xF6, 0x00, 0x00, 0xFF, 0x00
+    .byte   0x14, 0x02, 0x7F, 0xD4, 0x09, 0x00, 0x00, 0xFF, 0x00, 0xEE, 0x02, 0x7F, 0xCC, 0xF4, 0x00, 0x00
+    .byte   0xFF, 0x00, 0x18, 0x02, 0x7F, 0xD0, 0x0F, 0x00, 0x00, 0xFF, 0xF2, 0x00, 0xFF, 0x00, 0x0B, 0xFF
+    .byte   0x0E, 0x00, 0xFF, 0x00, 0xFA, 0x02, 0x7F, 0xD2, 0x14, 0x00, 0x00, 0xFF, 0x00, 0x4C, 0x02, 0x7F
+    .byte   0xD7, 0x5B, 0x00, 0x00, 0xFF, 0x0C, 0x00, 0x02, 0x7F, 0xE3, 0x5C, 0x00, 0x00, 0xFF, 0x00, 0xB6
+    .byte   0x02, 0x7F, 0xE7, 0x12, 0x00, 0x00, 0xFF, 0xF1, 0x00, 0x02, 0x7F, 0xD8, 0x14, 0x00, 0x00, 0xFF
+    .byte   0xF8, 0x00, 0xFF, 0xFF, 0xF7, 0xFF, 0x09, 0x00, 0xFF, 0x00, 0x09, 0x02, 0x7F, 0xD7, 0x14, 0x00
+    .byte   0x00, 0xFF, 0x00, 0x4C, 0xFF, 0xF3, 0x00, 0x02, 0x7F, 0xD7, 0x4F, 0x00, 0x00, 0xFF, 0x0C, 0x00
+    .byte   0x02, 0x7F, 0xE9, 0x57, 0x00, 0x00, 0xFF, 0x0E, 0x00, 0xFF, 0x00, 0xCF, 0x02, 0x7F, 0xFD, 0x26
+    .byte   0x00, 0x00, 0xFF, 0xEC, 0x00, 0x02, 0x7F, 0xE3, 0x28, 0x00, 0x00, 0xFF, 0xF4, 0x00, 0x02, 0x7F
+    .byte   0xD7, 0x1B, 0x00, 0x00, 0xFF, 0x0C, 0x00, 0x02, 0x7F, 0xE9, 0x13, 0x00, 0x00, 0xFF, 0x00, 0x49
+    .byte   0xFF, 0xFA, 0x00, 0x02, 0x7F, 0xF2, 0x57, 0x00, 0x00, 0xFF, 0x00, 0xB6, 0x02, 0x7F, 0xF1, 0x0B
+    .byte   0x00, 0x00, 0xFF, 0x00, 0x03, 0xFF, 0xFC, 0x00, 0xFF, 0xFE, 0x05, 0xFF, 0xFC, 0x00, 0xFF, 0x00
+    .byte   0xF8, 0x02, 0x7F, 0xE3, 0x0B, 0x00, 0x00, 0xFF, 0x00, 0x05, 0xFF, 0xF7, 0x00, 0xFF, 0x00, 0xFB
+    .byte   0xFF, 0x12, 0x00, 0x02, 0x7F, 0xF1, 0x0B, 0x00, 0x00, 0xFF, 0x0B, 0xF5, 0x02, 0x7F, 0x01, 0x00
+    .byte   0x00, 0x00, 0xFF, 0x00, 0x0B, 0x02, 0x7F, 0xFD, 0x0B, 0x00, 0x00, 0xFF, 0x00, 0x1D, 0xFF, 0x09
+    .byte   0x00, 0xFF, 0x00, 0xE3, 0xFF, 0xF7, 0x00, 0x02, 0x7F, 0x06, 0x0B, 0x00, 0x00, 0xFF, 0x01, 0xFC
+    .byte   0xFF, 0x05, 0xFD, 0x02, 0x7F, 0x0B, 0x05, 0x00, 0x00, 0xFF, 0x00, 0x2D, 0xFF, 0xFC, 0x00, 0x02
+    .byte   0x7F, 0x07, 0x35, 0x00, 0x00, 0xFF, 0x03, 0x00, 0xFF, 0x02, 0xFD, 0xFF, 0x06, 0x00, 0x02, 0x7F
+    .byte   0x14, 0x34, 0x00, 0x00, 0xFF, 0xFE, 0x02, 0xFF, 0xFD, 0x00, 0x02, 0x7F, 0x0E, 0x39, 0x00, 0x00
+    .byte   0xFF, 0xF9, 0x00, 0x02, 0x7F, 0x07, 0x3A, 0x00, 0x00, 0xFF, 0xF0, 0x00, 0x02, 0x7F, 0xF7, 0x32
+    .byte   0x00, 0x00, 0xFF, 0x10, 0x00, 0xFF, 0x00, 0x1B, 0xFF, 0xF0, 0x00, 0x02, 0x7F, 0xF7, 0x47, 0x00
+    .byte   0x00, 0xFF, 0x10, 0x00, 0x02, 0x7F, 0x07, 0x48, 0x00, 0x00, 0xFF, 0x07, 0x00, 0x02, 0x7F, 0x0E
+    .byte   0x47, 0x00, 0x00, 0xFF, 0x08, 0x00, 0xFF, 0x00, 0xF2, 0xFF, 0xFE, 0xFB, 0xFF, 0x05, 0x00, 0x02
+    .byte   0x7F, 0x1C, 0x35, 0x00, 0x00, 0xFF, 0xFE, 0x02, 0xFF, 0xFD, 0x00, 0x02, 0x7F, 0x16, 0x3A, 0x00
+    .byte   0x00, 0xFF, 0xF8, 0x00, 0x02, 0x7F, 0x16, 0x3B, 0x00, 0x00, 0xFF, 0x08, 0x00, 0xFF, 0x00, 0x0B
+    .byte   0xFF, 0xF8, 0x00, 0x02, 0x7F, 0x16, 0x47, 0x00, 0x00, 0xFF, 0xFE, 0x06, 0xFF, 0x05, 0x00, 0x02
+    .byte   0x7F, 0x1C, 0x4C, 0x00, 0x00, 0xFF, 0xFE, 0xFE, 0xFF, 0xFD, 0x00, 0x02, 0x7F, 0x14, 0x4D, 0x00
+    .byte   0x00, 0xFF, 0xFE, 0xFE, 0xFF, 0xFD, 0x00, 0x02, 0x7F, 0x12, 0x4F, 0x00, 0x00, 0xFF, 0xFA, 0x00
+    .byte   0xFF, 0xFE, 0xFD, 0xFF, 0xFD, 0x00, 0x02, 0x7F, 0x0C, 0x4F, 0x00, 0x00, 0xFF, 0x02, 0xFB, 0xFF
+    .byte   0x00, 0xED, 0xFF, 0xFE, 0xFB, 0x02, 0x7F, 0x07, 0x3E, 0x00, 0x00, 0xFF, 0x04, 0x00, 0xFF, 0x02
+    .byte   0x03, 0xFF, 0xFE, 0x03, 0xFF, 0xFC, 0x00, 0x02, 0x7F, 0x04, 0x44, 0x00, 0x00, 0xFF, 0x00, 0xF9
+    .byte   0xFF, 0xF7, 0x00, 0xFF, 0x00, 0x07, 0xFF, 0x09, 0x00, 0x02, 0x7F, 0xF7, 0x45, 0x00, 0x00, 0xFF
+    .byte   0xF2, 0x00, 0x02, 0x7F, 0xE3, 0x42, 0x00, 0x00, 0xFF, 0xF4, 0x00, 0x02, 0x7F, 0xD7, 0x36, 0x00
+    .byte   0x00, 0xFF, 0x0C, 0x00, 0x02, 0x7F, 0xF2, 0x0A, 0x00, 0x00, 0xFF, 0x02, 0x03, 0xFF, 0x05, 0x00
+    .byte   0xFF, 0x02, 0xFC, 0xFF, 0x03, 0xFF, 0xFF, 0x00, 0xFC, 0xFF, 0x03, 0xFC, 0x02, 0x7F, 0x0C, 0x00
+    .byte   0x00, 0x00, 0xFF, 0x00, 0xFA, 0xFF, 0x05, 0x00, 0xFF, 0x00, 0x0C, 0xFF, 0xFB, 0x00, 0xFF, 0x00
+    .byte   0xFA, 0x02, 0x7F, 0x11, 0xFD, 0x00, 0x00, 0xFF, 0x04, 0x00, 0xFF, 0x00, 0x06, 0xFF, 0xFC, 0x00
+    .byte   0x02, 0x7F, 0x10, 0x06, 0x00, 0x00, 0xFF, 0x00, 0x0A, 0xFF, 0xF6, 0x00, 0x02, 0x7F, 0x10, 0x0B
+    .byte   0x00, 0x00, 0xFF, 0x05, 0x00, 0xFF, 0x03, 0x03, 0xFF, 0x06, 0x00, 0x02, 0x7F, 0x21, 0x0D, 0x00
+    .byte   0x00, 0xFF, 0xFA, 0xFD, 0x02, 0x7F, 0x1A, 0x08, 0x00, 0x00, 0xFF, 0xF6, 0x00, 0x02, 0x7F, 0x1A
+    .byte   0x07, 0x00, 0x00, 0xFF, 0x08, 0x00, 0xFF, 0xFF, 0x06, 0xFF, 0x04, 0x00, 0x02, 0x7F, 0x28, 0x0B
+    .byte   0x00, 0x00, 0xFF, 0xFC, 0xFE, 0x02, 0x7F, 0x22, 0x07, 0x00, 0x00, 0xFF, 0x00, 0xF2, 0x02, 0x7F
+    .byte   0x22, 0xFB, 0x00, 0x00, 0xFF, 0x08, 0x00, 0xFF, 0x00, 0x0A, 0xFF, 0xF8, 0x00, 0x02, 0x7F, 0x2A
+    .byte   0x05, 0x00, 0x00, 0xFF, 0xFE, 0x06, 0xFF, 0x05, 0x00, 0x02, 0x7F, 0x30, 0x08, 0x00, 0x00, 0xFF
+    .byte   0xFB, 0xFE, 0x02, 0x7F, 0x2A, 0x04, 0x00, 0x00, 0xFF, 0x07, 0x00, 0xFF, 0x00, 0xF8, 0xFF, 0xF9
+    .byte   0x00, 0x02, 0x7F, 0x2A, 0xFB, 0x00, 0x00, 0xFF, 0xFE, 0xFA, 0xFF, 0x05, 0x00, 0x02, 0x7F, 0x30
+    .byte   0xF8, 0x00, 0x00, 0xFF, 0xFB, 0x02, 0x02, 0x7F, 0x28, 0xF5, 0x00, 0x00, 0xFF, 0xFC, 0x02, 0x02
+    .byte   0x7F, 0x25, 0xF3, 0x00, 0x00, 0xFF, 0xFC, 0x00, 0xFF, 0x01, 0x06, 0xFF, 0xF8, 0x00, 0x02, 0x7F
+    .byte   0x1A, 0xF8, 0x00, 0x00, 0xFF, 0xF6, 0x00, 0x02, 0x7F, 0x10, 0xFA, 0x00, 0x00, 0xFF, 0x00, 0xF6
+    .byte   0xFF, 0xF6, 0x00, 0x02, 0x7F, 0x10, 0xF5, 0x00, 0x00, 0xFF, 0x05, 0x00, 0xFF, 0x03, 0xFD, 0xFF
+    .byte   0x06, 0x00, 0x02, 0x7F, 0x21, 0xF3, 0x00, 0x00, 0xFF, 0xFA, 0x03, 0x02, 0x7F, 0x18, 0xF2, 0x00
+    .byte   0x00, 0xFF, 0x02, 0x05, 0xFF, 0x00, 0x12, 0xFF, 0xFE, 0x05, 0x02, 0x7F, 0xF4, 0x00, 0x00, 0x00
+    .byte   0xFF, 0xFF, 0xFC, 0xFF, 0xFC, 0xFD, 0xFF, 0xE9, 0x00, 0xFF, 0x00, 0x0E, 0xFF, 0x17, 0x00, 0xFF
+    .byte   0x04, 0xFD, 0xFF, 0x01, 0xFC, 0x02, 0x7F, 0xF2, 0xF3, 0x00, 0x00, 0xFF, 0x00, 0xB6, 0x02, 0x7F
+    .byte   0xE9, 0xA9, 0x00, 0x00, 0xFF, 0x0E, 0x00, 0xFF, 0x00, 0x31, 0x02, 0x7F, 0xFD, 0xDA, 0x00, 0x00
+    .byte   0xFF, 0xEC, 0x00, 0x02, 0x7F, 0xE3, 0xB1, 0x00, 0x00, 0xFF, 0xF4, 0x00, 0x02, 0x7F, 0xD7, 0xA5
+    .byte   0x00, 0x00, 0xFF, 0x0C, 0x00, 0x02, 0x7F, 0x1E, 0xB9, 0x00, 0x00, 0xFF, 0x03, 0x00, 0xFF, 0x01
+    .byte   0xFE, 0xFF, 0x05, 0x00, 0x02, 0x7F, 0x24, 0xB9, 0x00, 0x00, 0xFF, 0x05, 0x00, 0xFF, 0x00, 0x0D
+    .byte   0xFF, 0xFB, 0x00, 0x02, 0x7F, 0x23, 0xC8, 0x00, 0x00, 0xFF, 0x00, 0xEF, 0x02, 0x7F, 0x21, 0xB4
+    .byte   0x00, 0x00, 0xFF, 0xFB, 0x00, 0xFF, 0x02, 0x06, 0x02, 0x7F, 0x1E, 0xBC, 0x00, 0x00, 0xFF, 0x06
+    .byte   0x00, 0x02, 0x7F, 0x29, 0xBA, 0x00, 0x00, 0xFF, 0x04, 0x00, 0xFF, 0x00, 0x0B, 0xFF, 0xFC, 0x00
+    .byte   0x02, 0x7F, 0x27, 0xC8, 0x00, 0x00, 0xFF, 0xF7, 0xFE, 0x02, 0x7F, 0x1E, 0xC5, 0x00, 0x00, 0xFF
+    .byte   0xFE, 0x06, 0xFF, 0x04, 0x00, 0x02, 0x7F, 0x1E, 0xC3, 0x00, 0x00, 0xFF, 0x06, 0x00, 0x02, 0x7F
+    .byte   0x2D, 0xC3, 0x00, 0x00, 0xFF, 0x03, 0x00, 0xFF, 0x00, 0xF9, 0xFF, 0xFD, 0x00, 0x02, 0x7F, 0x30
+    .byte   0xBD, 0x00, 0x00, 0xFF, 0x03, 0x00, 0xFF, 0x00, 0x05, 0x02, 0x7F, 0x33, 0xC2, 0x00, 0x00, 0xFF
+    .byte   0xFD, 0x00, 0x02, 0x7F, 0x33, 0xF8, 0x00, 0x00, 0xFF, 0xFD, 0x00, 0xFF, 0x01, 0x04, 0x02, 0x7F
+    .byte   0x31, 0xFA, 0x00, 0x00, 0xFF, 0x05, 0x00, 0xFF, 0x00, 0x0C, 0xFF, 0xFB, 0x00, 0x02, 0x7F, 0x31
+    .byte   0x04, 0x00, 0x00, 0xFF, 0xFF, 0x04, 0xFF, 0x03, 0x00, 0x02, 0x7F, 0x36, 0x05, 0x00, 0x00, 0xFF
+    .byte   0x04, 0x00, 0xFF, 0x00, 0xF6, 0xFF, 0xFC, 0x00, 0x02, 0x7F, 0x3A, 0xFD, 0x00, 0x00, 0xFF, 0x03
+    .byte   0x00, 0xFF, 0x00, 0x06, 0xFF, 0xFD, 0x00, 0x02, 0x7F, 0x3D, 0x02, 0x00, 0x00, 0xFF, 0x04, 0x00
+    .byte   0xFF, 0x00, 0xFC, 0xFF, 0xFC, 0x00, 0x02, 0x7F, 0x27, 0x38, 0x00, 0x00, 0xFF, 0xF7, 0x02, 0x02
+    .byte   0x7F, 0x1E, 0x3B, 0x00, 0x00, 0xFF, 0xFE, 0xFA, 0xFF, 0x04, 0x00, 0x02, 0x7F, 0x23, 0x38, 0x00
+    .byte   0x00, 0xFF, 0x00, 0x11, 0x02, 0x7F, 0x24, 0x47, 0x00, 0x00, 0xFF, 0x05, 0x00, 0xFF, 0x00, 0xF3
+    .byte   0xFF, 0xFB, 0x00, 0x02, 0x7F, 0x24, 0x3D, 0x00, 0x00, 0xFF, 0xFA, 0x00, 0x02, 0x7F, 0x1E, 0x44
+    .byte   0x00, 0x00, 0xFF, 0x06, 0x00, 0x02, 0x7F, 0x29, 0x46, 0x00, 0x00, 0xFF, 0x04, 0x00, 0xFF, 0x00
+    .byte   0xF5, 0xFF, 0xFC, 0x00, 0x02, 0x7F, 0x2D, 0x3D, 0x00, 0x00, 0xFF, 0x03, 0x00, 0xFF, 0x00, 0x07
+    .byte   0xFF, 0xFD, 0x00, 0x02, 0x7F, 0x30, 0x43, 0x00, 0x00, 0xFF, 0x03, 0x00, 0xFF, 0x00, 0xFB, 0x02
+    .byte   0x7F, 0x33, 0x3E, 0x00, 0x00, 0xFF, 0xFD, 0x00, 0x02, 0x7F, 0x27, 0x49, 0x00, 0x00, 0xFF, 0xFB
+    .byte   0x00, 0xFF, 0xFF, 0xFE, 0xFF, 0xFD, 0x00, 0x02, 0x7F, 0x1E, 0x46, 0x00, 0x00, 0xFF, 0xFE, 0x06
+    .byte   0xFF, 0x05, 0x00, 0x02, 0x7F, 0xC7, 0x0D, 0x00, 0x00, 0xFF, 0x00, 0xE6, 0x02, 0x7F, 0xC0, 0xF2
+    .byte   0x00, 0x00, 0xFF, 0x00, 0x1C, 0x02
+.section .text
 
 @ --- ANGKOR_BG_3D_DATA (192 path(s)) ---
+    .balign 4
 .global _ANGKOR_BG_3D_DATA
 _ANGKOR_BG_3D_DATA:
     .word   389               @ vertex_count
@@ -5820,6 +2273,7 @@ _ANGKOR_BG_3D_DATA:
     .byte   0x09, 0x03, 0x00  @ vert 386: x=9,y=3,z=0
     .byte   0x08, 0x06, 0x00  @ vert 387: x=8,y=6,z=0
     .byte   0x04, 0x06, 0x00  @ vert 388: x=4,y=6,z=0
+    .balign 4
     .word   192               @ path_count
     .byte   5               @ path 0: pt_count
     .byte   0               @ path 0: closed
@@ -6853,11 +3307,12 @@ _ANGKOR_BG_3D_DATA:
     .byte   132
     .byte   195
     .byte   195
+    .balign 4
 
-@ --- barcelona_bg (60 path(s)) ---
+@ --- barcelona_bg (54 path(s)) ---
 .global _BARCELONA_BG_VECTORS
 _BARCELONA_BG_VECTORS:
-    .word   60               @ path_count
+    .word   54               @ path_count
     .word   _BARCELONA_BG_PATH0      @ ptr path 0
     .word   _BARCELONA_BG_PATH1      @ ptr path 1
     .word   _BARCELONA_BG_PATH2      @ ptr path 2
@@ -6912,16 +3367,174 @@ _BARCELONA_BG_VECTORS:
     .word   _BARCELONA_BG_PATH51      @ ptr path 51
     .word   _BARCELONA_BG_PATH52      @ ptr path 52
     .word   _BARCELONA_BG_PATH53      @ ptr path 53
-    .word   _BARCELONA_BG_PATH54      @ ptr path 54
-    .word   _BARCELONA_BG_PATH55      @ ptr path 55
-    .word   _BARCELONA_BG_PATH56      @ ptr path 56
-    .word   _BARCELONA_BG_PATH57      @ ptr path 57
-    .word   _BARCELONA_BG_PATH58      @ ptr path 58
-    .word   _BARCELONA_BG_PATH59      @ ptr path 59
 
 _BARCELONA_BG_PATH0:
     .byte   127               @ intensity
-    .byte   0xC0, 0xC6, 0x00, 0x00  @ y=-64, x=-58, hdr
+    .byte   0xF3, 0xF1, 0x00, 0x00  @ y=-13, x=-15, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x0F, 0x00  @ line dy=15, dx=0
+    .byte   0xFF, 0x08, 0x03  @ line dy=8, dx=3
+    .byte   0xFF, 0xF7, 0x04  @ line dy=-9, dx=4
+    .byte   0xFF, 0xF2, 0x01  @ line dy=-14, dx=1
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH1:
+    .byte   127               @ intensity
+    .byte   0xF2, 0xFC, 0x00, 0x00  @ y=-14, x=-4, hdr (simplified: -6 pts)
+    .byte   0xFF, 0x3A, 0x00  @ line dy=58, dx=0
+    .byte   0xFF, 0x0D, 0x03  @ line dy=13, dx=3
+    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
+    .byte   0xFF, 0xB1, 0x0A  @ line dy=-79, dx=10
+    .byte   0xFF, 0x34, 0xFD  @ line dy=52, dx=-3
+    .byte   0xFF, 0x0E, 0x02  @ line dy=14, dx=2
+    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
+    .byte   0xFF, 0xF1, 0x04  @ line dy=-15, dx=4
+    .byte   0xFF, 0xC7, 0x07  @ line dy=-57, dx=7
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH2:
+    .byte   127               @ intensity
+    .byte   0xEE, 0x13, 0x00, 0x00  @ y=-18, x=19, hdr
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH3:
+    .byte   127               @ intensity
+    .byte   0xF0, 0x13, 0x00, 0x00  @ y=-16, x=19, hdr
+    .byte   0xFF, 0x10, 0xFE  @ line dy=16, dx=-2
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH4:
+    .byte   127               @ intensity
+    .byte   0x02, 0x11, 0x00, 0x00  @ y=2, x=17, hdr
+    .byte   0xFF, 0x17, 0xFD  @ line dy=23, dx=-3
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH5:
+    .byte   127               @ intensity
+    .byte   0x1C, 0x0F, 0x00, 0x00  @ y=28, x=15, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x01, 0xFA  @ line dy=1, dx=-6
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH6:
+    .byte   127               @ intensity
+    .byte   0x1A, 0x0B, 0x00, 0x00  @ y=26, x=11, hdr
+    .byte   0xFF, 0xE9, 0x01  @ line dy=-23, dx=1
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH7:
+    .byte   127               @ intensity
+    .byte   0x00, 0x0C, 0x00, 0x00  @ y=0, x=12, hdr
+    .byte   0xFF, 0xF3, 0x01  @ line dy=-13, dx=1
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH8:
+    .byte   127               @ intensity
+    .byte   0xF2, 0x0D, 0x00, 0x00  @ y=-14, x=13, hdr
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH9:
+    .byte   127               @ intensity
+    .byte   0xF1, 0x10, 0x00, 0x00  @ y=-15, x=16, hdr
+    .byte   0xFF, 0x0F, 0xFF  @ line dy=15, dx=-1
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH10:
+    .byte   127               @ intensity
+    .byte   0x07, 0x05, 0x00, 0x00  @ y=7, x=5, hdr
+    .byte   0xFF, 0xF0, 0x01  @ line dy=-16, dx=1
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH11:
+    .byte   127               @ intensity
+    .byte   0xF9, 0x03, 0x00, 0x00  @ y=-7, x=3, hdr
+    .byte   0xFF, 0x0E, 0xFF  @ line dy=14, dx=-1
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH12:
+    .byte   127               @ intensity
+    .byte   0x07, 0xFF, 0x00, 0x00  @ y=7, x=-1, hdr
+    .byte   0xFF, 0xF4, 0x01  @ line dy=-12, dx=1
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH13:
+    .byte   127               @ intensity
+    .byte   0xF5, 0x00, 0x00, 0x00  @ y=-11, x=0, hdr
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH14:
+    .byte   127               @ intensity
+    .byte   0xF3, 0x05, 0x00, 0x00  @ y=-13, x=5, hdr
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH15:
+    .byte   127               @ intensity
+    .byte   0xF0, 0x08, 0x00, 0x00  @ y=-16, x=8, hdr
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH16:
+    .byte   127               @ intensity
+    .byte   0xF0, 0x10, 0x00, 0x00  @ y=-16, x=16, hdr
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH17:
+    .byte   127               @ intensity
+    .byte   0xD7, 0x1A, 0x00, 0x00  @ y=-41, x=26, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x0C, 0xFF  @ line dy=12, dx=-1
+    .byte   0xFF, 0x12, 0xDC  @ line dy=18, dx=-36
+    .byte   0xFF, 0xEE, 0xDC  @ line dy=-18, dx=-36
+    .byte   0xFF, 0xF5, 0xFE  @ line dy=-11, dx=-2
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH18:
+    .byte   127               @ intensity
+    .byte   0xD5, 0xCD, 0x00, 0x00  @ y=-43, x=-51, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x16, 0x28  @ line dy=22, dx=40
+    .byte   0xFF, 0xEA, 0x27  @ line dy=-22, dx=39
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH19:
+    .byte   127               @ intensity
+    .byte   0xC1, 0x21, 0x00, 0x00  @ y=-63, x=33, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x13, 0xF6  @ line dy=19, dx=-10
+    .byte   0xFF, 0x00, 0xFC  @ line dy=0, dx=-4
+    .byte   0xFF, 0xED, 0x03  @ line dy=-19, dx=3
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH20:
+    .byte   127               @ intensity
+    .byte   0xC1, 0x14, 0x00, 0x00  @ y=-63, x=20, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x18, 0xF9  @ line dy=24, dx=-7
+    .byte   0xFF, 0x01, 0xF7  @ line dy=1, dx=-9
+    .byte   0xFF, 0xE7, 0x05  @ line dy=-25, dx=5
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH21:
+    .byte   127               @ intensity
+    .byte   0xC1, 0x05, 0x00, 0x00  @ y=-63, x=5, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x18, 0xF9  @ line dy=24, dx=-7
+    .byte   0xFF, 0x0A, 0xF7  @ line dy=10, dx=-9
+    .byte   0xFF, 0xF6, 0xF5  @ line dy=-10, dx=-11
+    .byte   0xFF, 0xE7, 0xF9  @ line dy=-25, dx=-7
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH22:
+    .byte   127               @ intensity
+    .byte   0xC0, 0xE1, 0x00, 0x00  @ y=-64, x=-31, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x19, 0x04  @ line dy=25, dx=4
+    .byte   0xFF, 0xFF, 0xF7  @ line dy=-1, dx=-9
+    .byte   0xFF, 0xE8, 0xF8  @ line dy=-24, dx=-8
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH23:
+    .byte   127               @ intensity
+    .byte   0xC0, 0xD1, 0x00, 0x00  @ y=-64, x=-47, hdr
+    .byte   0xFF, 0x14, 0x06  @ line dy=20, dx=6
+    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
+    .byte   0xFF, 0xEC, 0xF9  @ line dy=-20, dx=-7
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH24:
+    .byte   127               @ intensity
+    .byte   0xC0, 0xC6, 0x00, 0x00  @ y=-64, x=-58, hdr (simplified: -1 pts)
     .byte   0xFF, 0x0D, 0x05  @ line dy=13, dx=5
     .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
     .byte   0xFF, 0x14, 0x2A  @ line dy=20, dx=42
@@ -6930,414 +3543,253 @@ _BARCELONA_BG_PATH0:
     .byte   0xFF, 0xF3, 0x06  @ line dy=-13, dx=6
     .byte   0x02            @ end marker
 
-_BARCELONA_BG_PATH1:
-    .byte   127               @ intensity
-    .byte   0xC0, 0xCA, 0x00, 0x00  @ y=-64, x=-54, hdr
-    .byte   0xFF, 0x14, 0x07  @ line dy=20, dx=7
-    .byte   0xFF, 0x00, 0x06  @ line dy=0, dx=6
-    .byte   0xFF, 0xEC, 0xFA  @ line dy=-20, dx=-6
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH2:
-    .byte   127               @ intensity
-    .byte   0xC0, 0xD4, 0x00, 0x00  @ y=-64, x=-44, hdr
-    .byte   0xFF, 0x18, 0x08  @ line dy=24, dx=8
-    .byte   0xFF, 0x01, 0x09  @ line dy=1, dx=9
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH3:
-    .byte   127               @ intensity
-    .byte   0xC1, 0x05, 0x00, 0x00  @ y=-63, x=5, hdr
-    .byte   0xFF, 0x18, 0xF9  @ line dy=24, dx=-7
-    .byte   0xFF, 0x0A, 0xF7  @ line dy=10, dx=-9
-    .byte   0xFF, 0xF6, 0xF5  @ line dy=-10, dx=-11
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH4:
-    .byte   127               @ intensity
-    .byte   0xC0, 0xF0, 0x00, 0x00  @ y=-64, x=-16, hdr
-    .byte   0xFF, 0x0C, 0x01  @ line dy=12, dx=1
-    .byte   0xFF, 0x01, 0x04  @ line dy=1, dx=4
-    .byte   0xFF, 0xFF, 0x04  @ line dy=-1, dx=4
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH5:
-    .byte   127               @ intensity
-    .byte   0xCC, 0xF9, 0x00, 0x00  @ y=-52, x=-7, hdr
-    .byte   0xFF, 0xF5, 0x01  @ line dy=-11, dx=1
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH6:
-    .byte   127               @ intensity
-    .byte   0xD9, 0xEA, 0x00, 0x00  @ y=-39, x=-22, hdr
-    .byte   0xFF, 0xE7, 0xF9  @ line dy=-25, dx=-7
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH7:
-    .byte   127               @ intensity
-    .byte   0xD9, 0xE5, 0x00, 0x00  @ y=-39, x=-27, hdr
-    .byte   0xFF, 0xE7, 0xFC  @ line dy=-25, dx=-4
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH8:
+_BARCELONA_BG_PATH25:
     .byte   127               @ intensity
     .byte   0xC1, 0x3A, 0x00, 0x00  @ y=-63, x=58, hdr
     .byte   0x02            @ end marker
 
-_BARCELONA_BG_PATH9:
-    .byte   127               @ intensity
-    .byte   0xC1, 0x09, 0x00, 0x00  @ y=-63, x=9, hdr
-    .byte   0xFF, 0x11, 0xFC  @ line dy=17, dx=-4
-    .byte   0xFF, 0x08, 0xFF  @ line dy=8, dx=-1
-    .byte   0xFF, 0xFF, 0x09  @ line dy=-1, dx=9
-    .byte   0xFF, 0xE8, 0x07  @ line dy=-24, dx=7
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH10:
-    .byte   127               @ intensity
-    .byte   0xC1, 0x16, 0x00, 0x00  @ y=-63, x=22, hdr
-    .byte   0xFF, 0x13, 0xFD  @ line dy=19, dx=-3
-    .byte   0xFF, 0x00, 0x04  @ line dy=0, dx=4
-    .byte   0xFF, 0xED, 0x0A  @ line dy=-19, dx=10
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH11:
-    .byte   127               @ intensity
-    .byte   0xD5, 0xCD, 0x00, 0x00  @ y=-43, x=-51, hdr
-    .byte   0xFF, 0x16, 0x28  @ line dy=22, dx=40
-    .byte   0xFF, 0xEA, 0x27  @ line dy=-22, dx=39
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH12:
-    .byte   127               @ intensity
-    .byte   0xEB, 0xF5, 0x00, 0x00  @ y=-21, x=-11, hdr
-    .byte   0xFF, 0xFB, 0x00  @ line dy=-5, dx=0
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH13:
-    .byte   127               @ intensity
-    .byte   0xD8, 0xCF, 0x00, 0x00  @ y=-40, x=-49, hdr
-    .byte   0xFF, 0x0B, 0x02  @ line dy=11, dx=2
-    .byte   0xFF, 0x12, 0x24  @ line dy=18, dx=36
-    .byte   0xFF, 0xEE, 0x24  @ line dy=-18, dx=36
-    .byte   0xFF, 0xF4, 0x01  @ line dy=-12, dx=1
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH14:
-    .byte   127               @ intensity
-    .byte   0xE4, 0xD3, 0x00, 0x00  @ y=-28, x=-45, hdr
-    .byte   0xFF, 0x3A, 0x08  @ line dy=58, dx=8
-    .byte   0xFF, 0x00, 0xFF  @ line dy=0, dx=-1
-    .byte   0xFF, 0x0F, 0x03  @ line dy=15, dx=3
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0xF2, 0x02  @ line dy=-14, dx=2
-    .byte   0xFF, 0x00, 0xFF  @ line dy=0, dx=-1
-    .byte   0xFF, 0xCB, 0x00  @ line dy=-53, dx=0
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH15:
-    .byte   127               @ intensity
-    .byte   0xEA, 0xE0, 0x00, 0x00  @ y=-22, x=-32, hdr
-    .byte   0xFF, 0x40, 0x06  @ line dy=64, dx=6
-    .byte   0xFF, 0x01, 0xFF  @ line dy=1, dx=-1
-    .byte   0xFF, 0x0F, 0x03  @ line dy=15, dx=3
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0xF3, 0x03  @ line dy=-13, dx=3
-    .byte   0xFF, 0xFF, 0xFF  @ line dy=-1, dx=-1
-    .byte   0xFF, 0xC5, 0x01  @ line dy=-59, dx=1
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH16:
-    .byte   127               @ intensity
-    .byte   0xF2, 0xFC, 0x00, 0x00  @ y=-14, x=-4, hdr
-    .byte   0xFF, 0x39, 0x01  @ line dy=57, dx=1
-    .byte   0xFF, 0x01, 0xFF  @ line dy=1, dx=-1
-    .byte   0xFF, 0x0D, 0x03  @ line dy=13, dx=3
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0xF1, 0x02  @ line dy=-15, dx=2
-    .byte   0xFF, 0x00, 0xFF  @ line dy=0, dx=-1
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH17:
-    .byte   127               @ intensity
-    .byte   0xEA, 0x0B, 0x00, 0x00  @ y=-22, x=11, hdr
-    .byte   0xFF, 0x34, 0xFE  @ line dy=52, dx=-2
-    .byte   0xFF, 0x00, 0xFF  @ line dy=0, dx=-1
-    .byte   0xFF, 0x0E, 0x02  @ line dy=14, dx=2
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0xF1, 0x04  @ line dy=-15, dx=4
-    .byte   0xFF, 0x00, 0xFF  @ line dy=0, dx=-1
-    .byte   0xFF, 0xC7, 0x08  @ line dy=-57, dx=8
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH18:
-    .byte   127               @ intensity
-    .byte   0x12, 0xED, 0x00, 0x00  @ y=18, x=-19, hdr
-    .byte   0xFF, 0x03, 0x07  @ line dy=3, dx=7
-    .byte   0xFF, 0xFE, 0x08  @ line dy=-2, dx=8
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH19:
-    .byte   127               @ intensity
-    .byte   0x0B, 0xED, 0x00, 0x00  @ y=11, x=-19, hdr
-    .byte   0xFF, 0x05, 0x07  @ line dy=5, dx=7
-    .byte   0xFF, 0xFC, 0x08  @ line dy=-4, dx=8
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH20:
-    .byte   127               @ intensity
-    .byte   0xF3, 0xF1, 0x00, 0x00  @ y=-13, x=-15, hdr
-    .byte   0xFF, 0x0F, 0x00  @ line dy=15, dx=0
-    .byte   0xFF, 0x08, 0x03  @ line dy=8, dx=3
-    .byte   0xFF, 0xF7, 0x04  @ line dy=-9, dx=4
-    .byte   0xFF, 0xF2, 0x01  @ line dy=-14, dx=1
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH21:
-    .byte   127               @ intensity
-    .byte   0x2A, 0x02, 0x00, 0x00  @ y=42, x=2, hdr
-    .byte   0xFF, 0xC0, 0x09  @ line dy=-64, dx=9
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH22:
-    .byte   127               @ intensity
-    .byte   0x2A, 0xE6, 0x00, 0x00  @ y=42, x=-26, hdr
-    .byte   0xFF, 0x01, 0x06  @ line dy=1, dx=6
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH23:
-    .byte   127               @ intensity
-    .byte   0x1D, 0xDB, 0x00, 0x00  @ y=29, x=-37, hdr
-    .byte   0xFF, 0x01, 0x05  @ line dy=1, dx=5
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH24:
-    .byte   127               @ intensity
-    .byte   0x2A, 0xFD, 0x00, 0x00  @ y=42, x=-3, hdr
-    .byte   0xFF, 0xFF, 0x05  @ line dy=-1, dx=5
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH25:
-    .byte   127               @ intensity
-    .byte   0x1D, 0x09, 0x00, 0x00  @ y=29, x=9, hdr
-    .byte   0xFF, 0xFF, 0x06  @ line dy=-1, dx=6
-    .byte   0x02            @ end marker
-
 _BARCELONA_BG_PATH26:
     .byte   127               @ intensity
-    .byte   0x28, 0xFE, 0x00, 0x00  @ y=40, x=-2, hdr
-    .byte   0xFF, 0xE6, 0x00  @ line dy=-26, dx=0
+    .byte   0xC1, 0xFA, 0x00, 0x00  @ y=-63, x=-6, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x0B, 0xFF  @ line dy=11, dx=-1
+    .byte   0xFF, 0x01, 0xFC  @ line dy=1, dx=-4
+    .byte   0xFF, 0xFF, 0xFC  @ line dy=-1, dx=-4
+    .byte   0xFF, 0xF4, 0xFF  @ line dy=-12, dx=-1
     .byte   0x02            @ end marker
 
 _BARCELONA_BG_PATH27:
     .byte   127               @ intensity
-    .byte   0x1A, 0x0B, 0x00, 0x00  @ y=26, x=11, hdr
-    .byte   0xFF, 0xE9, 0x01  @ line dy=-23, dx=1
+    .byte   0xE6, 0xF5, 0x00, 0x00  @ y=-26, x=-11, hdr
+    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
     .byte   0x02            @ end marker
 
 _BARCELONA_BG_PATH28:
     .byte   127               @ intensity
-    .byte   0x28, 0xE8, 0x00, 0x00  @ y=40, x=-24, hdr
-    .byte   0xFF, 0xE5, 0xFD  @ line dy=-27, dx=-3
+    .byte   0xF1, 0xED, 0x00, 0x00  @ y=-15, x=-19, hdr (simplified: -7 pts)
+    .byte   0xFF, 0x3C, 0x00  @ line dy=60, dx=0
+    .byte   0xFF, 0x0D, 0xFD  @ line dy=13, dx=-3
+    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
+    .byte   0xFF, 0xF1, 0xFD  @ line dy=-15, dx=-3
+    .byte   0xFF, 0xFF, 0x01  @ line dy=-1, dx=1
+    .byte   0xFF, 0xC0, 0xFA  @ line dy=-64, dx=-6
+    .byte   0xFF, 0x35, 0x01  @ line dy=53, dx=1
+    .byte   0xFF, 0x0E, 0xFE  @ line dy=14, dx=-2
+    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
+    .byte   0xFF, 0xB7, 0xF6  @ line dy=-73, dx=-10
     .byte   0x02            @ end marker
 
 _BARCELONA_BG_PATH29:
     .byte   127               @ intensity
-    .byte   0x28, 0xEB, 0x00, 0x00  @ y=40, x=-21, hdr
-    .byte   0xFF, 0xE6, 0x00  @ line dy=-26, dx=0
+    .byte   0xF0, 0xD7, 0x00, 0x00  @ y=-16, x=-41, hdr
+    .byte   0xFF, 0x10, 0x02  @ line dy=16, dx=2
     .byte   0x02            @ end marker
 
 _BARCELONA_BG_PATH30:
-    .byte   127               @ intensity
-    .byte   0x0E, 0xE9, 0x00, 0x00  @ y=14, x=-23, hdr
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH31:
-    .byte   127               @ intensity
-    .byte   0x28, 0x01, 0x00, 0x00  @ y=40, x=1, hdr
-    .byte   0xFF, 0xE5, 0x03  @ line dy=-27, dx=3
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH32:
-    .byte   127               @ intensity
-    .byte   0x19, 0x0E, 0x00, 0x00  @ y=25, x=14, hdr
-    .byte   0xFF, 0xE9, 0x03  @ line dy=-23, dx=3
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH33:
-    .byte   127               @ intensity
-    .byte   0x07, 0xE5, 0x00, 0x00  @ y=7, x=-27, hdr
-    .byte   0xFF, 0xF0, 0xFF  @ line dy=-16, dx=-1
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH34:
-    .byte   127               @ intensity
-    .byte   0x07, 0xE8, 0x00, 0x00  @ y=7, x=-24, hdr
-    .byte   0xFF, 0xF2, 0xFF  @ line dy=-14, dx=-1
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH35:
-    .byte   127               @ intensity
-    .byte   0x07, 0xEB, 0x00, 0x00  @ y=7, x=-21, hdr
-    .byte   0xFF, 0xF4, 0xFF  @ line dy=-12, dx=-1
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH36:
-    .byte   127               @ intensity
-    .byte   0xF5, 0x00, 0x00, 0x00  @ y=-11, x=0, hdr
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH37:
-    .byte   127               @ intensity
-    .byte   0xF3, 0x05, 0x00, 0x00  @ y=-13, x=5, hdr
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH38:
-    .byte   127               @ intensity
-    .byte   0xF0, 0x08, 0x00, 0x00  @ y=-16, x=8, hdr
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH39:
-    .byte   127               @ intensity
-    .byte   0x1B, 0xDC, 0x00, 0x00  @ y=27, x=-36, hdr
-    .byte   0xFF, 0xEB, 0xFE  @ line dy=-21, dx=-2
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH40:
-    .byte   127               @ intensity
-    .byte   0x1B, 0xDE, 0x00, 0x00  @ y=27, x=-34, hdr
-    .byte   0xFF, 0xEB, 0x00  @ line dy=-21, dx=0
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH41:
-    .byte   127               @ intensity
-    .byte   0x00, 0xD9, 0x00, 0x00  @ y=0, x=-39, hdr
-    .byte   0xFF, 0xF0, 0xFE  @ line dy=-16, dx=-2
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH42:
     .byte   127               @ intensity
     .byte   0x00, 0xDB, 0x00, 0x00  @ y=0, x=-37, hdr
     .byte   0xFF, 0xF1, 0xFF  @ line dy=-15, dx=-1
     .byte   0x02            @ end marker
 
-_BARCELONA_BG_PATH43:
+_BARCELONA_BG_PATH31:
     .byte   127               @ intensity
-    .byte   0x00, 0xDE, 0x00, 0x00  @ y=0, x=-34, hdr
-    .byte   0xFF, 0xF3, 0xFF  @ line dy=-13, dx=-1
+    .byte   0xF3, 0xDD, 0x00, 0x00  @ y=-13, x=-35, hdr
+    .byte   0xFF, 0x0D, 0x01  @ line dy=13, dx=1
     .byte   0x02            @ end marker
 
-_BARCELONA_BG_PATH44:
+_BARCELONA_BG_PATH32:
     .byte   127               @ intensity
-    .byte   0x3D, 0xEC, 0x00, 0x00  @ y=61, x=-20, hdr
-    .byte   0xFF, 0x03, 0xFF  @ line dy=3, dx=-1
-    .byte   0xFF, 0x00, 0xFD  @ line dy=0, dx=-3
-    .byte   0xFF, 0xFD, 0xFF  @ line dy=-3, dx=-1
-    .byte   0xFF, 0xFD, 0x01  @ line dy=-3, dx=1
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0x03, 0x02  @ line dy=3, dx=2
+    .byte   0x06, 0xDE, 0x00, 0x00  @ y=6, x=-34, hdr
+    .byte   0xFF, 0x15, 0x00  @ line dy=21, dx=0
     .byte   0x02            @ end marker
 
-_BARCELONA_BG_PATH45:
+_BARCELONA_BG_PATH33:
     .byte   127               @ intensity
-    .byte   0x30, 0xE1, 0x00, 0x00  @ y=48, x=-31, hdr
-    .byte   0xFF, 0x03, 0xFF  @ line dy=3, dx=-1
-    .byte   0xFF, 0x00, 0xFD  @ line dy=0, dx=-3
-    .byte   0xFF, 0xFD, 0xFE  @ line dy=-3, dx=-2
-    .byte   0xFF, 0xFD, 0x02  @ line dy=-3, dx=2
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0x03, 0x02  @ line dy=3, dx=2
+    .byte   0x1B, 0xDC, 0x00, 0x00  @ y=27, x=-36, hdr
+    .byte   0xFF, 0xEB, 0xFE  @ line dy=-21, dx=-2
     .byte   0x02            @ end marker
 
-_BARCELONA_BG_PATH46:
+_BARCELONA_BG_PATH34:
     .byte   127               @ intensity
-    .byte   0x3C, 0x03, 0x00, 0x00  @ y=60, x=3, hdr
-    .byte   0xFF, 0x03, 0xFF  @ line dy=3, dx=-1
-    .byte   0xFF, 0x00, 0xFC  @ line dy=0, dx=-4
-    .byte   0xFF, 0xFD, 0xFF  @ line dy=-3, dx=-1
-    .byte   0xFF, 0xFD, 0x02  @ line dy=-3, dx=2
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0x03, 0x02  @ line dy=3, dx=2
+    .byte   0x07, 0xE5, 0x00, 0x00  @ y=7, x=-27, hdr
+    .byte   0xFF, 0xF0, 0xFF  @ line dy=-16, dx=-1
     .byte   0x02            @ end marker
 
-_BARCELONA_BG_PATH47:
+_BARCELONA_BG_PATH35:
     .byte   127               @ intensity
-    .byte   0x2E, 0x0E, 0x00, 0x00  @ y=46, x=14, hdr
-    .byte   0xFF, 0x03, 0xFF  @ line dy=3, dx=-1
-    .byte   0xFF, 0x00, 0xFC  @ line dy=0, dx=-4
-    .byte   0xFF, 0xFD, 0xFF  @ line dy=-3, dx=-1
-    .byte   0xFF, 0xFE, 0x02  @ line dy=-2, dx=2
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0x02, 0x02  @ line dy=2, dx=2
+    .byte   0xF9, 0xE7, 0x00, 0x00  @ y=-7, x=-25, hdr
+    .byte   0xFF, 0x0E, 0x01  @ line dy=14, dx=1
     .byte   0x02            @ end marker
 
-_BARCELONA_BG_PATH48:
+_BARCELONA_BG_PATH36:
     .byte   127               @ intensity
-    .byte   0xF2, 0x0D, 0x00, 0x00  @ y=-14, x=13, hdr
+    .byte   0x07, 0xEB, 0x00, 0x00  @ y=7, x=-21, hdr
+    .byte   0xFF, 0xF4, 0xFF  @ line dy=-12, dx=-1
     .byte   0x02            @ end marker
 
-_BARCELONA_BG_PATH49:
-    .byte   127               @ intensity
-    .byte   0xF0, 0x10, 0x00, 0x00  @ y=-16, x=16, hdr
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH50:
-    .byte   127               @ intensity
-    .byte   0xEE, 0x13, 0x00, 0x00  @ y=-18, x=19, hdr
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_PATH51:
+_BARCELONA_BG_PATH37:
     .byte   127               @ intensity
     .byte   0x01, 0xEE, 0x00, 0x00  @ y=1, x=-18, hdr
     .byte   0x02            @ end marker
 
-_BARCELONA_BG_PATH52:
+_BARCELONA_BG_PATH38:
     .byte   127               @ intensity
     .byte   0x03, 0xF1, 0x00, 0x00  @ y=3, x=-15, hdr
     .byte   0x02            @ end marker
 
-_BARCELONA_BG_PATH53:
+_BARCELONA_BG_PATH39:
     .byte   127               @ intensity
     .byte   0x05, 0xF4, 0x00, 0x00  @ y=5, x=-12, hdr
     .byte   0x02            @ end marker
 
-_BARCELONA_BG_PATH54:
+_BARCELONA_BG_PATH40:
     .byte   127               @ intensity
-    .byte   0x07, 0x05, 0x00, 0x00  @ y=7, x=5, hdr
-    .byte   0xFF, 0xF0, 0x01  @ line dy=-16, dx=1
+    .byte   0x0B, 0xED, 0x00, 0x00  @ y=11, x=-19, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x05, 0x07  @ line dy=5, dx=7
+    .byte   0xFF, 0xFC, 0x08  @ line dy=-4, dx=8
     .byte   0x02            @ end marker
 
-_BARCELONA_BG_PATH55:
+_BARCELONA_BG_PATH41:
     .byte   127               @ intensity
-    .byte   0x07, 0x02, 0x00, 0x00  @ y=7, x=2, hdr
-    .byte   0xFF, 0xF2, 0x01  @ line dy=-14, dx=1
+    .byte   0x0E, 0xFE, 0x00, 0x00  @ y=14, x=-2, hdr
+    .byte   0xFF, 0x1A, 0x00  @ line dy=26, dx=0
     .byte   0x02            @ end marker
 
-_BARCELONA_BG_PATH56:
+_BARCELONA_BG_PATH42:
     .byte   127               @ intensity
-    .byte   0x07, 0xFF, 0x00, 0x00  @ y=7, x=-1, hdr
-    .byte   0xFF, 0xF4, 0x01  @ line dy=-12, dx=1
+    .byte   0x2A, 0xFD, 0x00, 0x00  @ y=42, x=-3, hdr
+    .byte   0xFF, 0xFF, 0x05  @ line dy=-1, dx=5
     .byte   0x02            @ end marker
 
-_BARCELONA_BG_PATH57:
+_BARCELONA_BG_PATH43:
     .byte   127               @ intensity
-    .byte   0x00, 0x11, 0x00, 0x00  @ y=0, x=17, hdr
-    .byte   0xFF, 0xF0, 0x02  @ line dy=-16, dx=2
+    .byte   0x28, 0x01, 0x00, 0x00  @ y=40, x=1, hdr
+    .byte   0xFF, 0xE5, 0x03  @ line dy=-27, dx=3
     .byte   0x02            @ end marker
 
-_BARCELONA_BG_PATH58:
+_BARCELONA_BG_PATH44:
     .byte   127               @ intensity
-    .byte   0x00, 0x0F, 0x00, 0x00  @ y=0, x=15, hdr
-    .byte   0xFF, 0xF1, 0x01  @ line dy=-15, dx=1
+    .byte   0x13, 0xFC, 0x00, 0x00  @ y=19, x=-4, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x02, 0xF8  @ line dy=2, dx=-8
+    .byte   0xFF, 0xFD, 0xF9  @ line dy=-3, dx=-7
     .byte   0x02            @ end marker
 
-_BARCELONA_BG_PATH59:
+_BARCELONA_BG_PATH45:
     .byte   127               @ intensity
-    .byte   0x00, 0x0C, 0x00, 0x00  @ y=0, x=12, hdr
-    .byte   0xFF, 0xF3, 0x01  @ line dy=-13, dx=1
+    .byte   0x0E, 0xEB, 0x00, 0x00  @ y=14, x=-21, hdr
+    .byte   0xFF, 0x1A, 0x00  @ line dy=26, dx=0
     .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH46:
+    .byte   127               @ intensity
+    .byte   0x28, 0xE8, 0x00, 0x00  @ y=40, x=-24, hdr (simplified: -1 pts)
+    .byte   0xFF, 0xE5, 0xFD  @ line dy=-27, dx=-3
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH47:
+    .byte   127               @ intensity
+    .byte   0x0E, 0xE9, 0x00, 0x00  @ y=14, x=-23, hdr
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH48:
+    .byte   127               @ intensity
+    .byte   0x1E, 0xE0, 0x00, 0x00  @ y=30, x=-32, hdr (simplified: -1 pts)
+    .byte   0xFF, 0xFF, 0xFB  @ line dy=-1, dx=-5
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH49:
+    .byte   127               @ intensity
+    .byte   0x2D, 0xDF, 0x00, 0x00  @ y=45, x=-33, hdr
+    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
+    .byte   0xFF, 0x03, 0xFE  @ line dy=3, dx=-2
+    .byte   0xFF, 0x03, 0x02  @ line dy=3, dx=2
+    .byte   0xFF, 0x00, 0x03  @ line dy=0, dx=3
+    .byte   0xFF, 0xFD, 0x01  @ line dy=-3, dx=1
+    .byte   0xFF, 0xFD, 0xFE  @ line dy=-3, dx=-2
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH50:
+    .byte   127               @ intensity
+    .byte   0x2A, 0xE6, 0x00, 0x00  @ y=42, x=-26, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x01, 0x06  @ line dy=1, dx=6
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH51:
+    .byte   127               @ intensity
+    .byte   0x3A, 0xEA, 0x00, 0x00  @ y=58, x=-22, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
+    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
+    .byte   0xFF, 0x00, 0x03  @ line dy=0, dx=3
+    .byte   0xFF, 0xFD, 0x01  @ line dy=-3, dx=1
+    .byte   0xFF, 0xFD, 0xFE  @ line dy=-3, dx=-2
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH52:
+    .byte   127               @ intensity
+    .byte   0x39, 0x01, 0x00, 0x00  @ y=57, x=1, hdr
+    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
+    .byte   0xFF, 0x03, 0xFE  @ line dy=3, dx=-2
+    .byte   0xFF, 0x03, 0x01  @ line dy=3, dx=1
+    .byte   0xFF, 0x00, 0x04  @ line dy=0, dx=4
+    .byte   0xFF, 0xFD, 0x01  @ line dy=-3, dx=1
+    .byte   0xFF, 0xFD, 0xFE  @ line dy=-3, dx=-2
+    .byte   0x02            @ end marker
+
+_BARCELONA_BG_PATH53:
+    .byte   127               @ intensity
+    .byte   0x2E, 0x0E, 0x00, 0x00  @ y=46, x=14, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x03, 0xFF  @ line dy=3, dx=-1
+    .byte   0xFF, 0x00, 0xFC  @ line dy=0, dx=-4
+    .byte   0xFF, 0xFD, 0xFF  @ line dy=-3, dx=-1
+    .byte   0xFF, 0xFE, 0x04  @ line dy=-2, dx=4
+    .byte   0xFF, 0x02, 0x02  @ line dy=2, dx=2
+    .byte   0x02            @ end marker
+
+@ --- BARCELONA_BG_VEC (libvpy position-independent .vec image) ---
+.section .rodata._BARCELONA_BG_VEC,"a",%progbits
+    .balign 4
+.global _BARCELONA_BG_VEC
+_BARCELONA_BG_VEC:
+    .byte   0x2C, 0x00, 0x7F, 0xF3, 0xF1, 0x00, 0x00, 0xFF, 0x0F, 0x00, 0xFF, 0x08, 0x03, 0xFF, 0xF7, 0x04
+    .byte   0xFF, 0xF2, 0x01, 0x02, 0x7F, 0xF2, 0xFC, 0x00, 0x00, 0xFF, 0x3A, 0x00, 0xFF, 0x0D, 0x03, 0xFF
+    .byte   0x00, 0x02, 0xFF, 0xB1, 0x0A, 0xFF, 0x34, 0xFD, 0xFF, 0x0E, 0x02, 0xFF, 0x00, 0x02, 0xFF, 0xF1
+    .byte   0x04, 0xFF, 0xC7, 0x07, 0x02, 0x7F, 0xF0, 0x13, 0x00, 0x00, 0xFF, 0x10, 0xFE, 0x02, 0x7F, 0x02
+    .byte   0x11, 0x00, 0x00, 0xFF, 0x17, 0xFD, 0x02, 0x7F, 0x1C, 0x0F, 0x00, 0x00, 0xFF, 0x01, 0xFA, 0x02
+    .byte   0x7F, 0x1A, 0x0B, 0x00, 0x00, 0xFF, 0xE9, 0x01, 0x02, 0x7F, 0x00, 0x0C, 0x00, 0x00, 0xFF, 0xF3
+    .byte   0x01, 0x02, 0x7F, 0xF1, 0x10, 0x00, 0x00, 0xFF, 0x0F, 0xFF, 0x02, 0x7F, 0x07, 0x05, 0x00, 0x00
+    .byte   0xFF, 0xF0, 0x01, 0x02, 0x7F, 0xF9, 0x03, 0x00, 0x00, 0xFF, 0x0E, 0xFF, 0x02, 0x7F, 0x07, 0xFF
+    .byte   0x00, 0x00, 0xFF, 0xF4, 0x01, 0x02, 0x7F, 0xD7, 0x1A, 0x00, 0x00, 0xFF, 0x0C, 0xFF, 0xFF, 0x12
+    .byte   0xDC, 0xFF, 0xEE, 0xDC, 0xFF, 0xF5, 0xFE, 0x02, 0x7F, 0xD5, 0xCD, 0x00, 0x00, 0xFF, 0x16, 0x28
+    .byte   0xFF, 0xEA, 0x27, 0x02, 0x7F, 0xC1, 0x21, 0x00, 0x00, 0xFF, 0x13, 0xF6, 0xFF, 0x00, 0xFC, 0xFF
+    .byte   0xED, 0x03, 0x02, 0x7F, 0xC1, 0x14, 0x00, 0x00, 0xFF, 0x18, 0xF9, 0xFF, 0x01, 0xF7, 0xFF, 0xE7
+    .byte   0x05, 0x02, 0x7F, 0xC1, 0x05, 0x00, 0x00, 0xFF, 0x18, 0xF9, 0xFF, 0x0A, 0xF7, 0xFF, 0xF6, 0xF5
+    .byte   0xFF, 0xE7, 0xF9, 0x02, 0x7F, 0xC0, 0xE1, 0x00, 0x00, 0xFF, 0x19, 0x04, 0xFF, 0xFF, 0xF7, 0xFF
+    .byte   0xE8, 0xF8, 0x02, 0x7F, 0xC0, 0xD1, 0x00, 0x00, 0xFF, 0x14, 0x06, 0xFF, 0x00, 0xFA, 0xFF, 0xEC
+    .byte   0xF9, 0x02, 0x7F, 0xC0, 0xC6, 0x00, 0x00, 0xFF, 0x0D, 0x05, 0xFF, 0x05, 0x00, 0xFF, 0x14, 0x2A
+    .byte   0xFF, 0xEB, 0x2B, 0xFF, 0xFD, 0xFD, 0xFF, 0xF3, 0x06, 0x02, 0x7F, 0xC1, 0xFA, 0x00, 0x00, 0xFF
+    .byte   0x0B, 0xFF, 0xFF, 0x01, 0xFC, 0xFF, 0xFF, 0xFC, 0xFF, 0xF4, 0xFF, 0x02, 0x7F, 0xE6, 0xF5, 0x00
+    .byte   0x00, 0xFF, 0x05, 0x00, 0x02, 0x7F, 0xF1, 0xED, 0x00, 0x00, 0xFF, 0x3C, 0x00, 0xFF, 0x0D, 0xFD
+    .byte   0xFF, 0x00, 0xFE, 0xFF, 0xF1, 0xFD, 0xFF, 0xFF, 0x01, 0xFF, 0xC0, 0xFA, 0xFF, 0x35, 0x01, 0xFF
+    .byte   0x0E, 0xFE, 0xFF, 0x00, 0xFE, 0xFF, 0xB7, 0xF6, 0x02, 0x7F, 0xF0, 0xD7, 0x00, 0x00, 0xFF, 0x10
+    .byte   0x02, 0x02, 0x7F, 0x00, 0xDB, 0x00, 0x00, 0xFF, 0xF1, 0xFF, 0x02, 0x7F, 0xF3, 0xDD, 0x00, 0x00
+    .byte   0xFF, 0x0D, 0x01, 0x02, 0x7F, 0x06, 0xDE, 0x00, 0x00, 0xFF, 0x15, 0x00, 0x02, 0x7F, 0x1B, 0xDC
+    .byte   0x00, 0x00, 0xFF, 0xEB, 0xFE, 0x02, 0x7F, 0x07, 0xE5, 0x00, 0x00, 0xFF, 0xF0, 0xFF, 0x02, 0x7F
+    .byte   0xF9, 0xE7, 0x00, 0x00, 0xFF, 0x0E, 0x01, 0x02, 0x7F, 0x07, 0xEB, 0x00, 0x00, 0xFF, 0xF4, 0xFF
+    .byte   0x02, 0x7F, 0x0B, 0xED, 0x00, 0x00, 0xFF, 0x05, 0x07, 0xFF, 0xFC, 0x08, 0x02, 0x7F, 0x0E, 0xFE
+    .byte   0x00, 0x00, 0xFF, 0x1A, 0x00, 0x02, 0x7F, 0x2A, 0xFD, 0x00, 0x00, 0xFF, 0xFF, 0x05, 0x02, 0x7F
+    .byte   0x28, 0x01, 0x00, 0x00, 0xFF, 0xE5, 0x03, 0x02, 0x7F, 0x13, 0xFC, 0x00, 0x00, 0xFF, 0x02, 0xF8
+    .byte   0xFF, 0xFD, 0xF9, 0x02, 0x7F, 0x0E, 0xEB, 0x00, 0x00, 0xFF, 0x1A, 0x00, 0x02, 0x7F, 0x28, 0xE8
+    .byte   0x00, 0x00, 0xFF, 0xE5, 0xFD, 0x02, 0x7F, 0x0E, 0xE9, 0x00, 0x00, 0x02, 0x7F, 0x1E, 0xE0, 0x00
+    .byte   0x00, 0xFF, 0xFF, 0xFB, 0x02, 0x7F, 0x2D, 0xDF, 0x00, 0x00, 0xFF, 0x00, 0xFE, 0xFF, 0x03, 0xFE
+    .byte   0xFF, 0x03, 0x02, 0xFF, 0x00, 0x03, 0xFF, 0xFD, 0x01, 0xFF, 0xFD, 0xFE, 0x02, 0x7F, 0x2A, 0xE6
+    .byte   0x00, 0x00, 0xFF, 0x01, 0x06, 0x02, 0x7F, 0x3A, 0xEA, 0x00, 0x00, 0xFF, 0x00, 0xFE, 0xFF, 0x06
+    .byte   0x00, 0xFF, 0x00, 0x03, 0xFF, 0xFD, 0x01, 0xFF, 0xFD, 0xFE, 0x02, 0x7F, 0x39, 0x01, 0x00, 0x00
+    .byte   0xFF, 0x00, 0xFE, 0xFF, 0x03, 0xFE, 0xFF, 0x03, 0x01, 0xFF, 0x00, 0x04, 0xFF, 0xFD, 0x01, 0xFF
+    .byte   0xFD, 0xFE, 0x02, 0x7F, 0x2E, 0x0E, 0x00, 0x00, 0xFF, 0x03, 0xFF, 0xFF, 0x00, 0xFC, 0xFF, 0xFD
+    .byte   0xFF, 0xFF, 0xFE, 0x04, 0xFF, 0x02, 0x02, 0x02
+.section .text
 
 @ --- BARCELONA_BG_3D_DATA (60 path(s)) ---
+    .balign 4
 .global _BARCELONA_BG_3D_DATA
 _BARCELONA_BG_3D_DATA:
     .word   156               @ vertex_count
@@ -7497,6 +3949,7 @@ _BARCELONA_BG_3D_DATA:
     .byte   0x1B, 0xFE, 0x00  @ vert 153: x=27,y=-2,z=0
     .byte   0x17, 0x0D, 0x00  @ vert 154: x=23,y=13,z=0
     .byte   0x18, 0x00, 0x00  @ vert 155: x=24,y=0,z=0
+    .balign 4
     .word   60               @ path_count
     .byte   8               @ path 0: pt_count
     .byte   0               @ path 0: closed
@@ -7811,6 +4264,7 @@ _BARCELONA_BG_3D_DATA:
     .byte   0               @ path 59: closed
     .byte   154
     .byte   155
+    .balign 4
 
 @ --- numbers (3 path(s)) ---
 .global _NUMBERS_VECTORS
@@ -7822,33 +4276,45 @@ _NUMBERS_VECTORS:
 
 _NUMBERS_PATH0:
     .byte   127               @ intensity
-    .byte   0xE4, 0xC9, 0x00, 0x00  @ y=-28, x=-55, hdr
-    .byte   0xFF, 0x32, 0x00  @ line dy=50, dx=0
-    .byte   0xFF, 0xEE, 0xF3  @ line dy=-18, dx=-13
+    .byte   0xE4, 0x07, 0x00, 0x00  @ y=-28, x=7, hdr
+    .byte   0xFF, 0x00, 0xE3  @ line dy=0, dx=-29
+    .byte   0xFF, 0x19, 0xFF  @ line dy=25, dx=-1
+    .byte   0xFF, 0x00, 0x18  @ line dy=0, dx=24
+    .byte   0xFF, 0x1C, 0x00  @ line dy=28, dx=0
+    .byte   0xFF, 0x00, 0xE8  @ line dy=0, dx=-24
     .byte   0x02            @ end marker
 
 _NUMBERS_PATH1:
     .byte   127               @ intensity
-    .byte   0x19, 0xE9, 0x00, 0x00  @ y=25, x=-23, hdr
-    .byte   0xFF, 0x00, 0x18  @ line dy=0, dx=24
-    .byte   0xFF, 0xE4, 0x00  @ line dy=-28, dx=0
-    .byte   0xFF, 0x00, 0xE8  @ line dy=0, dx=-24
-    .byte   0xFF, 0xE7, 0x01  @ line dy=-25, dx=1
-    .byte   0xFF, 0x00, 0x1D  @ line dy=0, dx=29
+    .byte   0x04, 0xBC, 0x00, 0x00  @ y=4, x=-68, hdr
+    .byte   0xFF, 0x12, 0x0D  @ line dy=18, dx=13
+    .byte   0xFF, 0xCE, 0x00  @ line dy=-50, dx=0
     .byte   0x02            @ end marker
 
 _NUMBERS_PATH2:
     .byte   127               @ intensity
-    .byte   0x1C, 0x29, 0x00, 0x00  @ y=28, x=41, hdr
-    .byte   0xFF, 0x00, 0x1B  @ line dy=0, dx=27
-    .byte   0xFF, 0xE8, 0x00  @ line dy=-24, dx=0
-    .byte   0xFF, 0xF8, 0xE9  @ line dy=-8, dx=-23
-    .byte   0xFF, 0xFC, 0x17  @ line dy=-4, dx=23
-    .byte   0xFF, 0xEB, 0xFF  @ line dy=-21, dx=-1
-    .byte   0xFF, 0x00, 0xE4  @ line dy=0, dx=-28
+    .byte   0xE3, 0x27, 0x00, 0x00  @ y=-29, x=39, hdr
+    .byte   0xFF, 0x00, 0x1C  @ line dy=0, dx=28
+    .byte   0xFF, 0x15, 0x01  @ line dy=21, dx=1
+    .byte   0xFF, 0x04, 0xE9  @ line dy=4, dx=-23
+    .byte   0xFF, 0x08, 0x17  @ line dy=8, dx=23
+    .byte   0xFF, 0x18, 0x00  @ line dy=24, dx=0
+    .byte   0xFF, 0x00, 0xE5  @ line dy=0, dx=-27
     .byte   0x02            @ end marker
 
+@ --- NUMBERS_VEC (libvpy position-independent .vec image) ---
+.section .rodata._NUMBERS_VEC,"a",%progbits
+    .balign 4
+.global _NUMBERS_VEC
+_NUMBERS_VEC:
+    .byte   0x03, 0x00, 0x7F, 0xE4, 0x07, 0x00, 0x00, 0xFF, 0x00, 0xE3, 0xFF, 0x19, 0xFF, 0xFF, 0x00, 0x18
+    .byte   0xFF, 0x1C, 0x00, 0xFF, 0x00, 0xE8, 0x02, 0x7F, 0x04, 0xBC, 0x00, 0x00, 0xFF, 0x12, 0x0D, 0xFF
+    .byte   0xCE, 0x00, 0x02, 0x7F, 0xE3, 0x27, 0x00, 0x00, 0xFF, 0x00, 0x1C, 0xFF, 0x15, 0x01, 0xFF, 0x04
+    .byte   0xE9, 0xFF, 0x08, 0x17, 0xFF, 0x18, 0x00, 0xFF, 0x00, 0xE5, 0x02
+.section .text
+
 @ --- NUMBERS_3D_DATA (3 path(s)) ---
+    .balign 4
 .global _NUMBERS_3D_DATA
 _NUMBERS_3D_DATA:
     .word   16               @ vertex_count
@@ -7868,6 +4334,7 @@ _NUMBERS_3D_DATA:
     .byte   0x3F, 0xF8, 0x00  @ vert 13: x=63,y=-8,z=0
     .byte   0x3F, 0xE3, 0x00  @ vert 14: x=63,y=-29,z=0
     .byte   0x27, 0xE3, 0x00  @ vert 15: x=39,y=-29,z=0
+    .balign 4
     .word   3               @ path_count
     .byte   3               @ path 0: pt_count
     .byte   0               @ path 0: closed
@@ -7891,11 +4358,12 @@ _NUMBERS_3D_DATA:
     .byte   13
     .byte   14
     .byte   15
+    .balign 4
 
-@ --- platform (21 path(s)) ---
+@ --- platform (20 path(s)) ---
 .global _PLATFORM_VECTORS
 _PLATFORM_VECTORS:
-    .word   21               @ path_count
+    .word   20               @ path_count
     .word   _PLATFORM_PATH0      @ ptr path 0
     .word   _PLATFORM_PATH1      @ ptr path 1
     .word   _PLATFORM_PATH2      @ ptr path 2
@@ -7916,120 +4384,20 @@ _PLATFORM_VECTORS:
     .word   _PLATFORM_PATH17      @ ptr path 17
     .word   _PLATFORM_PATH18      @ ptr path 18
     .word   _PLATFORM_PATH19      @ ptr path 19
-    .word   _PLATFORM_PATH20      @ ptr path 20
 
 _PLATFORM_PATH0:
-    .byte   85               @ intensity
-    .byte   0x41, 0xC6, 0x00, 0x00  @ y=65, x=-58, hdr
-    .byte   0xFF, 0x00, 0x73  @ line dy=0, dx=115
-    .byte   0xFF, 0xEE, 0x00  @ line dy=-18, dx=0
-    .byte   0xFF, 0x00, 0x8D  @ line dy=0, dx=-115
-    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
+    .byte   127               @ intensity
+    .byte   0x06, 0xD4, 0x00, 0x00  @ y=6, x=-44, hdr
+    .byte   0xFF, 0x00, 0xF3  @ line dy=0, dx=-13
     .byte   0x02            @ end marker
 
 _PLATFORM_PATH1:
-    .byte   85               @ intensity
-    .byte   0x36, 0xC6, 0x00, 0x00  @ y=54, x=-58, hdr
-    .byte   0xFF, 0xF9, 0x05  @ line dy=-7, dx=5
-    .byte   0xFF, 0x09, 0x05  @ line dy=9, dx=5
-    .byte   0xFF, 0xF7, 0x06  @ line dy=-9, dx=6
-    .byte   0xFF, 0x09, 0x06  @ line dy=9, dx=6
-    .byte   0xFF, 0xF7, 0x05  @ line dy=-9, dx=5
-    .byte   0xFF, 0x09, 0x07  @ line dy=9, dx=7
-    .byte   0xFF, 0xF7, 0x06  @ line dy=-9, dx=6
-    .byte   0xFF, 0x09, 0x06  @ line dy=9, dx=6
-    .byte   0xFF, 0xF7, 0x05  @ line dy=-9, dx=5
-    .byte   0xFF, 0x09, 0x06  @ line dy=9, dx=6
-    .byte   0xFF, 0xF7, 0x05  @ line dy=-9, dx=5
-    .byte   0xFF, 0x09, 0x07  @ line dy=9, dx=7
-    .byte   0xFF, 0xF7, 0x06  @ line dy=-9, dx=6
-    .byte   0xFF, 0x09, 0x05  @ line dy=9, dx=5
-    .byte   0xFF, 0xF7, 0x06  @ line dy=-9, dx=6
-    .byte   0xFF, 0x09, 0x06  @ line dy=9, dx=6
-    .byte   0xFF, 0xF7, 0x06  @ line dy=-9, dx=6
-    .byte   0xFF, 0x09, 0x05  @ line dy=9, dx=5
-    .byte   0xFF, 0xF7, 0x06  @ line dy=-9, dx=6
-    .byte   0xFF, 0x08, 0x06  @ line dy=8, dx=6
-    .byte   0x02            @ end marker
-
-_PLATFORM_PATH2:
-    .byte   85               @ intensity
-    .byte   0x3D, 0xC6, 0x00, 0x00  @ y=61, x=-58, hdr
-    .byte   0xFF, 0x00, 0x73  @ line dy=0, dx=115
-    .byte   0x02            @ end marker
-
-_PLATFORM_PATH3:
-    .byte   127               @ intensity
-    .byte   0x2F, 0xCB, 0x00, 0x00  @ y=47, x=-53, hdr
-    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
-    .byte   0x02            @ end marker
-
-_PLATFORM_PATH4:
-    .byte   127               @ intensity
-    .byte   0x2F, 0xD6, 0x00, 0x00  @ y=47, x=-42, hdr
-    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
-    .byte   0x02            @ end marker
-
-_PLATFORM_PATH5:
-    .byte   127               @ intensity
-    .byte   0x2F, 0xE1, 0x00, 0x00  @ y=47, x=-31, hdr
-    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
-    .byte   0x02            @ end marker
-
-_PLATFORM_PATH6:
-    .byte   127               @ intensity
-    .byte   0x2F, 0xEE, 0x00, 0x00  @ y=47, x=-18, hdr
-    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
-    .byte   0x02            @ end marker
-
-_PLATFORM_PATH7:
-    .byte   127               @ intensity
-    .byte   0x2F, 0xF9, 0x00, 0x00  @ y=47, x=-7, hdr
-    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
-    .byte   0x02            @ end marker
-
-_PLATFORM_PATH8:
-    .byte   127               @ intensity
-    .byte   0x2F, 0x04, 0x00, 0x00  @ y=47, x=4, hdr
-    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
-    .byte   0x02            @ end marker
-
-_PLATFORM_PATH9:
-    .byte   127               @ intensity
-    .byte   0x2F, 0x11, 0x00, 0x00  @ y=47, x=17, hdr
-    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
-    .byte   0x02            @ end marker
-
-_PLATFORM_PATH10:
-    .byte   127               @ intensity
-    .byte   0x2F, 0x1C, 0x00, 0x00  @ y=47, x=28, hdr
-    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
-    .byte   0x02            @ end marker
-
-_PLATFORM_PATH11:
-    .byte   127               @ intensity
-    .byte   0x2F, 0x28, 0x00, 0x00  @ y=47, x=40, hdr
-    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
-    .byte   0x02            @ end marker
-
-_PLATFORM_PATH12:
-    .byte   127               @ intensity
-    .byte   0x2F, 0x33, 0x00, 0x00  @ y=47, x=51, hdr
-    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
-    .byte   0x02            @ end marker
-
-_PLATFORM_PATH13:
     .byte   85               @ intensity
     .byte   0x10, 0xC7, 0x00, 0x00  @ y=16, x=-57, hdr
     .byte   0xFF, 0xAF, 0x00  @ line dy=-81, dx=0
     .byte   0xFF, 0x00, 0x1D  @ line dy=0, dx=29
     .byte   0xFF, 0x51, 0x00  @ line dy=81, dx=0
     .byte   0xFF, 0x00, 0xE3  @ line dy=0, dx=-29
-    .byte   0x02            @ end marker
-
-_PLATFORM_PATH14:
-    .byte   85               @ intensity
-    .byte   0x10, 0xC7, 0x00, 0x00  @ y=16, x=-57, hdr
     .byte   0xFF, 0xF6, 0x0D  @ line dy=-10, dx=13
     .byte   0xFF, 0xF9, 0xF3  @ line dy=-7, dx=-13
     .byte   0xFF, 0xF9, 0x0D  @ line dy=-7, dx=13
@@ -8042,43 +4410,163 @@ _PLATFORM_PATH14:
     .byte   0xFF, 0xF9, 0xF3  @ line dy=-7, dx=-13
     .byte   0x02            @ end marker
 
-_PLATFORM_PATH15:
-    .byte   85               @ intensity
-    .byte   0x10, 0xD4, 0x00, 0x00  @ y=16, x=-44, hdr
-    .byte   0xFF, 0xAE, 0x00  @ line dy=-82, dx=0
-    .byte   0x02            @ end marker
-
-_PLATFORM_PATH16:
+_PLATFORM_PATH2:
     .byte   127               @ intensity
-    .byte   0x06, 0xD4, 0x00, 0x00  @ y=6, x=-44, hdr
-    .byte   0xFF, 0x00, 0xF3  @ line dy=0, dx=-13
+    .byte   0xC6, 0xC7, 0x00, 0x00  @ y=-58, x=-57, hdr
+    .byte   0xFF, 0x00, 0x0D  @ line dy=0, dx=13
     .byte   0x02            @ end marker
 
-_PLATFORM_PATH17:
+_PLATFORM_PATH3:
+    .byte   85               @ intensity
+    .byte   0xBE, 0xD4, 0x00, 0x00  @ y=-66, x=-44, hdr
+    .byte   0xFF, 0x52, 0x00  @ line dy=82, dx=0
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH4:
     .byte   127               @ intensity
     .byte   0xF8, 0xD4, 0x00, 0x00  @ y=-8, x=-44, hdr
     .byte   0xFF, 0x00, 0xF3  @ line dy=0, dx=-13
     .byte   0x02            @ end marker
 
-_PLATFORM_PATH18:
+_PLATFORM_PATH5:
     .byte   127               @ intensity
-    .byte   0xE8, 0xD4, 0x00, 0x00  @ y=-24, x=-44, hdr
-    .byte   0xFF, 0x00, 0xF3  @ line dy=0, dx=-13
+    .byte   0xE8, 0xC7, 0x00, 0x00  @ y=-24, x=-57, hdr
+    .byte   0xFF, 0x00, 0x0D  @ line dy=0, dx=13
     .byte   0x02            @ end marker
 
-_PLATFORM_PATH19:
+_PLATFORM_PATH6:
     .byte   127               @ intensity
     .byte   0xD5, 0xD3, 0x00, 0x00  @ y=-43, x=-45, hdr
     .byte   0xFF, 0x00, 0xF4  @ line dy=0, dx=-12
     .byte   0x02            @ end marker
 
-_PLATFORM_PATH20:
+_PLATFORM_PATH7:
     .byte   127               @ intensity
-    .byte   0xC6, 0xD4, 0x00, 0x00  @ y=-58, x=-44, hdr
-    .byte   0xFF, 0x00, 0xF3  @ line dy=0, dx=-13
+    .byte   0x2F, 0xCB, 0x00, 0x00  @ y=47, x=-53, hdr
+    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
     .byte   0x02            @ end marker
 
+_PLATFORM_PATH8:
+    .byte   85               @ intensity
+    .byte   0x41, 0xC6, 0x00, 0x00  @ y=65, x=-58, hdr
+    .byte   0xFF, 0x00, 0x73  @ line dy=0, dx=115
+    .byte   0xFF, 0xEE, 0x00  @ line dy=-18, dx=0
+    .byte   0xFF, 0x00, 0x8D  @ line dy=0, dx=-115
+    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH9:
+    .byte   85               @ intensity
+    .byte   0x3D, 0xC6, 0x00, 0x00  @ y=61, x=-58, hdr
+    .byte   0xFF, 0x00, 0x73  @ line dy=0, dx=115
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH10:
+    .byte   85               @ intensity
+    .byte   0x37, 0x39, 0x00, 0x00  @ y=55, x=57, hdr
+    .byte   0xFF, 0xF8, 0xFA  @ line dy=-8, dx=-6
+    .byte   0xFF, 0x09, 0xFA  @ line dy=9, dx=-6
+    .byte   0xFF, 0xF7, 0xFB  @ line dy=-9, dx=-5
+    .byte   0xFF, 0x09, 0xFA  @ line dy=9, dx=-6
+    .byte   0xFF, 0xF7, 0xFA  @ line dy=-9, dx=-6
+    .byte   0xFF, 0x09, 0xFA  @ line dy=9, dx=-6
+    .byte   0xFF, 0xF7, 0xFB  @ line dy=-9, dx=-5
+    .byte   0xFF, 0x09, 0xFA  @ line dy=9, dx=-6
+    .byte   0xFF, 0xF7, 0xF9  @ line dy=-9, dx=-7
+    .byte   0xFF, 0x09, 0xFB  @ line dy=9, dx=-5
+    .byte   0xFF, 0xF7, 0xFA  @ line dy=-9, dx=-6
+    .byte   0xFF, 0x09, 0xFB  @ line dy=9, dx=-5
+    .byte   0xFF, 0xF7, 0xFA  @ line dy=-9, dx=-6
+    .byte   0xFF, 0x09, 0xFA  @ line dy=9, dx=-6
+    .byte   0xFF, 0xF7, 0xF9  @ line dy=-9, dx=-7
+    .byte   0xFF, 0x09, 0xFB  @ line dy=9, dx=-5
+    .byte   0xFF, 0xF7, 0xFA  @ line dy=-9, dx=-6
+    .byte   0xFF, 0x09, 0xFA  @ line dy=9, dx=-6
+    .byte   0xFF, 0xF7, 0xFB  @ line dy=-9, dx=-5
+    .byte   0xFF, 0x07, 0xFB  @ line dy=7, dx=-5
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH11:
+    .byte   127               @ intensity
+    .byte   0x2F, 0xD6, 0x00, 0x00  @ y=47, x=-42, hdr
+    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH12:
+    .byte   127               @ intensity
+    .byte   0x41, 0xE1, 0x00, 0x00  @ y=65, x=-31, hdr
+    .byte   0xFF, 0xEE, 0x00  @ line dy=-18, dx=0
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH13:
+    .byte   127               @ intensity
+    .byte   0x2F, 0xEE, 0x00, 0x00  @ y=47, x=-18, hdr
+    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH14:
+    .byte   127               @ intensity
+    .byte   0x41, 0xF9, 0x00, 0x00  @ y=65, x=-7, hdr
+    .byte   0xFF, 0xEE, 0x00  @ line dy=-18, dx=0
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH15:
+    .byte   127               @ intensity
+    .byte   0x2F, 0x04, 0x00, 0x00  @ y=47, x=4, hdr
+    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH16:
+    .byte   127               @ intensity
+    .byte   0x41, 0x11, 0x00, 0x00  @ y=65, x=17, hdr
+    .byte   0xFF, 0xEE, 0x00  @ line dy=-18, dx=0
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH17:
+    .byte   127               @ intensity
+    .byte   0x2F, 0x1C, 0x00, 0x00  @ y=47, x=28, hdr
+    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH18:
+    .byte   127               @ intensity
+    .byte   0x41, 0x28, 0x00, 0x00  @ y=65, x=40, hdr
+    .byte   0xFF, 0xEE, 0x00  @ line dy=-18, dx=0
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH19:
+    .byte   127               @ intensity
+    .byte   0x2F, 0x33, 0x00, 0x00  @ y=47, x=51, hdr
+    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
+    .byte   0x02            @ end marker
+
+@ --- PLATFORM_VEC (libvpy position-independent .vec image) ---
+.section .rodata._PLATFORM_VEC,"a",%progbits
+    .balign 4
+.global _PLATFORM_VEC
+_PLATFORM_VEC:
+    .byte   0x14, 0x00, 0x7F, 0x06, 0xD4, 0x00, 0x00, 0xFF, 0x00, 0xF3, 0x02, 0x55, 0x10, 0xC7, 0x00, 0x00
+    .byte   0xFF, 0xAF, 0x00, 0xFF, 0x00, 0x1D, 0xFF, 0x51, 0x00, 0xFF, 0x00, 0xE3, 0xFF, 0xF6, 0x0D, 0xFF
+    .byte   0xF9, 0xF3, 0xFF, 0xF9, 0x0D, 0xFF, 0xF8, 0xF3, 0xFF, 0xF8, 0x0D, 0xFF, 0xF4, 0xF3, 0xFF, 0xF9
+    .byte   0x0C, 0xFF, 0xF8, 0xF4, 0xFF, 0xF9, 0x0D, 0xFF, 0xF9, 0xF3, 0x02, 0x7F, 0xC6, 0xC7, 0x00, 0x00
+    .byte   0xFF, 0x00, 0x0D, 0x02, 0x55, 0xBE, 0xD4, 0x00, 0x00, 0xFF, 0x52, 0x00, 0x02, 0x7F, 0xF8, 0xD4
+    .byte   0x00, 0x00, 0xFF, 0x00, 0xF3, 0x02, 0x7F, 0xE8, 0xC7, 0x00, 0x00, 0xFF, 0x00, 0x0D, 0x02, 0x7F
+    .byte   0xD5, 0xD3, 0x00, 0x00, 0xFF, 0x00, 0xF4, 0x02, 0x7F, 0x2F, 0xCB, 0x00, 0x00, 0xFF, 0x12, 0x00
+    .byte   0x02, 0x55, 0x41, 0xC6, 0x00, 0x00, 0xFF, 0x00, 0x73, 0xFF, 0xEE, 0x00, 0xFF, 0x00, 0x8D, 0xFF
+    .byte   0x12, 0x00, 0x02, 0x55, 0x3D, 0xC6, 0x00, 0x00, 0xFF, 0x00, 0x73, 0x02, 0x55, 0x37, 0x39, 0x00
+    .byte   0x00, 0xFF, 0xF8, 0xFA, 0xFF, 0x09, 0xFA, 0xFF, 0xF7, 0xFB, 0xFF, 0x09, 0xFA, 0xFF, 0xF7, 0xFA
+    .byte   0xFF, 0x09, 0xFA, 0xFF, 0xF7, 0xFB, 0xFF, 0x09, 0xFA, 0xFF, 0xF7, 0xF9, 0xFF, 0x09, 0xFB, 0xFF
+    .byte   0xF7, 0xFA, 0xFF, 0x09, 0xFB, 0xFF, 0xF7, 0xFA, 0xFF, 0x09, 0xFA, 0xFF, 0xF7, 0xF9, 0xFF, 0x09
+    .byte   0xFB, 0xFF, 0xF7, 0xFA, 0xFF, 0x09, 0xFA, 0xFF, 0xF7, 0xFB, 0xFF, 0x07, 0xFB, 0x02, 0x7F, 0x2F
+    .byte   0xD6, 0x00, 0x00, 0xFF, 0x12, 0x00, 0x02, 0x7F, 0x41, 0xE1, 0x00, 0x00, 0xFF, 0xEE, 0x00, 0x02
+    .byte   0x7F, 0x2F, 0xEE, 0x00, 0x00, 0xFF, 0x12, 0x00, 0x02, 0x7F, 0x41, 0xF9, 0x00, 0x00, 0xFF, 0xEE
+    .byte   0x00, 0x02, 0x7F, 0x2F, 0x04, 0x00, 0x00, 0xFF, 0x12, 0x00, 0x02, 0x7F, 0x41, 0x11, 0x00, 0x00
+    .byte   0xFF, 0xEE, 0x00, 0x02, 0x7F, 0x2F, 0x1C, 0x00, 0x00, 0xFF, 0x12, 0x00, 0x02, 0x7F, 0x41, 0x28
+    .byte   0x00, 0x00, 0xFF, 0xEE, 0x00, 0x02, 0x7F, 0x2F, 0x33, 0x00, 0x00, 0xFF, 0x12, 0x00, 0x02
+.section .text
+
 @ --- PLATFORM_3D_DATA (21 path(s)) ---
+    .balign 4
 .global _PLATFORM_3D_DATA
 _PLATFORM_3D_DATA:
     .word   57               @ vertex_count
@@ -8139,6 +4627,7 @@ _PLATFORM_3D_DATA:
     .byte   0xC7, 0xE8, 0x00  @ vert 54: x=-57,y=-24,z=0
     .byte   0xC7, 0xD5, 0x00  @ vert 55: x=-57,y=-43,z=0
     .byte   0xC7, 0xC6, 0x00  @ vert 56: x=-57,y=-58,z=0
+    .balign 4
     .word   21               @ path_count
     .byte   5               @ path 0: pt_count
     .byte   0               @ path 0: closed
@@ -8258,6 +4747,7 @@ _PLATFORM_3D_DATA:
     .byte   0               @ path 20: closed
     .byte   49
     .byte   56
+    .balign 4
 
 @ --- platformver (3 path(s)) ---
 .global _PLATFORMVER_VECTORS
@@ -8269,6 +4759,37 @@ _PLATFORMVER_VECTORS:
 
 _PLATFORMVER_PATH0:
     .byte   85               @ intensity
+    .byte   0x01, 0xC7, 0x00, 0x00  @ y=1, x=-57, hdr
+    .byte   0xFF, 0x07, 0x06  @ line dy=7, dx=6
+    .byte   0xFF, 0xF8, 0x06  @ line dy=-8, dx=6
+    .byte   0xFF, 0x09, 0x05  @ line dy=9, dx=5
+    .byte   0xFF, 0xF7, 0x06  @ line dy=-9, dx=6
+    .byte   0xFF, 0x09, 0x06  @ line dy=9, dx=6
+    .byte   0xFF, 0xF7, 0x06  @ line dy=-9, dx=6
+    .byte   0xFF, 0x09, 0x05  @ line dy=9, dx=5
+    .byte   0xFF, 0xF7, 0x06  @ line dy=-9, dx=6
+    .byte   0xFF, 0x09, 0x07  @ line dy=9, dx=7
+    .byte   0xFF, 0xF7, 0x05  @ line dy=-9, dx=5
+    .byte   0xFF, 0x09, 0x06  @ line dy=9, dx=6
+    .byte   0xFF, 0xF7, 0x05  @ line dy=-9, dx=5
+    .byte   0xFF, 0x09, 0x06  @ line dy=9, dx=6
+    .byte   0xFF, 0xF7, 0x06  @ line dy=-9, dx=6
+    .byte   0xFF, 0x09, 0x07  @ line dy=9, dx=7
+    .byte   0xFF, 0xF7, 0x05  @ line dy=-9, dx=5
+    .byte   0xFF, 0x09, 0x06  @ line dy=9, dx=6
+    .byte   0xFF, 0xF7, 0x06  @ line dy=-9, dx=6
+    .byte   0xFF, 0x09, 0x05  @ line dy=9, dx=5
+    .byte   0xFF, 0xF9, 0x05  @ line dy=-7, dx=5
+    .byte   0x02            @ end marker
+
+_PLATFORMVER_PATH1:
+    .byte   85               @ intensity
+    .byte   0xFB, 0x3A, 0x00, 0x00  @ y=-5, x=58, hdr
+    .byte   0xFF, 0x00, 0x8D  @ line dy=0, dx=-115
+    .byte   0x02            @ end marker
+
+_PLATFORMVER_PATH2:
+    .byte   85               @ intensity
     .byte   0xF7, 0x3A, 0x00, 0x00  @ y=-9, x=58, hdr
     .byte   0xFF, 0x00, 0x8D  @ line dy=0, dx=-115
     .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
@@ -8276,38 +4797,21 @@ _PLATFORMVER_PATH0:
     .byte   0xFF, 0xEE, 0x00  @ line dy=-18, dx=0
     .byte   0x02            @ end marker
 
-_PLATFORMVER_PATH1:
-    .byte   85               @ intensity
-    .byte   0x02, 0x3A, 0x00, 0x00  @ y=2, x=58, hdr
-    .byte   0xFF, 0x07, 0xFB  @ line dy=7, dx=-5
-    .byte   0xFF, 0xF7, 0xFB  @ line dy=-9, dx=-5
-    .byte   0xFF, 0x09, 0xFA  @ line dy=9, dx=-6
-    .byte   0xFF, 0xF7, 0xFA  @ line dy=-9, dx=-6
-    .byte   0xFF, 0x09, 0xFB  @ line dy=9, dx=-5
-    .byte   0xFF, 0xF7, 0xF9  @ line dy=-9, dx=-7
-    .byte   0xFF, 0x09, 0xFA  @ line dy=9, dx=-6
-    .byte   0xFF, 0xF7, 0xFA  @ line dy=-9, dx=-6
-    .byte   0xFF, 0x09, 0xFB  @ line dy=9, dx=-5
-    .byte   0xFF, 0xF7, 0xFA  @ line dy=-9, dx=-6
-    .byte   0xFF, 0x09, 0xFB  @ line dy=9, dx=-5
-    .byte   0xFF, 0xF7, 0xF9  @ line dy=-9, dx=-7
-    .byte   0xFF, 0x09, 0xFA  @ line dy=9, dx=-6
-    .byte   0xFF, 0xF7, 0xFB  @ line dy=-9, dx=-5
-    .byte   0xFF, 0x09, 0xFA  @ line dy=9, dx=-6
-    .byte   0xFF, 0xF7, 0xFA  @ line dy=-9, dx=-6
-    .byte   0xFF, 0x09, 0xFA  @ line dy=9, dx=-6
-    .byte   0xFF, 0xF7, 0xFB  @ line dy=-9, dx=-5
-    .byte   0xFF, 0x08, 0xFA  @ line dy=8, dx=-6
-    .byte   0xFF, 0xF9, 0xFA  @ line dy=-7, dx=-6
-    .byte   0x02            @ end marker
-
-_PLATFORMVER_PATH2:
-    .byte   85               @ intensity
-    .byte   0xFB, 0x3A, 0x00, 0x00  @ y=-5, x=58, hdr
-    .byte   0xFF, 0x00, 0x8D  @ line dy=0, dx=-115
-    .byte   0x02            @ end marker
+@ --- PLATFORMVER_VEC (libvpy position-independent .vec image) ---
+.section .rodata._PLATFORMVER_VEC,"a",%progbits
+    .balign 4
+.global _PLATFORMVER_VEC
+_PLATFORMVER_VEC:
+    .byte   0x03, 0x00, 0x55, 0x01, 0xC7, 0x00, 0x00, 0xFF, 0x07, 0x06, 0xFF, 0xF8, 0x06, 0xFF, 0x09, 0x05
+    .byte   0xFF, 0xF7, 0x06, 0xFF, 0x09, 0x06, 0xFF, 0xF7, 0x06, 0xFF, 0x09, 0x05, 0xFF, 0xF7, 0x06, 0xFF
+    .byte   0x09, 0x07, 0xFF, 0xF7, 0x05, 0xFF, 0x09, 0x06, 0xFF, 0xF7, 0x05, 0xFF, 0x09, 0x06, 0xFF, 0xF7
+    .byte   0x06, 0xFF, 0x09, 0x07, 0xFF, 0xF7, 0x05, 0xFF, 0x09, 0x06, 0xFF, 0xF7, 0x06, 0xFF, 0x09, 0x05
+    .byte   0xFF, 0xF9, 0x05, 0x02, 0x55, 0xFB, 0x3A, 0x00, 0x00, 0xFF, 0x00, 0x8D, 0x02, 0x55, 0xF7, 0x3A
+    .byte   0x00, 0x00, 0xFF, 0x00, 0x8D, 0xFF, 0x12, 0x00, 0xFF, 0x00, 0x73, 0xFF, 0xEE, 0x00, 0x02
+.section .text
 
 @ --- PLATFORMVER_3D_DATA (3 path(s)) ---
+    .balign 4
 .global _PLATFORMVER_3D_DATA
 _PLATFORMVER_3D_DATA:
     .word   27               @ vertex_count
@@ -8338,6 +4842,7 @@ _PLATFORMVER_3D_DATA:
     .byte   0xC7, 0x01, 0x00  @ vert 24: x=-57,y=1,z=0
     .byte   0x3A, 0xFB, 0x00  @ vert 25: x=58,y=-5,z=0
     .byte   0xC7, 0xFB, 0x00  @ vert 26: x=-57,y=-5,z=0
+    .balign 4
     .word   3               @ path_count
     .byte   5               @ path 0: pt_count
     .byte   0               @ path 0: closed
@@ -8373,6 +4878,7 @@ _PLATFORMVER_3D_DATA:
     .byte   0               @ path 2: closed
     .byte   25
     .byte   26
+    .balign 4
 
 @ --- test (1 path(s)) ---
 .global _TEST_VECTORS
@@ -8388,26 +4894,37 @@ _TEST_PATH0:
     .byte   0xFF, 0x1E, 0xF1  @ line dy=30, dx=-15
     .byte   0x02            @ end marker
 
+@ --- TEST_VEC (libvpy position-independent .vec image) ---
+.section .rodata._TEST_VEC,"a",%progbits
+    .balign 4
+.global _TEST_VEC
+_TEST_VEC:
+    .byte   0x01, 0x00, 0x7F, 0x0F, 0x00, 0x00, 0x00, 0xFF, 0xE2, 0xF1, 0xFF, 0x00, 0x1E, 0xFF, 0x1E, 0xF1
+    .byte   0x02
+.section .text
+
 @ --- TEST_3D_DATA (1 path(s)) ---
+    .balign 4
 .global _TEST_3D_DATA
 _TEST_3D_DATA:
     .word   3               @ vertex_count
     .byte   0x00, 0x14, 0x00  @ vert 0: x=0,y=20,z=0
     .byte   0xF1, 0xF6, 0x00  @ vert 1: x=-15,y=-10,z=0
     .byte   0x0F, 0xF6, 0x00  @ vert 2: x=15,y=-10,z=0
+    .balign 4
     .word   1               @ path_count
     .byte   3               @ path 0: pt_count
     .byte   1               @ path 0: closed
     .byte   0
     .byte   1
     .byte   2
+    .balign 4
 
-@ --- triangule (2 path(s)) ---
+@ --- triangule (1 path(s)) ---
 .global _TRIANGULE_VECTORS
 _TRIANGULE_VECTORS:
-    .word   2               @ path_count
+    .word   1               @ path_count
     .word   _TRIANGULE_PATH0      @ ptr path 0
-    .word   _TRIANGULE_PATH1      @ ptr path 1
 
 _TRIANGULE_PATH0:
     .byte   127               @ intensity
@@ -8415,16 +4932,21 @@ _TRIANGULE_PATH0:
     .byte   0xFF, 0x00, 0x30  @ line dy=0, dx=48
     .byte   0xFF, 0x2B, 0xE7  @ line dy=43, dx=-25
     .byte   0xFF, 0xD5, 0xE9  @ line dy=-43, dx=-23
-    .byte   0x02            @ end marker
-
-_TRIANGULE_PATH1:
-    .byte   127               @ intensity
-    .byte   0xF6, 0xE8, 0x00, 0x00  @ y=-10, x=-24, hdr
     .byte   0xFF, 0xE9, 0x18  @ line dy=-23, dx=24
     .byte   0xFF, 0x17, 0x18  @ line dy=23, dx=24
     .byte   0x02            @ end marker
 
+@ --- TRIANGULE_VEC (libvpy position-independent .vec image) ---
+.section .rodata._TRIANGULE_VEC,"a",%progbits
+    .balign 4
+.global _TRIANGULE_VEC
+_TRIANGULE_VEC:
+    .byte   0x01, 0x00, 0x7F, 0xF6, 0xE8, 0x00, 0x00, 0xFF, 0x00, 0x30, 0xFF, 0x2B, 0xE7, 0xFF, 0xD5, 0xE9
+    .byte   0xFF, 0xE9, 0x18, 0xFF, 0x17, 0x18, 0x02
+.section .text
+
 @ --- TRIANGULE_3D_DATA (2 path(s)) ---
+    .balign 4
 .global _TRIANGULE_3D_DATA
 _TRIANGULE_3D_DATA:
     .word   4               @ vertex_count
@@ -8432,6 +4954,7 @@ _TRIANGULE_3D_DATA:
     .byte   0x19, 0x00, 0x00  @ vert 1: x=25,y=0,z=0
     .byte   0x00, 0x2B, 0x00  @ vert 2: x=0,y=43,z=0
     .byte   0x01, 0xE9, 0x00  @ vert 3: x=1,y=-23,z=0
+    .balign 4
     .word   2               @ path_count
     .byte   4               @ path 0: pt_count
     .byte   0               @ path 0: closed
@@ -8444,6 +4967,7 @@ _TRIANGULE_3D_DATA:
     .byte   0
     .byte   3
     .byte   1
+    .balign 4
 
 @ --- vec (2 path(s)) ---
 .global _VEC_VECTORS
@@ -8454,10 +4978,10 @@ _VEC_VECTORS:
 
 _VEC_PATH0:
     .byte   127               @ intensity
-    .byte   0x1C, 0x00, 0x00, 0x00  @ y=28, x=0, hdr
-    .byte   0xFF, 0xE2, 0xF1  @ line dy=-30, dx=-15
-    .byte   0xFF, 0x00, 0x1E  @ line dy=0, dx=30
-    .byte   0xFF, 0x1E, 0xF1  @ line dy=30, dx=-15
+    .byte   0xFE, 0x0F, 0x00, 0x00  @ y=-2, x=15, hdr
+    .byte   0xFF, 0x00, 0xE2  @ line dy=0, dx=-30
+    .byte   0xFF, 0x1E, 0x0F  @ line dy=30, dx=15
+    .byte   0xFF, 0xE2, 0x0F  @ line dy=-30, dx=15
     .byte   0x02            @ end marker
 
 _VEC_PATH1:
@@ -8467,7 +4991,17 @@ _VEC_PATH1:
     .byte   0xFF, 0x1B, 0x0F  @ line dy=27, dx=15
     .byte   0x02            @ end marker
 
+@ --- VEC_VEC (libvpy position-independent .vec image) ---
+.section .rodata._VEC_VEC,"a",%progbits
+    .balign 4
+.global _VEC_VEC
+_VEC_VEC:
+    .byte   0x02, 0x00, 0x7F, 0xFE, 0x0F, 0x00, 0x00, 0xFF, 0x00, 0xE2, 0xFF, 0x1E, 0x0F, 0xFF, 0xE2, 0x0F
+    .byte   0x02, 0x7F, 0xFE, 0xF1, 0x00, 0x00, 0xFF, 0xE5, 0x0F, 0xFF, 0x1B, 0x0F, 0x02
+.section .text
+
 @ --- VEC_3D_DATA (2 path(s)) ---
+    .balign 4
 .global _VEC_3D_DATA
 _VEC_3D_DATA:
     .word   4               @ vertex_count
@@ -8475,6 +5009,7 @@ _VEC_3D_DATA:
     .byte   0xF1, 0xFE, 0x00  @ vert 1: x=-15,y=-2,z=0
     .byte   0x0F, 0xFE, 0x00  @ vert 2: x=15,y=-2,z=0
     .byte   0x00, 0xE3, 0x00  @ vert 3: x=0,y=-29,z=0
+    .balign 4
     .word   2               @ path_count
     .byte   3               @ path 0: pt_count
     .byte   1               @ path 0: closed
@@ -8486,4 +5021,5 @@ _VEC_3D_DATA:
     .byte   1
     .byte   3
     .byte   2
+    .balign 4
 

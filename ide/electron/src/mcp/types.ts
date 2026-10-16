@@ -3,14 +3,14 @@
 
 export interface MCPRequest {
   jsonrpc: '2.0';
-  id: string | number;
+  id: string | number | null;
   method: string;
   params?: Record<string, any>;
 }
 
 export interface MCPResponse {
   jsonrpc: '2.0';
-  id: string | number;
+  id: string | number | null;
   result?: any;
   error?: MCPError;
 }
@@ -27,7 +27,9 @@ export interface MCPNotification {
   params?: Record<string, any>;
 }
 
-// Tool definition
+// Tool definition. `name` is the IDE method ("editor/read_document"); the
+// MCP-safe name exposed to external clients ("editor_read_document") is derived
+// from it by toolNameForMethod() in server.ts.
 export interface MCPTool {
   name: string;
   description: string;
@@ -325,4 +327,6 @@ export const ErrorCodes = {
   CompilationFailed: -32002,
   EmulatorNotRunning: -32003,
   BreakpointFailed: -32004,
+  Unauthorized: -32010,
+  ToolFailed: -32011,
 } as const;

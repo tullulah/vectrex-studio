@@ -32,6 +32,8 @@ START:
     STA VIA_t1_cnt_lo
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -63,17 +65,19 @@ NOTE_STATE           EQU $C880+$25   ; Pitched note state (10 bytes x 3 channels
 NOTE_ARG_INSTR       EQU $C880+$43   ; PLAY_NOTE argument: instrument ROM block address (2 bytes)
 NOTE_ARG_CHANNEL     EQU $C880+$45   ; PLAY_NOTE argument: channel (0/1/2) (1 bytes)
 NOTE_ARG_NOTE        EQU $C880+$46   ; PLAY_NOTE argument: MIDI note (24-107) (1 bytes)
-VAR_MELODY           EQU $C880+$47   ; User variable: melody (2 bytes)
-VAR_MELODY_LEN       EQU $C880+$49   ; User variable: melody_len (2 bytes)
-VAR_BASS             EQU $C880+$4B   ; User variable: bass (2 bytes)
-VAR_NOTE_TIMER       EQU $C880+$4D   ; User variable: note_timer (2 bytes)
-VAR_NOTE_INDEX       EQU $C880+$4F   ; User variable: note_index (2 bytes)
-VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_ARG0             EQU $C880+$47   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$49   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$4B   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$4D   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$4F   ; Function argument 4 (16-bit) (2 bytes)
+VAR_ARG5             EQU $C880+$51   ; Function argument 5 (16-bit) (2 bytes)
+VAR_ARG6             EQU $C880+$53   ; Function argument 6 (16-bit) (2 bytes)
+VAR_ARG7             EQU $C880+$55   ; Function argument 7 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$57   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_MELODY           EQU $C880+$58   ; User variable: MELODY (2 bytes)
+VAR_BASS             EQU $C880+$5A   ; User variable: BASS (2 bytes)
+VAR_NOTE_TIMER       EQU $C880+$5C   ; User variable: NOTE_TIMER (2 bytes)
+VAR_NOTE_INDEX       EQU $C880+$5E   ; User variable: NOTE_INDEX (2 bytes)
 ; Array length constants
 ARRAY_MELODY_LEN         EQU 14   ; 14 elements
 ARRAY_BASS_LEN         EQU 14   ; 14 elements
@@ -84,7 +88,7 @@ ARRAY_BASS_LEN         EQU 14   ; 14 elements
 ; Arrays are stored in ROM and accessed via pointers
 ; At startup, main() initializes VAR_{name} to point to ARRAY_{name}_DATA
 
-; Array literal for variable 'melody' (14 elements, 2 bytes each)
+; Array literal for variable 'MELODY' (14 elements, 2 bytes each)
 ARRAY_MELODY_DATA:
     FDB 60   ; Element 0
     FDB 60   ; Element 1
@@ -101,7 +105,7 @@ ARRAY_MELODY_DATA:
     FDB 62   ; Element 12
     FDB 60   ; Element 13
 
-; Array literal for variable 'bass' (14 elements, 2 bytes each)
+; Array literal for variable 'BASS' (14 elements, 2 bytes each)
 ARRAY_BASS_DATA:
     FDB 48   ; Element 0
     FDB 48   ; Element 1
@@ -127,6 +131,7 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    CLR DRAW_VEC_INTENSITY ; 0 = use recorded/vector intensity (no override)
     LDA #$F8
     STA TEXT_SCALE_H      ; Default height = -8 (normal size)
     LDA #$48
@@ -171,6 +176,7 @@ LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
     JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
     JSR NOTE_UPDATE_RUNTIME  ; Auto-injected: tick note timers + arpeggio
+; VPy_LINE:14
     LDD #0
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_NOTE_TIMER
@@ -182,6 +188,8 @@ LOOP_BODY:
     LDD #1
 .CMP_0_END:
     LBEQ IF_NEXT_1
+; VPy_LINE:15
+; NATIVE_CALL: PLAY_NOTE at line 15
     ; PLAY_NOTE("pluck", channel, note)
     LDX #_PLUCK_INSTR
     STX >NOTE_ARG_INSTR
@@ -199,6 +207,8 @@ LOOP_BODY:
     JSR PLAY_NOTE_RUNTIME
     LDD #0
     STD RESULT
+; VPy_LINE:16
+; NATIVE_CALL: PLAY_NOTE at line 16
     ; PLAY_NOTE("bell", channel, note)
     LDX #_BELL_INSTR
     STX >NOTE_ARG_INSTR
@@ -216,12 +226,14 @@ LOOP_BODY:
     JSR PLAY_NOTE_RUNTIME
     LDD #0
     STD RESULT
-    LDD >VAR_NOTE_INDEX
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:17
     LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_NOTE_INDEX
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_NOTE_INDEX
-    LDD #14  ; const melody_len
+; VPy_LINE:18
+    LDD #14  ; const MELODY_LEN
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_NOTE_INDEX
     CMPD TMPVAL
@@ -232,46 +244,53 @@ LOOP_BODY:
     LDD #1
 .CMP_1_END:
     LBEQ IF_NEXT_3
+; VPy_LINE:19
     LDD #0
     STD VAR_NOTE_INDEX
     LBRA IF_END_2
 IF_NEXT_3:
 IF_END_2:
+; VPy_LINE:20
     LDD #12
     STD VAR_NOTE_TIMER
     LBRA IF_END_0
 IF_NEXT_1:
 IF_END_0:
-    LDD >VAR_NOTE_TIMER
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:21
     LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_NOTE_TIMER
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_NOTE_TIMER
+; VPy_LINE:23
+; NATIVE_CALL: SET_INTENSITY at line 23
     ; SET_INTENSITY: Set drawing intensity
     LDD #64
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
     STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
+; VPy_LINE:24
+; NATIVE_CALL: PRINT_TEXT at line 24
     ; PRINT_TEXT: Print text at position
     LDD #-60
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #40
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_7255613315621351036      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:25
+; NATIVE_CALL: PRINT_TEXT at line 25
     ; PRINT_TEXT: Print text at position
     LDD #-60
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #20
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_4519249404345677336      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
@@ -320,26 +339,27 @@ _PLUCK_INSTR:
 VECTREX_PRINT_TEXT:
     ; VPy signature: PRINT_TEXT(x, y, string)
     ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
-    ; NOTE: Do NOT set VIA_cntl=$98 here - would release /ZERO prematurely
-    ;       causing integrators to drift toward joystick DAC value.
-    ;       Moveto_d_7F (called by Print_Str_d) handles VIA_cntl via $CE.
     LDA #$D0
-    TFR A,DP       ; Set Direct Page to $D0 for BIOS
-    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
-    JSR Reset0Ref   ; Reset beam to center before positioning text
-    LDU VAR_ARG2   ; string pointer
-    LDA >TEXT_SCALE_H ; height (signed byte, e.g. $F8=-8)
-    STA >$C82A      ; Vec_Text_Height: controls character Y scale
-    LDA >TEXT_SCALE_W ; width (unsigned byte, e.g. 72)
-    STA >$C82B      ; Vec_Text_Width: controls character X spacing
-    LDA >VAR_ARG1+1 ; Y coordinate
-    LDB >VAR_ARG0+1 ; X coordinate
+    TFR A,DP
+    JSR Intensity_5F
+    JSR Reset0Ref
+    LDU >VAR_ARG2
+    LDA >TEXT_SCALE_H
+    STA >$C82A          ; Vec_Text_Height
+    LDA >TEXT_SCALE_W
+    STA >$C82B          ; Vec_Text_Width
+    LDA >VAR_ARG1+1
+    LDB >VAR_ARG0+1
+    LDX >$C82C
+    PSHS X
     JSR Print_Str_d
+    PULS X
+    STX >$C82C
     LDA #$F8
-    STA >$C82A      ; Restore Vec_Text_Height to normal (-8)
+    STA >$C82A
     LDA #$48
-    STA >$C82B      ; Restore Vec_Text_Width to normal (72)
-    JSR $F1AF      ; DP_to_C8 - restore DP before return
+    STA >$C82B
+    JSR $F1AF
     RTS
 
 MOD16:

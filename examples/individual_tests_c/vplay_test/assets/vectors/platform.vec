@@ -1,0 +1,1 @@
+{"version":"1.0","name":"platform","canvas":{"width":256,"height":256,"origin":"center"},"layers":[{"name":"default","visible":true,"paths":[{"name":"platform","intensity":100,"closed":true,"points":[{"x":-30,"y":0},{"x":30,"y":0},{"x":30,"y":5},{"x":-30,"y":5}]}]}]}

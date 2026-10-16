@@ -2,10 +2,10 @@
 //!
 //! Builtins for drawing circles, rectangles, polygons, etc.
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use vpy_parser::Expr;
 
-/// DRAW_CIRCLE(xc, yc, diam) or DRAW_CIRCLE(xc, yc, diam, intensity)
+/// DRAW_CIRCLE(xc, yc, radius) or DRAW_CIRCLE(xc, yc, radius, intensity)
 pub fn emit_draw_circle(
     args: &[Expr],
     out: &mut String,
@@ -27,7 +27,7 @@ pub fn emit_draw_circle(
             }
             
             let segs = 16; // 16-sided polygon approximation (use DRAW_CIRCLE_SEG for more)
-            let r = (*diam as f64) / 2.0;
+            let r = *diam as f64; // 3rd arg IS the radius (was diameter/2)
             let mut verts: Vec<(i32, i32)> = Vec::new();
             
             for k in 0..segs {
@@ -247,7 +247,7 @@ pub fn emit_draw_circle_seg(
             }
             
             let segs = (*nseg).clamp(3, 64) as usize;
-            let r = (*diam as f64) / 2.0;
+            let r = *diam as f64; // 3rd arg IS the radius (was diameter/2)
             let mut verts: Vec<(i32, i32)> = Vec::new();
             
             for k in 0..segs {
@@ -491,9 +491,10 @@ pub fn emit_draw_sprite(
         return;
     }
     
-    // DRAW_SPRITE is complex (requires bitmap data, scanline conversion)
-    // For now, placeholder implementation
-    out.push_str("    ; TODO: DRAW_SPRITE implementation\n");
+    // DRAW_SPRITE has no m6809 implementation (it would need a bitmap asset
+    // system and raster conversion): fail the build instead of drawing nothing.
+    super::diagnostics::error("DRAW_SPRITE is not implemented on m6809 — draw a .vec asset with DRAW_VECTOR instead");
+    out.push_str("    ; DRAW_SPRITE: not implemented (compile error)\n");
     out.push_str("    ; Requires bitmap asset system and raster conversion\n");
     out.push_str("    LDD #0\n    STD RESULT\n");
 }
@@ -606,7 +607,7 @@ pub fn emit_draw_bezier_quad(args: &[Expr], out: &mut String) {
 
 /// Emit runtime helpers for drawing builtins
 /// Only emits helpers that are actually used in the code (tree shaking)
-pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
+pub fn emit_runtime_helpers(out: &mut String, needed: &BTreeSet<String>) {
     // DRAW_CIRCLE_RUNTIME: Draw circle with runtime parameters
     // Uses 8-segment octagon approximation (simple but effective)
     // Copied verbatim from core/src/backend/m6809/emission.rs
@@ -631,10 +632,8 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         PSHS B                 ; Save intensity on stack\n\
         \n\
         LDB DRAW_CIRCLE_DIAM\n\
-        SEX                    ; Sign-extend to 16-bit (diameter is unsigned 0..255)\n\
-        LSRA                   ; Divide by 2 to get radius\n\
-        RORB\n\
-        STD >DRAW_CIRCLE_TEMP   ; >DRAW_CIRCLE_TEMP = radius (16-bit, big-endian: +0=hi, +1=lo)\n\
+        SEX                    ; Sign-extend to 16-bit (radius is the arg, 0..127)\n\
+        STD >DRAW_CIRCLE_TEMP   ; >DRAW_CIRCLE_TEMP = radius (the 3rd arg IS the radius; was diameter/2)\n\
         \n\
         LDB DRAW_CIRCLE_XC     ; xc (signed -128..127)\n\
         SEX\n\

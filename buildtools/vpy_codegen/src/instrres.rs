@@ -72,6 +72,27 @@ impl InstrResource {
         Ok(resource)
     }
 
+    /// The 16-byte instrument block as raw bytes: the same layout and the same
+    /// clamps as [`Self::compile_to_arm_asm_with_name`], for the C header that
+    /// `vpy_cli compile-asset --format c` emits (libvpy's `vpy_play_note` reads it).
+    pub fn compile_to_bytes(&self) -> [u8; 16] {
+        [
+            self.duration_frames,
+            self.volume.min(15),
+            self.arpeggio_count.min(4),
+            self.arpeggio_speed_frames.max(1),
+            self.arpeggio_intervals[0] as u8,
+            self.arpeggio_intervals[1] as u8,
+            self.arpeggio_intervals[2] as u8,
+            self.arpeggio_intervals[3] as u8,
+            if self.noise_enabled { 1 } else { 0 },
+            self.noise_period.min(31),
+            self.pitch_sweep_delta as u8,
+            self.pitch_sweep_duration_frames,
+            0, 0, 0, 0,
+        ]
+    }
+
     /// Compile to a fixed 16-byte ROM data block in ARM assembler syntax (.byte directives).
     ///
     /// Same byte layout as compile_to_asm_with_name but uses .byte / .global
@@ -242,6 +263,35 @@ mod tests {
         assert_eq!(byte_count, 16, "expected 16 bytes");
     }
 
+    /// The C header's bytes are the ARM ROM block's bytes, value for value
+    /// (the clamps included: volume 20 -> 15, arpeggio_count 9 -> 4, speed 0 -> 1).
+    #[test]
+    fn test_compile_to_bytes_matches_arm_block() {
+        let instr = InstrResource {
+            name: "odd".to_string(),
+            duration_frames: 7,
+            volume: 20,
+            arpeggio_count: 9,
+            arpeggio_speed_frames: 0,
+            arpeggio_intervals: [0, 7, -5, 12],
+            noise_enabled: true,
+            noise_period: 40,
+            pitch_sweep_delta: -3,
+            pitch_sweep_duration_frames: 6,
+            ..Default::default()
+        };
+        let asm = instr.compile_to_arm_asm_with_name("odd");
+        let from_asm: Vec<u8> = asm.lines()
+            .filter_map(|l| l.trim_start().strip_prefix(".byte"))
+            .flat_map(|rest| {
+                let vals = rest.split('@').next().unwrap_or("").to_string();
+                vals.split(',').map(|v| v.trim().parse::<u8>().unwrap()).collect::<Vec<_>>()
+            })
+            .collect();
+        assert_eq!(from_asm, instr.compile_to_bytes().to_vec());
+        assert_eq!(&instr.compile_to_bytes()[..4], &[7, 15, 4, 1]);
+    }
+
     #[test]
     fn test_compile_bell_to_asm() {
         let instr = InstrResource {
@@ -290,8 +340,7 @@ mod tests {
     fn test_note_period_table_coverage() {
         // Verify the MIDI-to-period formula produces valid values for range 24-107
         for midi in 24u8..=107 {
-            let period = (88200.0 / (440.0 * 2f32.powf((midi as f32 - 69.0) / 12.0))).round() as u16;
-            let period = period.max(1).min(4095);
+            let period = crate::psg::midi_to_period(midi as f64);
             assert!(period >= 1 && period <= 4095,
                 "MIDI {} produced out-of-range period {}", midi, period);
         }

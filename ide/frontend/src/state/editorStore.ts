@@ -21,6 +21,7 @@ interface EditorState {
   setDiagnostics: (uri: string, diags: DiagnosticModel[]) => void;
   setDiagnosticsBySource: (uri: string, source: string, diags: DiagnosticModel[]) => void;
   closeDocument: (uri: string) => void;
+  setPinned: (uri: string, pinned: boolean) => void;
   gotoLocation: (uri: string, line: number, column: number) => void;
   setScrollPosition: (uri: string, top: number) => void;
   setHadFocus: (uri: string, focused: boolean) => void;
@@ -184,6 +185,16 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   closeDocument: (uri) => set((s) => {
     const documents = s.documents.filter(d => d.uri !== uri);
     return { documents, active: s.active === uri ? undefined : s.active, allDiagnostics: recomputeAllDiagnostics(documents) };
+  }),
+  /** Pin or unpin a tab. Pinned tabs come first: pinning moves a tab to the end of the pinned
+   *  group, unpinning to the start of the others (as VS Code does). */
+  setPinned: (uri, pinned) => set((s) => {
+    const doc = s.documents.find(d => d.uri === uri);
+    if (!doc || !!doc.pinned === pinned) return {};
+    const rest = s.documents.filter(d => d.uri !== uri);
+    const nPinned = rest.filter(d => d.pinned).length;
+    const documents = [...rest.slice(0, nPinned), { ...doc, pinned }, ...rest.slice(nPinned)];
+    return { documents };
   }),
   gotoLocation: (uri, line, column) => {
     const s = get();

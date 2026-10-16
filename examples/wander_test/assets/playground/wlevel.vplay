@@ -1,0 +1,16 @@
+{
+ "version":"2.0","type":"level",
+ "metadata":{"name":"wlevel"},
+ "worldBounds":{"xMin":-96,"xMax":95,"yMin":-128,"yMax":127},
+ "isolateScreens":false,
+ "layers":{
+  "background":[],
+  "gameplay":[
+   {"id":"e1","type":"enemy","vectorName":"enemy","layer":"gameplay","x":-40,"y":-20,
+    "scale":1,"rotation":0,"enemyType":"enemy","aiType":"wander",
+    "walkable_areas":[{"y":-20,"x_min":-80,"x_max":0},{"y":30,"x_min":10,"x_max":80}],
+    "transitions":[{"from":0,"to":1,"type":"jump_up"}]}
+  ],
+  "foreground":[]
+ }
+}

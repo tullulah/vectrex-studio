@@ -5,14 +5,14 @@ use std::path::{Path, PathBuf};
 use std::fs;
 use std::collections::{HashSet, HashMap};
 use crate::{AssetInfo, AssetType};
-use vpy_parser::{Module, Item, Stmt, Expr};
+use vpy_parser::{Module, Expr};
 
 /// Filter assets to only those actually used in the code
 pub fn filter_used_assets(assets: &[AssetInfo], module: &Module) -> Vec<AssetInfo> {
     let mut used_names = HashSet::new();
 
     // Scan all statements for asset references
-    collect_asset_names(&module.items, &mut used_names);
+    collect_asset_names(module, &mut used_names);
 
     // Also scan any used level files to include the vectors they reference
     let level_names: Vec<String> = used_names.iter().cloned().collect();
@@ -144,118 +144,24 @@ fn collect_vanim_vec_refs(vanim_path: &str, used_names: &mut HashSet<String>) {
     }
 }
 
-/// Recursively collect asset names from statements
-fn collect_asset_names(items: &[Item], used_names: &mut HashSet<String>) {
-    for item in items {
-        match item {
-            Item::Function(func) => {
-                for stmt in &func.body {
-                    collect_asset_names_from_stmt(stmt, used_names);
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
-/// Collect asset names from a single statement
-fn collect_asset_names_from_stmt(stmt: &Stmt, used_names: &mut HashSet<String>) {
-    match stmt {
-        Stmt::Expr(e, _) => collect_asset_names_from_expr(e, used_names),
-        Stmt::If { cond, body, elifs, else_body, .. } => {
-            collect_asset_names_from_expr(cond, used_names);
-            for s in body {
-                collect_asset_names_from_stmt(s, used_names);
-            }
-            for (elif_cond, elif_body) in elifs {
-                collect_asset_names_from_expr(elif_cond, used_names);
-                for s in elif_body {
-                    collect_asset_names_from_stmt(s, used_names);
-                }
-            }
-            if let Some(else_stmts) = else_body {
-                for s in else_stmts {
-                    collect_asset_names_from_stmt(s, used_names);
-                }
+/// Collect asset names named by asset-loading builtins anywhere in the module
+/// (DRAW_VECTOR("name"), PLAY_MUSIC("name"), …). Uses the exhaustive walker so an
+/// asset referenced from a `switch` case, a `return`, or a compound assignment is
+/// still embedded.
+fn collect_asset_names(module: &Module, used_names: &mut HashSet<String>) {
+    const ASSET_BUILTINS: &[&str] = &[
+        "DRAW_VECTOR", "DRAW_VECTOR_EX", "DRAW_VECTOR_3D", "DRAW_VECTOR_ROT", "PLAY_MUSIC",
+        "PLAY_SFX", "LOAD_LEVEL", "DRAW_ANIM", "PLAY_NOTE", "DRAW_RECORDING",
+    ];
+    super::ast_walk::for_each_call(module, |call| {
+        let up = call.name.to_uppercase();
+        if ASSET_BUILTINS.contains(&up.as_str()) {
+            // First argument should be asset name (string literal)
+            if let Some(Expr::StringLit(asset_name)) = call.args.first() {
+                used_names.insert(asset_name.clone());
             }
         }
-        Stmt::While { cond, body, .. } => {
-            collect_asset_names_from_expr(cond, used_names);
-            for s in body {
-                collect_asset_names_from_stmt(s, used_names);
-            }
-        }
-        Stmt::For { start, end, step, body, .. } => {
-            collect_asset_names_from_expr(start, used_names);
-            collect_asset_names_from_expr(end, used_names);
-            if let Some(step_expr) = step {
-                collect_asset_names_from_expr(step_expr, used_names);
-            }
-            for s in body {
-                collect_asset_names_from_stmt(s, used_names);
-            }
-        }
-        Stmt::ForIn { iterable, body, .. } => {
-            collect_asset_names_from_expr(iterable, used_names);
-            for s in body {
-                collect_asset_names_from_stmt(s, used_names);
-            }
-        }
-        Stmt::Assign { value, .. } | Stmt::Let { value, .. } => {
-            collect_asset_names_from_expr(value, used_names);
-        }
-        _ => {}
-    }
-}
-
-/// Collect asset names from expressions (DRAW_VECTOR("name"), PLAY_MUSIC("name"), etc.)
-fn collect_asset_names_from_expr(expr: &Expr, used_names: &mut HashSet<String>) {
-    match expr {
-        Expr::Call(vpy_parser::CallInfo { name, args, .. }) => {
-            // Check if it's an asset-loading builtin
-            let up = name.to_uppercase();
-            if up == "DRAW_VECTOR" || up == "DRAW_VECTOR_EX" || up == "DRAW_VECTOR_3D" ||
-               up == "PLAY_MUSIC" || up == "PLAY_SFX" || up == "LOAD_LEVEL" ||
-               up == "DRAW_ANIM" || up == "PLAY_NOTE" {
-                // First argument should be asset name (string literal)
-                if let Some(Expr::StringLit(asset_name)) = args.first() {
-                    used_names.insert(asset_name.clone());
-                }
-            }
-            // Recursively check arguments
-            for arg in args {
-                collect_asset_names_from_expr(arg, used_names);
-            }
-        }
-        Expr::Binary { left, right, .. } | 
-        Expr::Compare { left, right, .. } |
-        Expr::Logic { left, right, .. } => {
-            collect_asset_names_from_expr(left, used_names);
-            collect_asset_names_from_expr(right, used_names);
-        }
-        Expr::Not(operand) | Expr::BitNot(operand) => {
-            collect_asset_names_from_expr(operand, used_names);
-        }
-        Expr::Index { target, index } => {
-            collect_asset_names_from_expr(target, used_names);
-            collect_asset_names_from_expr(index, used_names);
-        }
-        Expr::List(elements) => {
-            for e in elements {
-                collect_asset_names_from_expr(e, used_names);
-            }
-        }
-        Expr::FieldAccess { target, .. } => {
-            collect_asset_names_from_expr(target, used_names);
-        }
-        Expr::MethodCall(vpy_parser::MethodCallInfo { target, args, .. }) => {
-            collect_asset_names_from_expr(target, used_names);
-            for arg in args {
-                collect_asset_names_from_expr(arg, used_names);
-            }
-        }
-        _ => {}
-    }
+    });
 }
 
 /// Discover all assets in a project
@@ -408,6 +314,75 @@ pub fn discover_assets(source_path: &Path) -> Vec<AssetInfo> {
         }
     }
 
+    // Search for recording assets (assets/recordings/*.vrec)
+    // Playback is ARM-only (rp2350/uvm2); on m6809/pitrex these are discovered
+    // but never referenced (DRAW_RECORDING is not collected there), so they are
+    // dropped by filter_used_assets.
+    let rec_dir = project_root.join("assets").join("recordings");
+    if rec_dir.is_dir() {
+        if let Ok(entries) = fs::read_dir(&rec_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("vrec") {
+                    if let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
+                        assets.push(AssetInfo {
+                            name: name.to_string(),
+                            path: path.display().to_string(),
+                            asset_type: AssetType::Recording,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // Search for audio-sample assets (assets/samples/*.vsmp)
+    // Playback is ARM-only (rp2350/uvm2); on m6809/pitrex these are discovered
+    // but never referenced (PLAY_SAMPLE is not collected there), so they are
+    // dropped by filter_used_assets.
+    let smp_dir = project_root.join("assets").join("samples");
+    if smp_dir.is_dir() {
+        if let Ok(entries) = fs::read_dir(&smp_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("vsmp") {
+                    if let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
+                        assets.push(AssetInfo {
+                            name: name.to_string(),
+                            path: path.display().to_string(),
+                            asset_type: AssetType::Sample,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // 3D assets for vpy3d (the 3D builtins, uvm2): .vmesh anywhere under
+    // assets/meshes/ (names unique across its folders), .vscene in assets/scenes/.
+    for (name, paths) in crate::vsceneres::find_meshes(&project_root.join("assets").join("meshes")) {
+        for path in paths {
+            assets.push(AssetInfo {
+                name: name.clone(),
+                path: path.display().to_string(),
+                asset_type: AssetType::Mesh,
+            });
+        }
+    }
+    let scenes_dir = project_root.join("assets").join("scenes");
+    for entry in fs::read_dir(&scenes_dir).into_iter().flatten().flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) == Some("vscene") {
+            if let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
+                assets.push(AssetInfo {
+                    name: name.to_string(),
+                    path: path.display().to_string(),
+                    asset_type: AssetType::Scene,
+                });
+            }
+        }
+    }
+
     // Search for enemy assets (assets/enemies/*.venemy)
     let enemies_dir = project_root.join("assets").join("enemies");
     if enemies_dir.is_dir() {
@@ -425,8 +400,10 @@ pub fn discover_assets(source_path: &Path) -> Vec<AssetInfo> {
         }
     }
 
-    // Sort assets alphabetically by name for consistency
-    assets.sort_by(|a, b| a.name.cmp(&b.name));
+    // Sort by name, then path: read_dir order is filesystem-specific, and two assets can
+    // share a name (e.g. levels in different subfolders), so the name alone is not a total
+    // order and the build would depend on the directory listing.
+    assets.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.path.cmp(&b.path)));
     assets
 }
 
@@ -441,8 +418,9 @@ pub struct SizedAsset {
 /// Asset distribution result for multi-bank support
 #[derive(Debug, Clone)]
 pub struct AssetDistribution {
-    /// Assets assigned to each bank (bank_id -> list of assets)
-    pub bank_assignments: std::collections::HashMap<u8, Vec<SizedAsset>>,
+    /// Assets assigned to each bank (bank_id -> list of assets). A BTreeMap so the
+    /// per-bank emission and the legacy ASSET_*_TABLE order are the same every build.
+    pub bank_assignments: std::collections::BTreeMap<u8, Vec<SizedAsset>>,
     /// Total assets distributed
     pub total_assets: usize,
     /// Total bytes distributed
@@ -657,7 +635,7 @@ pub fn distribute_assets(
     use std::collections::HashMap;
     
     let sized_assets = prepare_assets_with_sizes(assets);
-    let mut bank_assignments: HashMap<u8, Vec<SizedAsset>> = HashMap::new();
+    let mut bank_assignments: std::collections::BTreeMap<u8, Vec<SizedAsset>> = std::collections::BTreeMap::new();
     // Seed bank_sizes with function code already assigned to each bank.
     let mut bank_sizes: HashMap<u8, usize> = pre_used_bytes.clone();
     
@@ -810,7 +788,153 @@ pub fn generate_assets_asm(assets: &[AssetInfo]) -> Result<String, String> {
         }
     }
 
+    // Generate recording assets (.vrec vector-movie playback data).
+    // VIDEO-ONLY, SINGLE-BANK: emitted as MC6809 FDB/FCB tables read by
+    // DRAW_RECORDING_RUNTIME. See compile_vrec for the byte layout.
+    for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Recording)) {
+        match fs::read_to_string(&asset.path) {
+            Ok(text) => match serde_json::from_str::<VrecResource>(&text) {
+                Ok(vrec) => out.push_str(&compile_vrec(&vrec, &asset.name)),
+                Err(e) => {
+                    eprintln!("[WARNING] Failed to parse recording asset '{}': {}", asset.name, e);
+                    let sym = asset.name.to_uppercase().replace('-', "_").replace(' ', "_");
+                    out.push_str(&format!("_{sym}_VREC:\n    FDB 0    ; empty recording (parse error)\n\n"));
+                }
+            },
+            Err(e) => {
+                eprintln!("[WARNING] Failed to read recording asset '{}': {}", asset.name, e);
+            }
+        }
+    }
+
     Ok(out)
+}
+
+// ============================================================
+// Recording compiler (.vrec → MC6809 frame/segment table)
+// ============================================================
+//
+// The .vrec JSON is TARGET-AGNOSTIC (same file drives rp2350/pitrex/m6809).
+// The offset table stores ABSOLUTE frame-label pointers (FDB _<SYM>_VREC_Fn),
+// which the linker resolves — no address math in codegen; the runtime
+// dereferences with LDX ,X just like DRAW_ANIM's frame table.
+//
+// POLYLINE CHAINING (2026-07): consecutive segments that share an endpoint AND
+// intensity are folded into a single chain (start point once + one delta per
+// line) by the target-agnostic `crate::vrec_chain::chain_frame`. This roughly
+// halves ROM size for traced contours (each interior vertex was stored twice)
+// and draws faster (one Reset0Ref + Moveto_d per chain, then continuous
+// Draw_Line_d deltas). The .vrec FILE format is UNCHANGED — chaining is a
+// compile-time transform. Per-frame layout emitted here:
+//
+//   _<SYM>_VREC:  FDB frame_count
+//                 FDB _<SYM>_VREC_F0, _<SYM>_VREC_F1, ...   (abs frame pointers)
+//   _<SYM>_VREC_Fn:
+//                 FDB chain_count
+//     per chain:  FCB start_x, start_y   ; i8 (compile-time clamped)
+//                 FCB intensity          ; u8 (0-127)
+//                 FCB seg_count          ; number of deltas (drawn lines), 1-255
+//                 FCB dx,dy × seg_count  ; i8 deltas (compile-time clamped)
+//
+// A chain of N segments costs 4 + 2N bytes vs the old 5N (e.g. a 20-line closed
+// contour: 44 bytes vs 100). Deltas are clamped to i8 at compile time exactly
+// like the old runtime DREC_DIFF (no accuracy regression). A chain longer than
+// 255 deltas (rare) is split into consecutive chains, re-anchored at the pen.
+//
+// NOTE: the vectors/frame count remains a DATA (flicker-budget) concern — the
+// runtime draws every segment; it does not decimate.
+const VREC_MAX_DELTAS_PER_CHAIN: usize = 255;
+
+fn compile_vrec(vrec: &VrecResource, override_name: &str) -> String {
+    use crate::vrec_chain::{chain_frame, Segment};
+    let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
+    let frame_count = vrec.frames.len();
+
+    let clamp8 = |v: i32| v.clamp(-127, 127) as i8;
+
+    let mut s = String::new();
+    s.push_str(&format!(
+        "; --- {} RECORDING ({} frame(s), fps={}, polyline-chained) ---\n",
+        override_name, frame_count, vrec.fps
+    ));
+    s.push_str(&format!("_{sym}_VREC:\n"));
+    s.push_str(&format!("    FDB {}    ; frame_count\n", frame_count));
+    for i in 0..frame_count {
+        s.push_str(&format!("    FDB _{sym}_VREC_F{i}    ; frame {i} pointer\n"));
+    }
+    for (i, frame) in vrec.frames.iter().enumerate() {
+        // Fold this frame's ordered segments into polyline chains.
+        let segs: Vec<Segment> = frame.segments.iter()
+            .map(|seg| Segment { x0: seg.x0, y0: seg.y0, x1: seg.x1, y1: seg.y1, i: seg.i })
+            .collect();
+        let chains = chain_frame(&segs);
+
+        // Emit each chain, splitting any chain with > 255 deltas so seg_count
+        // fits in one byte. A split re-anchors at the raw pen position.
+        let mut emitted: Vec<(i32, i32, i32, Vec<(i32, i32)>)> = Vec::new(); // (sx, sy, inten, deltas)
+        for c in &chains {
+            if c.deltas.len() <= VREC_MAX_DELTAS_PER_CHAIN {
+                emitted.push((c.start.0, c.start.1, c.intensity, c.deltas.clone()));
+            } else {
+                let (mut px, mut py) = c.start;
+                for part in c.deltas.chunks(VREC_MAX_DELTAS_PER_CHAIN) {
+                    emitted.push((px, py, c.intensity, part.to_vec()));
+                    for (dx, dy) in part {
+                        px += dx;
+                        py += dy;
+                    }
+                }
+            }
+        }
+
+        s.push_str(&format!("_{sym}_VREC_F{i}:\n"));
+        s.push_str(&format!("    FDB {}    ; chain_count\n", emitted.len()));
+        for (sx, sy, inten, deltas) in &emitted {
+            let start_x = clamp8(*sx);
+            let start_y = clamp8(*sy);
+            let intensity = (*inten).clamp(0, 127) as u8;
+            s.push_str(&format!(
+                "    FCB ${:02X},${:02X},${:02X},${:02X}    ; start=({},{}) i={} segs={}\n",
+                start_x as u8, start_y as u8, intensity, deltas.len() as u8,
+                start_x, start_y, intensity, deltas.len()
+            ));
+            for (dx, dy) in deltas {
+                let cdx = clamp8(*dx);
+                let cdy = clamp8(*dy);
+                s.push_str(&format!(
+                    "    FCB ${:02X},${:02X}    ; d=({},{})\n",
+                    cdx as u8, cdy as u8, cdx, cdy
+                ));
+            }
+        }
+    }
+    s.push('\n');
+    s
+}
+
+// .vrec JSON schema (identical to pitrex/arm VrecResource — target-agnostic).
+#[derive(serde::Deserialize)]
+struct VrecResource {
+    #[serde(default)]
+    fps: f64,
+    #[serde(default)]
+    frames: Vec<VrecFrame>,
+}
+
+#[derive(serde::Deserialize)]
+struct VrecFrame {
+    #[serde(default)]
+    segments: Vec<VrecSegment>,
+}
+
+#[derive(serde::Deserialize)]
+struct VrecSegment {
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+    /// Intensity 0-127 (recorder only stores visible segments, i > 0)
+    i: i32,
 }
 
 /// Generate assembly code for assets distributed across multiple banks
@@ -943,6 +1067,18 @@ pub fn generate_distributed_assets_asm(
                 AssetType::Animation => format!("_ANIM_{}", symbol_name),
                 AssetType::Instrument => format!("_{}_INSTR", symbol_name),
                 AssetType::Enemy => format!("_{}_ENEMY", symbol_name),
+                // .vrec playback is ARM-only; recordings never reach the m6809
+                // bank packer (filter_used_assets drops them), but keep the
+                // match exhaustive.
+                AssetType::Recording => format!("_{}_VREC", symbol_name),
+                // .vsmp playback is ARM-only; samples never reach the m6809
+                // bank packer (filter_used_assets drops them), but keep the
+                // match exhaustive.
+                AssetType::Sample => format!("_{}_SMP", symbol_name),
+                // 3D assets are uvm2-only (the 3D builtins are a compile error on
+                // m6809), so they never reach the bank packer either.
+                AssetType::Mesh => format!("_{}_VMESH", symbol_name),
+                AssetType::Scene => format!("_{}_VSCENE", symbol_name),
             };
             asset_entries.push((asset.info.name.clone(), *bank_id, label, asset.info.asset_type.clone()));
         }
@@ -1269,7 +1405,11 @@ pub fn generate_distributed_assets_asm(
 
             // Emit vec files referenced by animations (also in helpers bank)
             lookup_asm.push_str("; Vec files referenced by animations (helpers bank for cross-bank safety)\n\n");
-            for vec_name in &anim_vec_refs {
+            // Sorted: anim_vec_refs is a HashSet, and its iteration order changes
+            // from run to run (would reorder these vecs in the helpers bank).
+            let mut anim_vec_names: Vec<&String> = anim_vec_refs.iter().collect();
+            anim_vec_names.sort();
+            for vec_name in anim_vec_names {
                 if let Some(vec_asset) = assets.iter().find(|a| matches!(a.asset_type, AssetType::Vector) && &a.name == vec_name) {
                     match crate::vecres::VecResource::load(std::path::Path::new(&vec_asset.path)) {
                         Ok(resource) => {
@@ -1647,7 +1787,80 @@ pub fn generate_3d_data_asm(assets: &[AssetInfo]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::generate_draw_anim_banked_wrapper;
+    use super::{compile_vrec, generate_draw_anim_banked_wrapper, VrecResource};
+
+    const VREC_JSON: &str = r#"{
+        "version": "1.0",
+        "name": "clip",
+        "fps": 12,
+        "frames": [
+            { "segments": [
+                { "x0": -50, "y0": 10, "x1": 30, "y1": 20, "i": 95 },
+                { "x0": 200, "y0": -200, "x1": 0, "y1": 0, "i": 300 }
+            ] },
+            { "segments": [
+                { "x0": 0, "y0": 0, "x1": 10, "y1": 10, "i": 1 }
+            ] }
+        ]
+    }"#;
+
+    /// compile_vrec must emit the CHAINED MC6809 table: frame_count word,
+    /// absolute frame pointers, per-frame chain_count word, and per-chain
+    /// [start_x,start_y,intensity,seg_count] + i8 deltas, clamped to i8 / 0-127.
+    #[test]
+    fn test_compile_vrec_m6809_chained_layout() {
+        let vrec: VrecResource = serde_json::from_str(VREC_JSON).unwrap();
+        let asm = compile_vrec(&vrec, "clip");
+
+        assert!(asm.contains("_CLIP_VREC:\n    FDB 2    ; frame_count"),
+            "missing frame_count:\n{asm}");
+        assert!(asm.contains("FDB _CLIP_VREC_F0"), "missing frame 0 pointer:\n{asm}");
+        assert!(asm.contains("FDB _CLIP_VREC_F1"), "missing frame 1 pointer:\n{asm}");
+        // Frame 0: two disjoint segments → 2 chains.
+        assert!(asm.contains("_CLIP_VREC_F0:\n    FDB 2    ; chain_count"),
+            "frame 0 must have 2 chains:\n{asm}");
+        // Frame 1: one segment → 1 chain.
+        assert!(asm.contains("_CLIP_VREC_F1:\n    FDB 1    ; chain_count"),
+            "frame 1 must have 1 chain:\n{asm}");
+        // Chain 0 header: start=(-50,10)=($CE,$0A), i=95=$5F, seg_count=1.
+        assert!(asm.contains("FCB $CE,$0A,$5F,$01"),
+            "chain 0 header bytes wrong:\n{asm}");
+        // Chain 0 delta: (30-(-50), 20-10) = (80,10) = ($50,$0A).
+        assert!(asm.contains("FCB $50,$0A    ; d=(80,10)"),
+            "chain 0 delta wrong:\n{asm}");
+        // Chain 1 header clamped: start 200→127($7F), -200→-127($81), i 300→127($7F), seg_count 1.
+        assert!(asm.contains("FCB $7F,$81,$7F,$01"),
+            "chain 1 clamped header wrong:\n{asm}");
+        // Chain 1 delta clamped: (0-200, 0-(-200)) = (-200,200) → (-127,127) = ($81,$7F).
+        assert!(asm.contains("FCB $81,$7F    ; d=(-127,127)"),
+            "chain 1 clamped delta wrong:\n{asm}");
+    }
+
+    /// A closed square (4 chained segments) must emit ONE chain of 4 deltas.
+    /// Body size: 4 (start_x,start_y,i,seg_count) + 4*2 deltas = 12 bytes,
+    /// vs the old per-segment layout's 5*4 = 20 bytes. Extrapolated to a
+    /// 20-line closed contour: 4 + 40 = 44 bytes (chained) vs 100 (old).
+    #[test]
+    fn test_compile_vrec_closed_square_single_chain() {
+        let json = r#"{ "fps": 10, "frames": [ { "segments": [
+            { "x0": -40, "y0": -40, "x1":  40, "y1": -40, "i": 90 },
+            { "x0":  40, "y0": -40, "x1":  40, "y1":  40, "i": 90 },
+            { "x0":  40, "y0":  40, "x1": -40, "y1":  40, "i": 90 },
+            { "x0": -40, "y0":  40, "x1": -40, "y1": -40, "i": 90 }
+        ] } ] }"#;
+        let vrec: VrecResource = serde_json::from_str(json).unwrap();
+        let asm = compile_vrec(&vrec, "sq");
+
+        assert!(asm.contains("_SQ_VREC_F0:\n    FDB 1    ; chain_count"),
+            "closed square must be a single chain:\n{asm}");
+        // start=(-40,-40)=($D8,$D8), i=90=$5A, seg_count=4.
+        assert!(asm.contains("FCB $D8,$D8,$5A,$04"), "chain header wrong:\n{asm}");
+        // 4 deltas: (80,0),(0,80),(-80,0),(0,-80).
+        assert!(asm.contains("FCB $50,$00    ; d=(80,0)"), "delta 0 wrong:\n{asm}");
+        assert!(asm.contains("FCB $00,$50    ; d=(0,80)"), "delta 1 wrong:\n{asm}");
+        assert!(asm.contains("FCB $B0,$00    ; d=(-80,0)"), "delta 2 wrong:\n{asm}");
+        assert!(asm.contains("FCB $00,$B0    ; d=(0,-80)"), "delta 3 wrong:\n{asm}");
+    }
 
     /// Regression test for Bug 2: DRAW_ANIM_BANKED must save X on the stack
     /// before the Vectrex BIOS calls (Reset0Ref, Moveto_d) that may clobber it,

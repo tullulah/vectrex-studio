@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, session, dialog, systemPreferences } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, session, dialog, systemPreferences, shell } from 'electron';
 import { spawn } from 'child_process';
 // Legacy TypeScript emulator removed: all references to './emu6809' have been deleted.
 // NOTE: Remaining emulator-related IPC endpoints that depended on globalCpu have been pruned.
@@ -6,7 +6,7 @@ import { spawn } from 'child_process';
 // via the existing WASM front-end (renderer) bridge or add a new secure preload API.
 import { createInterface } from 'readline';
 import { join, basename, dirname } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, readdirSync, readFileSync } from 'fs';
 import * as fs from 'fs/promises';
 import { watch } from 'fs';
 import chokidar from 'chokidar';
@@ -14,7 +14,22 @@ import * as crypto from 'crypto';
 import * as net from 'net';
 import { getMCPServer } from './mcp/server.js';
 import type { MCPRequest } from './mcp/types.js';
+import { startMcpTcpServer } from './mcp/tcpServer.js';
+import { startGdbServer, setGdbWindow } from './gdb/server.js';
+import { registerHwDebug } from './hwdebug/session.js';
+import { registerUvmc2Serial } from './hwdebug/uvmc2Serial.js';
+// How to launch the stdio MCP server against this IDE instance (used to wire Claude Code).
+import { getMcpLaunchSpec } from './mcp/auth.js';
+export { getMcpLaunchSpec, getMcpPort, getMcpToken } from './mcp/auth.js';
 import { registerAIProxyHandlers } from './ai-proxy.js';
+import { writeClaudeMcpConfig } from './shellIntegration.js';
+import { createProjectFromTemplate, ensureDefaultProjectsDir, syncCompileFlags } from './projectTemplates.js';
+import { registerTerminalHandlers } from './terminal.js';
+import {
+  ARM_TOOLCHAIN_DOWNLOAD_URL, armToolchainEnv, detectArmToolchain, ensureUvm2Rust, ensureSdk, isSdkInstalled, isValidSdkTag, latestSdkTag, listInstalledSdks, listRemoteSdkTags,
+  projectSdkVersion, resolveProjectSdk, dropStaleSdkBuilds, sdkEnv, sdkRootDir, toolPath, writeProjectSdkVersion, type SdkProgress,
+} from './sdkManager.js';
+import { prependPath, windowsBuildEnv, windowsPicotool, windowsSimEnv } from './winBuildTools.js';
 import { storageGet, storageSet, storageDelete, storageKeys, storageClear, getStoragePath, StorageKeys } from './storage.js';
 import { 
   initPyPilotDb, 
@@ -35,6 +50,10 @@ import {
   getFileBreakpoints,
   clearBreakpoints
 } from './pypilotDb.js';
+import os from 'os';
+// ffmpeg-static exports the absolute path to a per-platform prebuilt ffmpeg
+// binary. Used to transcode the renderer's WebM gameplay capture to MP4.
+import ffmpegStatic from 'ffmpeg-static';
 
 // macOS GUI apps launched from Finder/installer inherit a minimal PATH from
 // launchd (typically /usr/bin:/bin:/usr/sbin:/sbin) and do NOT pick up the
@@ -82,8 +101,6 @@ import {
 })();
 
 let mainWindow: BrowserWindow | null = null;
-let mcpIpcServer: net.Server | null = null;
-const MCP_IPC_PORT = 9123;
 const verbose = process.env.VPY_IDE_VERBOSE_LSP === '1';
 
 // Track current project for MCP server
@@ -119,7 +136,10 @@ interface LspChild {
   proc: ReturnType<typeof spawn>;
   stdin: NodeJS.WritableStream;
 }
-let lsp: LspChild | null = null;
+// Multiple concurrent language servers keyed by a serverId ('vpy', 'clangd', …).
+// Each speaks LSP over stdio with Content-Length framing; messages are tagged
+// with the serverId so the renderer can route them to the right client.
+const lspServers = new Map<string, LspChild>();
 
 // macOS auto-injects Writing Tools / AutoFill / Dictation / Emoji items into any
 // menu labeled "Edit". Suppress them via NSUserDefaults so AppKit skips the injection
@@ -136,6 +156,9 @@ if (process.platform === 'darwin') {
     console.warn('[macOS] failed to suppress Edit menu auto-items:', e);
   }
 }
+
+/** The panels the layout has open (the View menu's checkboxes; see view:visiblePanels). */
+let openPanels = new Set<string>();
 
 async function createWindow() {
   const verbose = process.env.VPY_IDE_VERBOSE_LSP === '1';
@@ -164,31 +187,37 @@ async function createWindow() {
           {
             label: 'New',
             submenu: [
-              { label: 'Project...', click: () => mainWindow?.webContents.send('command', 'project.new') },
+              { label: 'Project...', click: () => sendMenuCommand( 'project.new') },
               { type: 'separator' },
-              { label: 'VPy File', accelerator: 'CmdOrCtrl+N', click: () => mainWindow?.webContents.send('command', 'file.new.vpy') },
-              { label: 'C/C++ File', click: () => mainWindow?.webContents.send('command', 'file.new.c') },
-              { label: 'Vector List (.vec)', click: () => mainWindow?.webContents.send('command', 'file.new.vec') },
-              { label: 'Music File (.vmus)', click: () => mainWindow?.webContents.send('command', 'file.new.vmus') },
-              { label: 'Sound Effect (.vsfx)', click: () => mainWindow?.webContents.send('command', 'file.new.vsfx') },
-              { label: 'Animation (.vanim)', click: () => mainWindow?.webContents.send('command', 'file.new.vanim') },
-              { label: 'Instrument (.vinstr)', click: () => mainWindow?.webContents.send('command', 'file.new.vinstr') },
-              { label: 'Enemy (.venemy)', click: () => mainWindow?.webContents.send('command', 'file.new.venemy') }
+              { label: 'VPy File', accelerator: 'CmdOrCtrl+N', click: () => sendMenuCommand( 'file.new.vpy') },
+              { label: 'C/C++ File', click: () => sendMenuCommand( 'file.new.c') },
+              { label: 'Vector List (.vec)', click: () => sendMenuCommand( 'file.new.vec') },
+              { label: 'Music File (.vmus)', click: () => sendMenuCommand( 'file.new.vmus') },
+            { label: 'Vector Movie (.vmov)', click: () => sendMenuCommand( 'file.new.vmov') },
+              { label: 'Sound Effect (.vsfx)', click: () => sendMenuCommand( 'file.new.vsfx') },
+              { label: 'Animation (.vanim)', click: () => sendMenuCommand( 'file.new.vanim') },
+              { label: 'Instrument (.vinstr)', click: () => sendMenuCommand( 'file.new.vinstr') },
+              { label: 'Enemy (.venemy)', click: () => sendMenuCommand( 'file.new.venemy') },
+              { label: '3D Mesh (.vmesh)', click: () => sendMenuCommand( 'file.new.vmesh') },
+              { label: '3D Scene (.vscene)', click: () => sendMenuCommand( 'file.new.vscene') },
+              { label: '3D Skeleton (.vskel)', click: () => sendMenuCommand( 'file.new.vskel') },
+              { label: '3D Animation (.vclip)', click: () => sendMenuCommand( 'file.new.vclip') }
             ]
           },
           {
             label: 'Open',
             submenu: [
-              { label: 'Project...', accelerator: 'CmdOrCtrl+Shift+O', click: () => mainWindow?.webContents.send('command', 'project.open') },
-              { label: 'File...', accelerator: 'CmdOrCtrl+O', click: () => mainWindow?.webContents.send('command', 'file.open') }
+              { label: 'Project...', accelerator: 'CmdOrCtrl+Shift+O', click: () => sendMenuCommand( 'project.open') },
+              { label: 'Import C/C++ Project...', click: () => sendMenuCommand( 'project.importC') },
+              { label: 'File...', accelerator: 'CmdOrCtrl+O', click: () => sendMenuCommand( 'file.open') }
             ]
           },
           { type: 'separator' },
-          { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => mainWindow?.webContents.send('command', 'file.save') },
-          { label: 'Save As...', accelerator: 'CmdOrCtrl+Shift+S', click: () => mainWindow?.webContents.send('command', 'file.saveAs') },
+          { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => sendMenuCommand( 'file.save') },
+          { label: 'Save As...', accelerator: 'CmdOrCtrl+Shift+S', click: () => sendMenuCommand( 'file.saveAs') },
           { type: 'separator' },
-          { label: 'Close File', click: () => mainWindow?.webContents.send('command', 'file.close') },
-          { label: 'Close Project', click: () => mainWindow?.webContents.send('command', 'project.close') },
+          { label: 'Close File', click: () => sendMenuCommand( 'file.close') },
+          { label: 'Close Project', click: () => sendMenuCommand( 'project.close') },
           { type: 'separator' },
           {
             label: 'Recent Projects',
@@ -197,7 +226,7 @@ async function createWindow() {
             ]
           },
           { type: 'separator' },
-          { label: 'Reset Layout', click: () => mainWindow?.webContents.send('command', 'layout.reset') }
+          { label: 'Reset Layout', click: () => sendMenuCommand( 'layout.reset') }
         ]
       },
       {
@@ -267,41 +296,60 @@ async function createWindow() {
       {
         label: 'Build',
         submenu: [
-          { label: 'Build', accelerator: 'CmdOrCtrl+F7', click: () => mainWindow?.webContents.send('command', 'build.build') },
-          { label: 'Build & Run', accelerator: 'CmdOrCtrl+F5', click: () => mainWindow?.webContents.send('command', 'build.run') },
-          { label: 'Clean', click: () => mainWindow?.webContents.send('command', 'build.clean') }
+          // THE SAME FOUR KEYS THE RENDERER BINDS, and they have to stay in step: on macOS
+          // the native menu takes the key BEFORE the renderer sees it, so an accelerator
+          // that disagrees here silently wins. Bare = the selected target, Shift = the
+          // simulator; F5 runs it, F7 only builds.
+          { label: 'Build && Run on emulator', accelerator: 'F5', click: () => sendMenuCommand( 'build.run') },
+          { label: 'Build && Run on simulator (fast)', accelerator: 'Shift+F5', click: () => sendMenuCommand( 'build.simulate') },
+          { type: 'separator' },
+          { label: 'Build (no run)', accelerator: 'F7', click: () => sendMenuCommand( 'build.build') },
+          { label: 'Build simulator (no run)', accelerator: 'Shift+F7', click: () => sendMenuCommand( 'build.buildSim') },
+          { type: 'separator' },
+          { label: 'Upload to Cartridge (UVMC2, USB)', click: () => sendMenuCommand( 'build.uploadUvm2') },
+          { type: 'separator' },
+          { label: 'Clean', click: () => sendMenuCommand( 'build.clean') }
         ]
       },
       {
         label: 'Debug',
         submenu: [
-          { label: 'Start Debugging', accelerator: 'CmdOrCtrl+F5', click: () => mainWindow?.webContents.send('command', 'debug.start') },
-          { label: 'Stop Debugging', accelerator: 'Shift+F5', click: () => mainWindow?.webContents.send('command', 'debug.stop') },
+          { label: 'Start Debugging', accelerator: 'CmdOrCtrl+D', click: () => sendMenuCommand( 'debug.start') },
+          { label: 'Stop Debugging', click: () => sendMenuCommand( 'debug.stop') },
+          { label: 'Debug on Cartridge (RP2350 SWD / UVMC2 USB)', click: () => sendMenuCommand( 'debug.cartridge') },
+          { label: 'Stop Debugging on Cartridge', click: () => sendMenuCommand( 'debug.cartridgeStop') },
           { type: 'separator' },
-          { label: 'Step Over', accelerator: 'F10', click: () => mainWindow?.webContents.send('command', 'debug.stepOver') },
-          { label: 'Step Into', accelerator: 'F11', click: () => mainWindow?.webContents.send('command', 'debug.stepInto') },
-          { label: 'Step Out', accelerator: 'Shift+F11', click: () => mainWindow?.webContents.send('command', 'debug.stepOut') },
+          { label: 'Step Over', accelerator: 'F10', click: () => sendMenuCommand( 'debug.stepOver') },
+          { label: 'Step Into', accelerator: 'F11', click: () => sendMenuCommand( 'debug.stepInto') },
+          { label: 'Step Out', accelerator: 'Shift+F11', click: () => sendMenuCommand( 'debug.stepOut') },
           { type: 'separator' },
-          { label: 'Toggle Breakpoint', accelerator: 'F9', click: () => mainWindow?.webContents.send('command', 'debug.toggleBreakpoint') }
+          { label: 'Toggle Breakpoint', accelerator: 'F9', click: () => sendMenuCommand( 'debug.toggleBreakpoint') }
         ]
       },
       {
         label: 'View',
         submenu: [
-          { label: 'Emulator', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.emulator') },
-          { label: 'Dual Test', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.dual-emulator') },
-          { label: 'Debug', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.debug') },
-          { label: 'Errors', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.errors') },
-          { label: 'Output', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.output') },
-          { label: 'Build Output', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.build-output') },
-          { label: 'Compiler Output', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.compiler-output') },
-          { label: 'Memory', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.memory') },
-          { label: 'Trace', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.trace') },
-          { label: 'PSG Log', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.psglog') },
-          { label: 'PyPilot', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.ai-assistant') },
+          // the panels, alphabetically (the same list as the in-window View menu, main.tsx)
+          { id: 'view.toggle.bioscalls', label: 'BIOS Calls', type: 'checkbox', checked: openPanels.has('bioscalls'), click: () => sendMenuCommand( 'view.toggle.bioscalls') },
+          { id: 'view.toggle.build-output', label: 'Build Output', type: 'checkbox', checked: openPanels.has('build-output'), click: () => sendMenuCommand( 'view.toggle.build-output') },
+          { id: 'view.toggle.callstack', label: 'Call Stack', type: 'checkbox', checked: openPanels.has('callstack'), click: () => sendMenuCommand( 'view.toggle.callstack') },
+          { id: 'view.toggle.compiler-output', label: 'Compiler Output', type: 'checkbox', checked: openPanels.has('compiler-output'), click: () => sendMenuCommand( 'view.toggle.compiler-output') },
+          { id: 'view.toggle.debug', label: 'Debug', type: 'checkbox', checked: openPanels.has('debug'), click: () => sendMenuCommand( 'view.toggle.debug') },
+          { id: 'view.toggle.dual-emulator', label: 'Dual Test', type: 'checkbox', checked: openPanels.has('dual-emulator'), click: () => sendMenuCommand( 'view.toggle.dual-emulator') },
+          { id: 'view.toggle.emulator', label: 'Emulator', type: 'checkbox', checked: openPanels.has('emulator'), click: () => sendMenuCommand( 'view.toggle.emulator') },
+          { id: 'view.toggle.errors', label: 'Errors', type: 'checkbox', checked: openPanels.has('errors'), click: () => sendMenuCommand( 'view.toggle.errors') },
+          { id: 'view.toggle.memory', label: 'Memory', type: 'checkbox', checked: openPanels.has('memory'), click: () => sendMenuCommand( 'view.toggle.memory') },
+          { id: 'view.toggle.output', label: 'Output', type: 'checkbox', checked: openPanels.has('output'), click: () => sendMenuCommand( 'view.toggle.output') },
+          { id: 'view.toggle.psglog', label: 'PSG Log', type: 'checkbox', checked: openPanels.has('psglog'), click: () => sendMenuCommand( 'view.toggle.psglog') },
+          { id: 'view.toggle.ai-assistant', label: 'PyPilot', type: 'checkbox', checked: openPanels.has('ai-assistant'), click: () => sendMenuCommand( 'view.toggle.ai-assistant') },
+          { id: 'view.toggle.terminal', label: 'Terminal', type: 'checkbox', checked: openPanels.has('terminal'), click: () => sendMenuCommand( 'view.toggle.terminal') },
+          { id: 'view.toggle.trace', label: 'Trace', type: 'checkbox', checked: openPanels.has('trace'), click: () => sendMenuCommand( 'view.toggle.trace') },
           { type: 'separator' },
-          { label: 'Hide Active Panel', click: () => mainWindow?.webContents.send('command', 'view.hideActivePanel') },
-          { label: 'Pin/Unpin Active Panel', click: () => mainWindow?.webContents.send('command', 'view.togglePinActivePanel') },
+          { label: 'New Terminal', click: () => sendMenuCommand( 'terminal.new') },
+          { label: 'Claude Code in Terminal', click: () => sendMenuCommand( 'terminal.claude') },
+          { type: 'separator' },
+          { label: 'Hide Active Panel', click: () => sendMenuCommand( 'view.hideActivePanel') },
+          { label: 'Pin/Unpin Active Panel', click: () => sendMenuCommand( 'view.togglePinActivePanel') },
           { type: 'separator' },
           { role: 'reload' },
           { role: 'forceReload' },
@@ -347,6 +395,10 @@ async function createWindow() {
       sandbox: sandboxEnabled,
       // No permitir contenido inseguro mixto
       allowRunningInsecureContent: false,
+      // The emulators run on requestAnimationFrame, which Chromium stops in a window
+      // that is hidden or covered: a game behind another window froze, and so did a
+      // program being debugged from a gdb terminal in front of the IDE
+      backgroundThrottling: false,
       // Bloquear navegación arbitraria (seguimos validando manualmente de todos modos)
       webSecurity: true,
       // DevTools sólo si se habilita variable explícita; en prod quedan bloqueadas incluso si usuario presiona F12
@@ -423,17 +475,36 @@ async function createWindow() {
   
   // Start MCP IPC server for external MCP stdio process
   startMCPIpcServer();
+
+  // gdb's way into the ARM emulator: `target remote :3333` (gdb/server.ts)
+  setGdbWindow(mainWindow);
+  startGdbServer(verbose).then((p) => {
+    if (p == null) console.error('[gdb] no free port in 3333-3343: gdb cannot attach');
+    else console.log(`[gdb] ARM emulator: arm-none-eabi-gdb -ex "target remote :${p}"`);
+  });
   
   // CRITICAL: Block accidental browser reloads that would clear localStorage
   mainWindow.webContents.on('before-input-event', (event, input) => {
     const ctrl = input.control || input.meta; // Ctrl on Windows/Linux, Cmd on macOS
     
-    // F5 triggers debug-continue (not reload)
-    if (input.type === 'keyDown' && input.key === 'F5' && !ctrl && !input.shift) {
-      console.log('[IDE] 🟢 F5 pressed - sending debug-continue to frontend');
-      if (mainWindow) {
-        mainWindow.webContents.send('debug-continue-hotkey');
-      }
+    // THE FOUR BUILD KEYS, INTERCEPTED HERE SO THEY NEVER REACH THE PAGE AS A RELOAD.
+    //
+    // This hook runs BEFORE the renderer sees the key, and it preventDefaults — so
+    // whatever it routes to is what the key does, and any binding in the renderer for the
+    // same key is dead code. F5 used to be routed to `debug-continue-hotkey`, which on a
+    // VPy project continues the 6809 emulator with no cartridge: it boots the BIOS, and
+    // the BIOS is Minestorm. That is the whole of "I press F5 and Minestorm appears".
+    //
+    // Bare = the selected target, Shift = the simulator; F5 runs it, F7 only builds. Same
+    // four keys as the native menus and the renderer — on macOS the menu accelerator gets
+    // there first and this never fires, on Linux/Windows there is no native menu and this
+    // is the only thing that fires. Both roads have to lead to the same command.
+    if (input.type === 'keyDown' && !ctrl && (input.key === 'F5' || input.key === 'F7')) {
+      const cmd = input.key === 'F5'
+        ? (input.shift ? 'build.simulate' : 'build.run')
+        : (input.shift ? 'build.buildSim' : 'build.build');
+      console.log(`[IDE] ${input.shift ? 'Shift+' : ''}${input.key} -> ${cmd}`);
+      sendMenuCommand( cmd);
       event.preventDefault();
       return;
     }
@@ -484,69 +555,38 @@ async function createWindow() {
   });
 }
 
-// Start TCP server for MCP stdio process to communicate with IDE
-function startMCPIpcServer() {
-  if (mcpIpcServer) return;
-  
-  const verbose = process.env.VPY_IDE_VERBOSE_LSP === '1';
-  
-  mcpIpcServer = net.createServer((socket) => {
-    console.log('[MCP IPC] Client connected');
-    
-    let buffer = '';
-    
-    socket.on('data', async (chunk) => {
-      buffer += chunk.toString();
-      
-      // Split by newlines
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-      
-      for (const line of lines) {
-        if (line.trim()) {
-          try {
-            const request: MCPRequest = JSON.parse(line);
-            console.log('[MCP IPC] ▶ Request:', request.method, 'params:', request.params);
-            
-            const mcpServer = getMCPServer();
-            console.log('[MCP IPC] ▶ Calling handleRequest...');
-            const response = await mcpServer.handleRequest(request);
-            console.log('[MCP IPC] ✓ Response received:', response);
-            
-            // Send response back
-            socket.write(JSON.stringify(response) + '\n');
-            console.log('[MCP IPC] ✓ Response sent');
-          } catch (e: any) {
-            console.error('[MCP IPC] Error:', e.message);
-            socket.write(JSON.stringify({
-              jsonrpc: '2.0',
-              id: null,
-              error: { code: -32603, message: e.message }
-            }) + '\n');
-          }
-        }
-      }
-    });
-    
-    socket.on('error', (err) => {
-      console.error('[MCP IPC] Socket error:', err.message);
-    });
-    
-    socket.on('close', () => {
-      console.log('[MCP IPC] Client disconnected');
-    });
-  });
-  
-  mcpIpcServer.listen(MCP_IPC_PORT, 'localhost', () => {
-    console.log(`[MCP IPC] Server listening on port ${MCP_IPC_PORT}`);
-  });
-  
-  mcpIpcServer.on('error', (err: any) => {
-    if (err.code === 'EADDRINUSE') {
-      console.error(`[MCP IPC] Port ${MCP_IPC_PORT} already in use`);
-    } else {
-      console.error('[MCP IPC] Server error:', err);
+// Start the authenticated localhost TCP endpoint the stdio MCP server
+// (ide/mcp-server/server.js) connects to. Port 9123 by default, next free one up
+// to 9133 otherwise; token + port via getMcpToken()/getMcpPort() (mcp/auth.ts).
+// The View menu's panel checkboxes follow the layout: the renderer says which panels
+// are open (at start, from the saved layout, and on every change). A click flips the
+// checkbox by itself, and the layout's answer sets it right.
+// Kept here too: the menu is rebuilt (recent projects: menu:updateRecentProjects), and
+// a rebuilt menu starts from these.
+ipcMain.on('view:visiblePanels', (_e, visible: unknown) => {
+  if (!Array.isArray(visible)) return;
+  openPanels = new Set(visible.filter((v): v is string => typeof v === 'string'));
+  const menu = Menu.getApplicationMenu();
+  if (!menu) return;
+  for (const item of menu.items) {
+    for (const sub of item.submenu?.items ?? []) {
+      if (sub.id?.startsWith('view.toggle.')) sub.checked = visible.includes(sub.id.slice('view.toggle.'.length));
     }
+  }
+});
+
+function startMCPIpcServer() {
+  startMcpTcpServer((request) => getMCPServer().handleRequest(request)).then((port) => {
+    // `claude` in the IDE's terminals is started with this config (shellIntegration.ts):
+    // written once the port is bound, since it carries the port and this run's token.
+    if (port == null) return;
+    try {
+      writeClaudeMcpConfig(getMcpLaunchSpec());
+    } catch (e: any) {
+      console.error('[MCP] could not write the Claude Code MCP config:', e?.message || e);
+    }
+  }).catch((e) => {
+    console.error('[MCP TCP] failed to start:', e?.message || e);
   });
 }
 
@@ -564,30 +604,53 @@ function resolveLspPath(): string | null {
     // run-ide.sh no longer touches (it builds with --profile dev-fast).
     join(cwd, 'ide', 'electron', 'resources', exeName),
     join(cwd, '..', '..', 'ide', 'electron', 'resources', exeName),
-    // Manual `cargo build` without run-ide.sh
+    // Manual `cargo build` without run-ide.sh (root workspace, then buildtools/)
     join(cwd, 'target', 'dev-fast', exeName),
     join(cwd, 'target', 'debug', exeName),
     join(cwd, 'target', 'release', exeName),
+    join(cwd, 'buildtools', 'target', 'debug', exeName),
+    join(cwd, 'buildtools', 'target', 'release', exeName),
     // Bin copiado manualmente
     join(cwd, exeName),
-    // Layout monorepo: bin dentro de crate core
-    join(cwd, 'core', 'target', 'debug', exeName),
-    join(cwd, 'core', 'target', 'release', exeName),
     // Si por alguna razón el cwd termina en ide/electron
     join(cwd, '..', '..', 'target', 'debug', exeName),
     join(cwd, '..', '..', 'target', 'release', exeName),
-    join(cwd, '..', '..', 'core', 'target', 'debug', exeName),
-    join(cwd, '..', '..', 'core', 'target', 'release', exeName),
   ];
   for (const p of candidates) {
     try { if (existsSync(p)) return p; } catch {}
   }
   if (!lspPathWarned) {
     lspPathWarned = true;
-    mainWindow?.webContents.send('lsp://stderr', `[LSP] CWD=${cwd}`);
-    mainWindow?.webContents.send('lsp://stderr', `LSP binary not found. Tried paths:\n${candidates.join('\n')}\nCompile with: cargo build -p vectrex_lang --bin vpy_lsp`);
+    mainWindow?.webContents.send('lsp://stderr', { serverId: 'vpy', line: `[LSP] CWD=${cwd}` });
+    mainWindow?.webContents.send('lsp://stderr', { serverId: 'vpy', line: `LSP binary not found. Tried paths:\n${candidates.join('\n')}\nCompile with: cargo build --bin vpy_lsp` });
   }
   return null;
+}
+
+// Locate clangd (C/C++ IntelliSense). Prefer $CLANGD, then a bundled copy, then
+// common system locations; finally fall back to bare 'clangd' resolved via PATH.
+function resolveClangd(): string {
+  const exe = process.platform === 'win32' ? 'clangd.exe' : 'clangd';
+  const candidates = [
+    process.env.CLANGD || '',
+    join(process.resourcesPath, exe),
+    '/usr/bin/clangd',
+    '/usr/local/bin/clangd',
+    '/opt/homebrew/bin/clangd',
+    '/Library/Developer/CommandLineTools/usr/bin/clangd',
+  ].filter(Boolean);
+  for (const p of candidates) { try { if (existsSync(p)) return p; } catch {} }
+  return exe; // rely on PATH
+}
+
+// Resolve the command + args for a given language server id.
+function resolveServerCommand(serverId: string): { cmd: string; args: string[] } | null {
+  if (serverId === 'clangd') {
+    return { cmd: resolveClangd(), args: ['--background-index', '--clang-tidy=false', '--header-insertion=never'] };
+  }
+  // default: the VPy language server
+  const p = resolveLspPath();
+  return p ? { cmd: p, args: [] } : null;
 }
 
 // Enumerate .vpy and .asm under examples/ and working directory (non-recursive + shallow recursive examples)
@@ -597,150 +660,6 @@ ipcMain.handle('list:sources', async (_e, args: { limit?: number } = {}) => {
   const exDir = join(cwd, 'examples');
   const results: Array<{ path:string; kind:'vpy'|'asm'; size:number; mtime:number }> = [];
 
-// Update native menu with recent projects
-ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: string; path: string}>) => {
-  if (process.platform !== 'darwin' || !mainWindow) return;
-  
-  const template: Electron.MenuItemConstructorOptions[] = [
-    {
-      label: 'Vectrex Studio',
-      submenu: [
-        { role: 'about' },
-        { type: 'separator' },
-        { role: 'services' },
-        { type: 'separator' },
-        { role: 'hide' },
-        { role: 'hideOthers' },
-        { role: 'unhide' },
-        { type: 'separator' },
-        { role: 'quit' }
-      ]
-    },
-    {
-      label: 'File',
-      submenu: [
-        {
-          label: 'New',
-          submenu: [
-            { label: 'Project...', click: () => mainWindow?.webContents.send('command', 'project.new') },
-            { type: 'separator' },
-            { label: 'VPy File', accelerator: 'CmdOrCtrl+N', click: () => mainWindow?.webContents.send('command', 'file.new.vpy') },
-            { label: 'C/C++ File', click: () => mainWindow?.webContents.send('command', 'file.new.c') },
-            { label: 'Vector List (.vec)', click: () => mainWindow?.webContents.send('command', 'file.new.vec') },
-            { label: 'Music File (.vmus)', click: () => mainWindow?.webContents.send('command', 'file.new.vmus') },
-            { label: 'Sound Effect (.vsfx)', click: () => mainWindow?.webContents.send('command', 'file.new.vsfx') },
-            { label: 'Animation (.vanim)', click: () => mainWindow?.webContents.send('command', 'file.new.vanim') },
-            { label: 'Instrument (.vinstr)', click: () => mainWindow?.webContents.send('command', 'file.new.vinstr') },
-            { label: 'Enemy (.venemy)', click: () => mainWindow?.webContents.send('command', 'file.new.venemy') }
-          ]
-        },
-        {
-          label: 'Open',
-          submenu: [
-            { label: 'Project...', accelerator: 'CmdOrCtrl+Shift+O', click: () => mainWindow?.webContents.send('command', 'project.open') },
-            { label: 'File...', accelerator: 'CmdOrCtrl+O', click: () => mainWindow?.webContents.send('command', 'file.open') }
-          ]
-        },
-        { type: 'separator' },
-        { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => mainWindow?.webContents.send('command', 'file.save') },
-        { label: 'Save As...', accelerator: 'CmdOrCtrl+Shift+S', click: () => mainWindow?.webContents.send('command', 'file.saveAs') },
-        { type: 'separator' },
-        { label: 'Close File', click: () => mainWindow?.webContents.send('command', 'file.close') },
-        { label: 'Close Project', click: () => mainWindow?.webContents.send('command', 'project.close') },
-        { type: 'separator' },
-        {
-          label: 'Recent Projects',
-          submenu: recents.length > 0 
-            ? recents.map(r => ({
-                label: r.name,
-                click: () => mainWindow?.webContents.send('command', 'project.openPath', r.path)
-              }))
-            : [{ label: 'No recent projects', enabled: false }]
-        },
-        { type: 'separator' },
-        { label: 'Reset Layout', click: () => mainWindow?.webContents.send('command', 'layout.reset') }
-      ]
-    },
-    {
-      label: 'Edit',
-      submenu: [
-        { label: 'Undo', accelerator: 'CmdOrCtrl+Z', role: 'undo' },
-        { label: 'Redo', accelerator: 'CmdOrCtrl+Y', role: 'redo' },
-        { type: 'separator' },
-        { label: 'Cut', accelerator: 'CmdOrCtrl+X', role: 'cut' },
-        { label: 'Copy', accelerator: 'CmdOrCtrl+C', role: 'copy' },
-        { label: 'Paste', accelerator: 'CmdOrCtrl+V', role: 'paste' },
-        { type: 'separator' },
-        { label: 'Select All', accelerator: 'CmdOrCtrl+A', role: 'selectAll' },
-        { type: 'separator' },
-        { label: 'Toggle Comment', accelerator: 'CmdOrCtrl+/', enabled: false },
-        { label: 'Format Document', accelerator: 'Shift+Alt+F', enabled: false }
-      ]
-    },
-    {
-      label: 'Build',
-      submenu: [
-        { label: 'Build', accelerator: 'F7', click: () => mainWindow?.webContents.send('command', 'build.build') },
-        { label: 'Build & Run', accelerator: 'F5', click: () => mainWindow?.webContents.send('command', 'build.run') },
-        { label: 'Clean', click: () => mainWindow?.webContents.send('command', 'build.clean') }
-      ]
-    },
-    {
-      label: 'Debug',
-      submenu: [
-        { label: 'Start Debugging', accelerator: 'CmdOrCtrl+F5', click: () => mainWindow?.webContents.send('command', 'debug.start') },
-        { label: 'Stop Debugging', accelerator: 'Shift+F5', click: () => mainWindow?.webContents.send('command', 'debug.stop') },
-        { type: 'separator' },
-        { label: 'Step Over', accelerator: 'F10', click: () => mainWindow?.webContents.send('command', 'debug.stepOver') },
-        { label: 'Step Into', accelerator: 'F11', click: () => mainWindow?.webContents.send('command', 'debug.stepInto') },
-        { label: 'Step Out', accelerator: 'Shift+F11', click: () => mainWindow?.webContents.send('command', 'debug.stepOut') },
-        { type: 'separator' },
-        { label: 'Toggle Breakpoint', accelerator: 'F9', click: () => mainWindow?.webContents.send('command', 'debug.toggleBreakpoint') }
-      ]
-    },
-    {
-      label: 'View',
-      submenu: [
-        { label: 'Emulator', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.emulator') },
-        { label: 'Dual Test', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.dual-emulator') },
-        { label: 'Debug', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.debug') },
-        { label: 'Errors', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.errors') },
-        { label: 'Output', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.output') },
-        { label: 'Build Output', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.build-output') },
-        { label: 'Compiler Output', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.compiler-output') },
-        { label: 'Memory', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.memory') },
-        { label: 'Trace', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.trace') },
-        { label: 'PSG Log', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.psglog') },
-        { label: 'PyPilot', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.ai-assistant') },
-        { type: 'separator' },
-        { label: 'Hide Active Panel', click: () => mainWindow?.webContents.send('command', 'view.hideActivePanel') },
-        { label: 'Pin/Unpin Active Panel', click: () => mainWindow?.webContents.send('command', 'view.togglePinActivePanel') },
-        { type: 'separator' },
-        { role: 'reload' },
-        { role: 'forceReload' },
-        { type: 'separator' },
-        { role: 'resetZoom' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
-        { type: 'separator' },
-        { role: 'togglefullscreen' }
-      ]
-    },
-    {
-      label: 'Window',
-      submenu: [
-        { role: 'minimize' },
-        { role: 'zoom' },
-        { type: 'separator' },
-        { role: 'front' },
-        { role: 'close' }
-      ]
-    }
-  ];
-  
-  const menu = Menu.buildFromTemplate(template);
-  Menu.setApplicationMenu(menu);
-});
   async function scanDir(dir:string, depth:number){
     if (results.length >= limit) return;
     try {
@@ -767,19 +686,214 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
   return { ok:true, sources: uniq.slice(0, limit) };
 });
 
-ipcMain.handle('lsp_start', async () => {
+/* FUERA DE `list:sources`, QUE ES DONDE ESTABA. Este handler se habia quedado ANIDADO
+ * dentro del cuerpo de `list:sources`, asi que solo se registraba cuando alguien invocaba
+ * list:sources — y al arrancar no lo invoca nadie. El renderer llamaba y Electron
+ * contestaba `No handler registered for 'menu:updateRecentProjects'`, y la lista de
+ * proyectos recientes desaparecia del menu nativo.
+ *
+ * Compilaba y no daba un solo aviso: anidar un `ipcMain.handle` dentro de otro es sintaxis
+ * valida. Lo unico que lo delata es que el registro no ocurre. */
+// Update native menu with recent projects
+ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: string; path: string}>) => {
+  if (process.platform !== 'darwin' || !mainWindow) return;
+  
+  const template: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: 'Vectrex Studio',
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' }
+      ]
+    },
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'New',
+          submenu: [
+            { label: 'Project...', click: () => sendMenuCommand( 'project.new') },
+            { type: 'separator' },
+            { label: 'VPy File', accelerator: 'CmdOrCtrl+N', click: () => sendMenuCommand( 'file.new.vpy') },
+            { label: 'C/C++ File', click: () => sendMenuCommand( 'file.new.c') },
+            { label: 'Vector List (.vec)', click: () => sendMenuCommand( 'file.new.vec') },
+            { label: 'Music File (.vmus)', click: () => sendMenuCommand( 'file.new.vmus') },
+            { label: 'Vector Movie (.vmov)', click: () => sendMenuCommand( 'file.new.vmov') },
+            { label: 'Sound Effect (.vsfx)', click: () => sendMenuCommand( 'file.new.vsfx') },
+            { label: 'Animation (.vanim)', click: () => sendMenuCommand( 'file.new.vanim') },
+            { label: 'Instrument (.vinstr)', click: () => sendMenuCommand( 'file.new.vinstr') },
+            { label: 'Enemy (.venemy)', click: () => sendMenuCommand( 'file.new.venemy') },
+            { label: '3D Mesh (.vmesh)', click: () => sendMenuCommand( 'file.new.vmesh') },
+            { label: '3D Scene (.vscene)', click: () => sendMenuCommand( 'file.new.vscene') },
+              { label: '3D Skeleton (.vskel)', click: () => sendMenuCommand( 'file.new.vskel') },
+              { label: '3D Animation (.vclip)', click: () => sendMenuCommand( 'file.new.vclip') }
+          ]
+        },
+        {
+          label: 'Open',
+          submenu: [
+            { label: 'Project...', accelerator: 'CmdOrCtrl+Shift+O', click: () => sendMenuCommand( 'project.open') },
+            { label: 'Import C/C++ Project...', click: () => sendMenuCommand( 'project.importC') },
+            { label: 'File...', accelerator: 'CmdOrCtrl+O', click: () => sendMenuCommand( 'file.open') }
+          ]
+        },
+        { type: 'separator' },
+        { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => sendMenuCommand( 'file.save') },
+        { label: 'Save As...', accelerator: 'CmdOrCtrl+Shift+S', click: () => sendMenuCommand( 'file.saveAs') },
+        { type: 'separator' },
+        { label: 'Close File', click: () => sendMenuCommand( 'file.close') },
+        { label: 'Close Project', click: () => sendMenuCommand( 'project.close') },
+        { type: 'separator' },
+        {
+          label: 'Recent Projects',
+          submenu: recents.length > 0 
+            ? recents.map(r => ({
+                label: r.name,
+                click: () => sendMenuCommand( 'project.openPath', r.path)
+              }))
+            : [{ label: 'No recent projects', enabled: false }]
+        },
+        { type: 'separator' },
+        { label: 'Reset Layout', click: () => sendMenuCommand( 'layout.reset') }
+      ]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { label: 'Undo', accelerator: 'CmdOrCtrl+Z', role: 'undo' },
+        { label: 'Redo', accelerator: 'CmdOrCtrl+Y', role: 'redo' },
+        { type: 'separator' },
+        { label: 'Cut', accelerator: 'CmdOrCtrl+X', role: 'cut' },
+        { label: 'Copy', accelerator: 'CmdOrCtrl+C', role: 'copy' },
+        { label: 'Paste', accelerator: 'CmdOrCtrl+V', role: 'paste' },
+        { type: 'separator' },
+        { label: 'Select All', accelerator: 'CmdOrCtrl+A', role: 'selectAll' },
+        { type: 'separator' },
+        { label: 'Toggle Comment', accelerator: 'CmdOrCtrl+/', enabled: false },
+        { label: 'Format Document', accelerator: 'Shift+Alt+F', enabled: false }
+      ]
+    },
+    {
+      label: 'Build',
+      submenu: [
+        // THE SAME FOUR KEYS THE RENDERER BINDS, and they have to stay in step: on macOS
+        // the native menu takes the key BEFORE the renderer sees it, so an accelerator
+        // that disagrees here silently wins. Bare = the selected target, Shift = the
+        // simulator; F5 runs it, F7 only builds.
+        { label: 'Build && Run on emulator', accelerator: 'F5', click: () => sendMenuCommand( 'build.run') },
+        { label: 'Build && Run on simulator (fast)', accelerator: 'Shift+F5', click: () => sendMenuCommand( 'build.simulate') },
+        { type: 'separator' },
+        { label: 'Build (no run)', accelerator: 'F7', click: () => sendMenuCommand( 'build.build') },
+        { label: 'Build simulator (no run)', accelerator: 'Shift+F7', click: () => sendMenuCommand( 'build.buildSim') },
+        { type: 'separator' },
+        { label: 'Upload to Cartridge (UVMC2, USB)', click: () => sendMenuCommand( 'build.uploadUvm2') },
+        { type: 'separator' },
+        { label: 'Clean', click: () => sendMenuCommand( 'build.clean') }
+      ]
+      },
+    {
+      label: 'Debug',
+      submenu: [
+        { label: 'Start Debugging', accelerator: 'CmdOrCtrl+D', click: () => sendMenuCommand( 'debug.start') },
+        { label: 'Stop Debugging', click: () => sendMenuCommand( 'debug.stop') },
+        { label: 'Debug on Cartridge (RP2350 SWD / UVMC2 USB)', click: () => sendMenuCommand( 'debug.cartridge') },
+        { label: 'Stop Debugging on Cartridge', click: () => sendMenuCommand( 'debug.cartridgeStop') },
+        { type: 'separator' },
+        { label: 'Step Over', accelerator: 'F10', click: () => sendMenuCommand( 'debug.stepOver') },
+        { label: 'Step Into', accelerator: 'F11', click: () => sendMenuCommand( 'debug.stepInto') },
+        { label: 'Step Out', accelerator: 'Shift+F11', click: () => sendMenuCommand( 'debug.stepOut') },
+        { type: 'separator' },
+        { label: 'Toggle Breakpoint', accelerator: 'F9', click: () => sendMenuCommand( 'debug.toggleBreakpoint') }
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        // the panels, alphabetically (the same list as the in-window View menu, main.tsx)
+        { id: 'view.toggle.bioscalls', label: 'BIOS Calls', type: 'checkbox', checked: openPanels.has('bioscalls'), click: () => sendMenuCommand( 'view.toggle.bioscalls') },
+        { id: 'view.toggle.build-output', label: 'Build Output', type: 'checkbox', checked: openPanels.has('build-output'), click: () => sendMenuCommand( 'view.toggle.build-output') },
+        { id: 'view.toggle.callstack', label: 'Call Stack', type: 'checkbox', checked: openPanels.has('callstack'), click: () => sendMenuCommand( 'view.toggle.callstack') },
+        { id: 'view.toggle.compiler-output', label: 'Compiler Output', type: 'checkbox', checked: openPanels.has('compiler-output'), click: () => sendMenuCommand( 'view.toggle.compiler-output') },
+        { id: 'view.toggle.debug', label: 'Debug', type: 'checkbox', checked: openPanels.has('debug'), click: () => sendMenuCommand( 'view.toggle.debug') },
+        { id: 'view.toggle.dual-emulator', label: 'Dual Test', type: 'checkbox', checked: openPanels.has('dual-emulator'), click: () => sendMenuCommand( 'view.toggle.dual-emulator') },
+        { id: 'view.toggle.emulator', label: 'Emulator', type: 'checkbox', checked: openPanels.has('emulator'), click: () => sendMenuCommand( 'view.toggle.emulator') },
+        { id: 'view.toggle.errors', label: 'Errors', type: 'checkbox', checked: openPanels.has('errors'), click: () => sendMenuCommand( 'view.toggle.errors') },
+        { id: 'view.toggle.memory', label: 'Memory', type: 'checkbox', checked: openPanels.has('memory'), click: () => sendMenuCommand( 'view.toggle.memory') },
+        { id: 'view.toggle.output', label: 'Output', type: 'checkbox', checked: openPanels.has('output'), click: () => sendMenuCommand( 'view.toggle.output') },
+        { id: 'view.toggle.psglog', label: 'PSG Log', type: 'checkbox', checked: openPanels.has('psglog'), click: () => sendMenuCommand( 'view.toggle.psglog') },
+        { id: 'view.toggle.ai-assistant', label: 'PyPilot', type: 'checkbox', checked: openPanels.has('ai-assistant'), click: () => sendMenuCommand( 'view.toggle.ai-assistant') },
+        { id: 'view.toggle.terminal', label: 'Terminal', type: 'checkbox', checked: openPanels.has('terminal'), click: () => sendMenuCommand( 'view.toggle.terminal') },
+        { id: 'view.toggle.trace', label: 'Trace', type: 'checkbox', checked: openPanels.has('trace'), click: () => sendMenuCommand( 'view.toggle.trace') },
+        { type: 'separator' },
+        { label: 'New Terminal', click: () => sendMenuCommand( 'terminal.new') },
+        { label: 'Claude Code in Terminal', click: () => sendMenuCommand( 'terminal.claude') },
+        { type: 'separator' },
+        { label: 'Hide Active Panel', click: () => sendMenuCommand( 'view.hideActivePanel') },
+        { label: 'Pin/Unpin Active Panel', click: () => sendMenuCommand( 'view.togglePinActivePanel') },
+        { type: 'separator' },
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        { type: 'separator' },
+        { role: 'front' },
+        { role: 'close' }
+      ]
+    }
+  ];
+  
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+});
+
+// Start a language server. serverId selects the binary ('vpy' | 'clangd'); cwd
+// should be the project root (clangd discovers compile_flags.txt / compile_commands.json
+// there). Messages are emitted on 'lsp://message' as { serverId, body }.
+ipcMain.handle('lsp_start', async (_e, args?: { serverId?: string; cwd?: string }) => {
   const verbose = process.env.VPY_IDE_VERBOSE_LSP === '1';
-  if (lsp) return;
-  if (verbose) console.log('[LSP] start request');
-  const path = resolveLspPath();
-  if (!path) return; // mensaje detallado ya emitido en resolveLspPath (una sola vez)
-  if (verbose) console.log('[LSP] spawning', path);
-  const child = spawn(path, [], { stdio: ['pipe', 'pipe', 'pipe'] });
-  lsp = { proc: child, stdin: child.stdin! };
+  const serverId = args?.serverId || 'vpy';
+  if (lspServers.has(serverId)) return { ok: true, already: true };
+  const resolved = resolveServerCommand(serverId);
+  if (!resolved) {
+    mainWindow?.webContents.send('lsp://stderr', { serverId, line: `[LSP:${serverId}] server binary not found` });
+    return { ok: false, error: 'binary_not_found' };
+  }
+  if (serverId === 'clangd' && args?.cwd) {
+    // Include paths for the SDK the project pins now (compile_flags.txt is written once)
+    if (await syncCompileFlags(args.cwd).catch(() => false)) logSdk(`[SDK] ${args.cwd}/compile_flags.txt updated\n`);
+  }
+  if (verbose) console.log(`[LSP:${serverId}] spawning`, resolved.cmd, resolved.args, 'cwd=', args?.cwd);
+  let child;
+  try {
+    child = spawn(resolved.cmd, resolved.args, { stdio: ['pipe', 'pipe', 'pipe'], cwd: args?.cwd || undefined, env: process.env });
+  } catch (e: any) {
+    mainWindow?.webContents.send('lsp://stderr', { serverId, line: `[LSP:${serverId}] spawn failed: ${e?.message || e}` });
+    return { ok: false, error: 'spawn_failed' };
+  }
+  const entry: LspChild = { proc: child, stdin: child.stdin! };
+  lspServers.set(serverId, entry);
 
   let buffer = '';
   let expected: number | null = null;
-  child.stdout.on('data', (chunk: Buffer) => {
+  child.stdout!.on('data', (chunk: Buffer) => {
     buffer += chunk.toString('utf8');
     while (true) {
       if (expected === null) {
@@ -787,10 +901,7 @@ ipcMain.handle('lsp_start', async () => {
         if (headerEnd === -1) break;
         const header = buffer.slice(0, headerEnd);
         const match = /Content-Length: *([0-9]+)/i.exec(header);
-        if (!match) {
-          buffer = buffer.slice(headerEnd + 4);
-          continue;
-        }
+        if (!match) { buffer = buffer.slice(headerEnd + 4); continue; }
         expected = parseInt(match[1], 10);
         buffer = buffer.slice(headerEnd + 4);
       }
@@ -798,30 +909,41 @@ ipcMain.handle('lsp_start', async () => {
         const body = buffer.slice(0, expected);
         buffer = buffer.slice(expected);
         expected = null;
-        mainWindow?.webContents.send('lsp://message', body);
-        mainWindow?.webContents.send('lsp://stdout', body);
-        if (verbose) console.log('[LSP<-] message len', body.length);
+        mainWindow?.webContents.send('lsp://message', { serverId, body });
         continue;
       }
       break;
     }
   });
 
-  const rlErr = createInterface({ input: child.stderr });
-  rlErr.on('line', line => mainWindow?.webContents.send('lsp://stderr', line));
+  const rlErr = createInterface({ input: child.stderr! });
+  rlErr.on('line', line => mainWindow?.webContents.send('lsp://stderr', { serverId, line }));
   child.on('exit', code => {
-    mainWindow?.webContents.send('lsp://stderr', `[LSP exited ${code}]`);
-    if (verbose) console.log('[LSP] exited', code);
-    lsp = null;
+    mainWindow?.webContents.send('lsp://stderr', { serverId, line: `[LSP:${serverId} exited ${code}]` });
+    if (verbose) console.log(`[LSP:${serverId}] exited`, code);
+    lspServers.delete(serverId);
   });
+  return { ok: true };
 });
 
-ipcMain.handle('lsp_send', async (_e, payload: string) => {
-  if (!lsp) return;
+// Send a framed LSP message to a server. Accepts { serverId, payload } or a bare
+// string (back-compat → the default 'vpy' server).
+ipcMain.handle('lsp_send', async (_e, args: { serverId?: string; payload: string } | string) => {
+  const serverId = typeof args === 'string' ? 'vpy' : (args?.serverId || 'vpy');
+  const payload = typeof args === 'string' ? args : args?.payload;
+  const entry = lspServers.get(serverId);
+  if (!entry || typeof payload !== 'string') return;
   const bytes = Buffer.from(payload, 'utf8');
-  const header = `Content-Length: ${bytes.length}\r\n\r\n`;
-  lsp.stdin.write(header);
-  lsp.stdin.write(bytes);
+  entry.stdin.write(`Content-Length: ${bytes.length}\r\n\r\n`);
+  entry.stdin.write(bytes);
+});
+
+// Stop a language server (e.g. when closing a project).
+ipcMain.handle('lsp_stop', async (_e, args?: { serverId?: string }) => {
+  const serverId = args?.serverId || 'vpy';
+  const entry = lspServers.get(serverId);
+  if (entry) { try { entry.proc.kill(); } catch {} lspServers.delete(serverId); }
+  return { ok: true };
 });
 
 // MCP Server handler - Handle JSON-RPC requests from AI agents
@@ -906,8 +1028,122 @@ ipcMain.handle('bin:open', async () => {
 
 // Resolve compiler binary path. Supports env override VPY_COMPILER_BIN.
 // Binaries live in ide/electron/resources/ (dev) or process.resourcesPath (packaged).
-// @param backend: 'buildtools' (default, new modular compiler) or 'core' (legacy compiler)
-function resolveCompilerPath(backend: 'buildtools' | 'core' = 'buildtools'): string | null {
+// ─── SDK versions (uvmc2-sdk) ──────────────────────────────────────────────
+// Not bundled: each project pins a version, downloaded into ~/VectrexStudio/sdk/<tag>/.
+
+function logSdk(line: string) {
+  mainWindow?.webContents.send('run://stdout', line);
+}
+
+function sendSdkProgress(p: SdkProgress) {
+  mainWindow?.webContents.send('sdk://progress', p);
+}
+
+ipcMain.handle('sdk:list', async (_e, args?: { refresh?: boolean }) => {
+  const [installed, remote] = await Promise.all([listInstalledSdks(), listRemoteSdkTags(!!args?.refresh)]);
+  return { installed, remote, latest: remote?.[0] ?? installed[0] ?? null, root: sdkRootDir() };
+});
+
+ipcMain.handle('sdk:install', async (_e, tag: string) => {
+  try {
+    return { ok: true, dir: await ensureSdk(tag, sendSdkProgress) };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+});
+
+ipcMain.handle('sdk:project:get', async (_e, projectFile: string) => {
+  try {
+    const v = await projectSdkVersion(projectFile);
+    if ('error' in v) return { ok: false, error: v.error };
+    if (v.pinned) logSdk(`[SDK] ${projectFile} had no [sdk] version — pinned to ${v.version}\n`);
+    return { ok: true, version: v.version, pinned: v.pinned, installed: await isSdkInstalled(v.version) };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+});
+
+ipcMain.handle('sdk:project:set', async (_e, projectFile: string, tag: string) => {
+  if (!isValidSdkTag(tag)) return { ok: false, error: `Invalid SDK version "${tag}"` };
+  try {
+    await writeProjectSdkVersion(projectFile, tag);
+    logSdk(`[SDK] ${projectFile} now uses SDK ${tag}\n`);
+    if (/\.cvproj$/i.test(projectFile)) await syncCompileFlags(dirname(projectFile)).catch(() => false);
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+});
+
+// The Arm GNU Toolchain is never downloaded (too big, per platform): the Project Settings
+// panel shows whether a usable one is installed, found the same way the build finds it.
+ipcMain.handle('sdk:toolchain', async () => detectArmToolchain());
+
+// Opens the one fixed download page — the renderer can't navigate to external URLs.
+ipcMain.handle('sdk:toolchain:openDownload', async () => {
+  await shell.openExternal(ARM_TOOLCHAIN_DOWNLOAD_URL);
+});
+
+// Every native-menu command goes through here. Clicking the macOS menu bar takes the
+// keyboard away from the page; without giving it back, a dialog the command opens (the
+// name prompt of File > New > Vector/Mesh/...) shows a focused input that receives no keys.
+function sendMenuCommand(id: string, ...payload: any[]) {
+  const wc = mainWindow?.webContents;
+  if (!wc || wc.isDestroyed()) return;
+  if (!wc.isFocused()) wc.focus();
+  wc.send('command', id, ...payload);
+}
+
+/**
+ * A path a Makefile can use unquoted. Project Makefiles say `$(VPY_CLI) compile-asset ...`
+ * and an installed IDE's compiler sits under a path with a space ("/opt/Vectrex Studio/...",
+ * "/Applications/Vectrex Studio.app/..."): the shell cut it at the space. Such a path gets a
+ * symlink without spaces, ~/VectrexStudio/tools/bin/<name>, and that is what make sees.
+ */
+async function makeSafePath(p: string): Promise<string> {
+  if (process.platform === 'win32') return toolPath(await windowsSafePath(p));
+  if (!/\s/.test(p)) return p;
+  const link = join(os.homedir(), 'VectrexStudio', 'tools', 'bin', basename(p));
+  if (/\s/.test(link)) return p;
+  try {
+    let current: string | null = null;
+    try { current = await fs.readlink(link); } catch { /* none yet */ }
+    if (current !== p) {
+      await fs.mkdir(dirname(link), { recursive: true });
+      await fs.rm(link, { force: true });
+      await fs.symlink(p, link);
+    }
+    return link;
+  } catch {
+    return p;
+  }
+}
+
+/**
+ * Windows: a symlink needs administrator rights or Developer Mode, so the program is COPIED
+ * to ~/VectrexStudio/tools/bin (again whenever the IDE's copy changes size or date). With a
+ * space in the home folder too, the path's short 8.3 form, if the volume keeps those.
+ */
+async function windowsSafePath(p: string): Promise<string> {
+  if (!/\s/.test(p)) return p;
+  const copy = join(os.homedir(), 'VectrexStudio', 'tools', 'bin', basename(p));
+  if (!/\s/.test(copy)) {
+    try {
+      const [src, dst] = await Promise.all([fs.stat(p), fs.stat(copy).catch(() => null)]);
+      if (!dst || dst.size !== src.size || dst.mtimeMs < src.mtimeMs) {
+        await fs.mkdir(dirname(copy), { recursive: true });
+        await fs.copyFile(p, copy);
+      }
+      return copy;
+    } catch { /* fall through to the short name */ }
+  }
+  const r = require('child_process').spawnSync('cmd.exe', ['/d', '/s', '/c', `"for %I in ("${p}") do @echo %~sI"`],
+    { encoding: 'utf8', windowsVerbatimArguments: true });
+  const short = String(r.stdout || '').trim();
+  return short && !/\s/.test(short) ? short : p;
+}
+
+function resolveCompilerPath(): string | null {
   const override = process.env.VPY_COMPILER_BIN;
   if (override) {
     try { if (existsSync(override)) return override; } catch {}
@@ -916,14 +1152,6 @@ function resolveCompilerPath(backend: 'buildtools' | 'core' = 'buildtools'): str
 
   const isWin = process.platform === 'win32';
   const resourcesDir = app.isPackaged ? process.resourcesPath : join(__dirname, '..', 'resources');
-
-  if (backend === 'core') {
-    const exe = isWin ? 'vectrexc.exe' : 'vectrexc';
-    const p = join(resourcesDir, exe);
-    try { if (existsSync(p)) return p; } catch {}
-    mainWindow?.webContents.send('run://stderr', `Core compiler not found: ${p}\nCopy binary to ide/electron/resources/ or build with: cargo build --bin vectrexc --release`);
-    return null;
-  }
 
   const exe = isWin ? 'vpy_cli.exe' : 'vpy_cli';
   const p = join(resourcesDir, exe);
@@ -1004,23 +1232,48 @@ function parseCompilerDiagnostics(output: string, sourceFile: string): Array<{ f
 }
 
 
-async function copyPitrexToSDCard(imgPath: string, sdPath: string, win: BrowserWindow | null): Promise<void> {
+/**
+ * Mounted removable volumes (an SD card, the RP2350's BOOTSEL drive), first found first:
+ * macOS /Volumes (not the system's), Linux /media/<user> and /run/media/<user>, Windows the
+ * removable drives (X:\). With `label`, only the volume of that name.
+ */
+async function removableVolumes(label?: string): Promise<string[]> {
+  const out: string[] = [];
+  if (process.platform === 'win32') {
+    const r = await new Promise<string>((resolve) => {
+      let txt = '';
+      const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+        "Get-Volume | Where-Object { $_.DriveType -eq 'Removable' -and $_.DriveLetter } | ForEach-Object { [string]$_.DriveLetter + '|' + $_.FileSystemLabel }"],
+        { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
+      child.stdout?.on('data', (c: Buffer) => { txt += c.toString(); });
+      child.on('error', () => resolve(''));
+      child.on('close', () => resolve(txt));
+    });
+    for (const line of r.split(/\r?\n/)) {
+      const [letter, name = ''] = line.trim().split('|');
+      if (letter && (!label || name === label)) out.push(`${letter}:\\`);
+    }
+    return out;
+  }
+  const roots = process.platform === 'darwin'
+    ? ['/Volumes']
+    : [join('/media', os.userInfo().username), join('/run/media', os.userInfo().username)];
+  const skip = new Set(['Macintosh HD', 'Macintosh HD - Data', 'Recovery']);
+  for (const root of roots) {
+    let names: string[] = [];
+    try { names = await fs.readdir(root); } catch { continue; }
+    for (const n of names) if (!skip.has(n) && (!label || n === label)) out.push(join(root, n));
+  }
+  return out;
+}
+
+async function copyPitrexToSDCard(imgPath: string, sdPath: string, win: BrowserWindow | null, extraFiles: string[] = []): Promise<void> {
   const resourcesDir = app.isPackaged ? process.resourcesPath : join(__dirname, '..', 'resources');
   const sdBundlePath = join(resourcesDir, 'pitrex-sd');
 
   // Resolve SD mount: use explicit path if set, otherwise find first non-system volume
   let sdMount: string = sdPath.trim();
-  if (!sdMount) {
-    try {
-      const volumes = await fs.readdir('/Volumes');
-      const skip = new Set(['Macintosh HD', 'Macintosh HD - Data', 'Recovery']);
-      for (const vol of volumes) {
-        if (skip.has(vol)) continue;
-        sdMount = join('/Volumes', vol);
-        break;
-      }
-    } catch {}
-  }
+  if (!sdMount) sdMount = (await removableVolumes())[0] ?? '';
 
   if (!sdMount) {
     win?.webContents.send('run://stderr', '[SD] No SD card found. Set the SD path in Settings > Build Target > PiTrex.\n');
@@ -1054,28 +1307,30 @@ async function copyPitrexToSDCard(imgPath: string, sdPath: string, win: BrowserW
   const kernelDst = join(sdMount, 'kernel7l.img');
   try {
     await fs.copyFile(imgPath, kernelDst);
-    win?.webContents.send('run://stdout', `[SD]   + kernel7.img\n`);
-    win?.webContents.send('run://status', `Copied to SD: ${sdMount}`);
-    win?.webContents.send('run://stdout', `[SD] Done.\n`);
+    win?.webContents.send('run://stdout', `[SD]   + kernel7l.img\n`);
   } catch (e: any) {
-    win?.webContents.send('run://stderr', `[SD] Failed to copy kernel7.img: ${e.message}\n`);
+    win?.webContents.send('run://stderr', `[SD] Failed to copy kernel7l.img: ${e.message}\n`);
+    return;
   }
+
+  // Extra payload files (e.g. a DOOM .wad) copied to the SD root by basename.
+  for (const extra of extraFiles) {
+    try {
+      await fs.copyFile(extra, join(sdMount, basename(extra)));
+      win?.webContents.send('run://stdout', `[SD]   + ${basename(extra)}\n`);
+    } catch (e: any) {
+      win?.webContents.send('run://stderr', `[SD] Failed to copy ${basename(extra)}: ${e.message}\n`);
+    }
+  }
+
+  win?.webContents.send('run://status', `Copied to SD: ${sdMount}`);
+  win?.webContents.send('run://stdout', `[SD] Done.\n`);
 }
 
 async function copyUvm2ToSDCard(um2Path: string, sdPath: string, win: BrowserWindow | null): Promise<void> {
   // Resolve SD mount: use explicit path if set, otherwise find first non-system volume
   let sdMount: string = sdPath.trim();
-  if (!sdMount) {
-    try {
-      const volumes = await fs.readdir('/Volumes');
-      const skip = new Set(['Macintosh HD', 'Macintosh HD - Data', 'Recovery']);
-      for (const vol of volumes) {
-        if (skip.has(vol)) continue;
-        sdMount = join('/Volumes', vol);
-        break;
-      }
-    } catch {}
-  }
+  if (!sdMount) sdMount = (await removableVolumes())[0] ?? '';
 
   if (!sdMount) {
     win?.webContents.send('run://stderr', '[SD] No SD card found. Set the SD path in Settings > Build Target > UVM2.\n');
@@ -1104,14 +1359,667 @@ async function copyUvm2ToSDCard(um2Path: string, sdPath: string, win: BrowserWin
   }
 }
 
+// Run a subprocess and stream its stdout/stderr to the build/run output panel.
+// Resolves with the numeric exit code (or -1 if the process failed to spawn).
+//
+// `opts.label` prefixes the streamed lines (default 'RP2350'); `opts.env`
+// overrides the child environment (default the IDE's own env). Both let the
+// generic external-build path (C/C++ projects) reuse this without inheriting
+// the RP2350-flavoured logging.
+function runFlashCommand(
+  cmd: string,
+  cmdArgs: string[],
+  cwd: string | undefined,
+  win: BrowserWindow | null,
+  opts?: { env?: NodeJS.ProcessEnv; label?: string },
+): Promise<number> {
+  const label = opts?.label ?? 'RP2350';
+  return new Promise((resolve) => {
+    win?.webContents.send('run://stdout', `[${label}] $ ${cmd} ${cmdArgs.join(' ')}\n`);
+    let child;
+    try {
+      child = spawn(cmd, cmdArgs, { cwd, env: opts?.env ?? process.env });
+    } catch (e: any) {
+      win?.webContents.send('run://stderr', `[${label}] Failed to spawn ${cmd}: ${e?.message || e}\n`);
+      resolve(-1);
+      return;
+    }
+    child.stdout?.on('data', (d) => win?.webContents.send('run://stdout', d.toString()));
+    child.stderr?.on('data', (d) => win?.webContents.send('run://stderr', d.toString()));
+    child.on('error', (err) => {
+      win?.webContents.send('run://stderr', `[${label}] ${cmd} error: ${err.message}\n`);
+      resolve(-1);
+    });
+    child.on('close', (code) => resolve(code ?? -1));
+  });
+}
+
+// Flash the RP2350 debug cartridge with a freshly built VPy program.
+//
+// The `--target rp2350` build produces a standalone ELF that emits `svc #N`
+// traps which only the firmware (BIOS) can service, so the ELF is not
+// flashable on its own. The real deployable is the firmware Rust crate with the
+// VPy program's `.s` embedded as `src/intro.s`. Pipeline:
+//   1. Copy the built `.s` to <firmwareDir>/src/intro.s
+//   2. cargo build --release in <firmwareDir>
+//   3. Flash target/thumbv8m.main-none-eabihf/release/vectrex-cart via:
+//        - SWD: probe-rs download (--speed 1000 is REQUIRED) + probe-rs reset
+//        - USB: ELF -> UF2 via picotool, copy to /Volumes/RP2350 if mounted
+async function flashRp2350(
+  sPath: string,
+  firmwareDir: string,
+  method: 'none' | 'swd' | 'usb',
+  win: BrowserWindow | null,
+): Promise<void> {
+  if (method === 'none') return;
+
+  const fw = (firmwareDir || '').trim();
+  if (!fw) {
+    win?.webContents.send('run://stderr', '[RP2350] No firmware directory set. Configure it in Settings > Build Target > RP2350.\n');
+    win?.webContents.send('run://status', 'RP2350 flash failed: no firmware directory');
+    return;
+  }
+
+  // Verify firmware directory exists
+  try {
+    await fs.access(fw);
+  } catch {
+    win?.webContents.send('run://stderr', `[RP2350] Firmware directory not found: ${fw}\n`);
+    win?.webContents.send('run://status', `RP2350 flash failed: firmware dir not found`);
+    return;
+  }
+
+  // Step 2: copy built .s -> <firmwareDir>/src/intro.s
+  const introDst = join(fw, 'src', 'intro.s');
+  try {
+    await fs.access(sPath);
+  } catch {
+    win?.webContents.send('run://stderr', `[RP2350] Built assembly not found: ${sPath}\n`);
+    win?.webContents.send('run://status', 'RP2350 flash failed: .s not found');
+    return;
+  }
+  try {
+    await fs.copyFile(sPath, introDst);
+    win?.webContents.send('run://stdout', `[RP2350] Embedded program: ${sPath} -> ${introDst}\n`);
+  } catch (e: any) {
+    win?.webContents.send('run://stderr', `[RP2350] Failed to copy .s into firmware: ${e.message}\n`);
+    win?.webContents.send('run://status', 'RP2350 flash failed: could not embed .s');
+    return;
+  }
+
+  // Step 3: build the firmware
+  win?.webContents.send('run://status', 'RP2350: building firmware...');
+  const buildCode = await runFlashCommand('cargo', ['build', '--release'], fw, win);
+  if (buildCode !== 0) {
+    win?.webContents.send('run://stderr', `[RP2350] Firmware build failed (exit ${buildCode}).\n`);
+    win?.webContents.send('run://status', 'RP2350 flash failed: firmware build error');
+    return;
+  }
+
+  const elfPath = join(fw, 'target', 'thumbv8m.main-none-eabihf', 'release', 'vectrex-cart');
+  try {
+    await fs.access(elfPath);
+  } catch {
+    win?.webContents.send('run://stderr', `[RP2350] Firmware ELF not found: ${elfPath}\n`);
+    win?.webContents.send('run://status', 'RP2350 flash failed: ELF not found');
+    return;
+  }
+
+  // Step 4: flash by the chosen method
+  if (method === 'swd') {
+    // Before halting the core to reflash, poke the running firmware's "LOADING"
+    // mailbox (SCRATCH_X @ 0x20080000) with a background RAM write. It reacts on
+    // its next frame: silences the AY (which otherwise holds its last tone all
+    // through the CPU-halted flash → a stuck note) and shows a LOADING screen.
+    // Best-effort: if no game is running / probe-rs halts instead of doing a
+    // background write, this is a no-op and the flash proceeds as before.
+    await runFlashCommand(
+      'probe-rs',
+      ['write', '--chip', 'RP235x', '--speed', '1000', 'b32', '0x20080000', '0x10AD10AD'],
+      fw,
+      win,
+    ).catch(() => 0);
+    await new Promise((r) => setTimeout(r, 150)); // let the firmware react (a few frames)
+
+    // --speed 1000 is REQUIRED: at default SWD speed the download silently
+    // fails to commit (verify passes but the old image keeps running).
+    win?.webContents.send('run://status', 'RP2350: flashing via SWD...');
+    const dlCode = await runFlashCommand(
+      'probe-rs',
+      ['download', '--chip', 'RP235x', '--speed', '1000', '--binary-format', 'elf', elfPath],
+      fw,
+      win,
+    );
+    if (dlCode !== 0) {
+      win?.webContents.send('run://stderr', `[RP2350] probe-rs download failed (exit ${dlCode}). Is the SWD probe connected?\n`);
+      win?.webContents.send('run://status', 'RP2350 flash failed: SWD download error');
+      return;
+    }
+    const resetCode = await runFlashCommand(
+      'probe-rs',
+      ['reset', '--chip', 'RP235x', '--speed', '1000'],
+      fw,
+      win,
+    );
+    if (resetCode !== 0) {
+      win?.webContents.send('run://stderr', `[RP2350] probe-rs reset failed (exit ${resetCode}).\n`);
+      win?.webContents.send('run://status', 'RP2350 flash failed: SWD reset error');
+      return;
+    }
+    win?.webContents.send('run://stdout', '[RP2350] SWD flash complete. Cartridge reset.\n');
+    win?.webContents.send('run://status', 'RP2350 flashed via SWD');
+    return;
+  }
+
+  if (method === 'usb') {
+    // picotool needs a `.elf` extension on the input, so copy the
+    // extension-less ELF to a temp *.elf first.
+    const tmpElf = join(app.getPath('temp'), 'vectrex-cart.elf');
+    const uf2Out = join(app.getPath('temp'), 'vectrex-cart.uf2');
+    try {
+      await fs.copyFile(elfPath, tmpElf);
+    } catch (e: any) {
+      win?.webContents.send('run://stderr', `[RP2350] Failed to stage ELF for picotool: ${e.message}\n`);
+      win?.webContents.send('run://status', 'RP2350 flash failed: could not stage ELF');
+      return;
+    }
+    win?.webContents.send('run://status', 'RP2350: converting ELF -> UF2...');
+    const picotoolExe = process.platform === 'win32'
+      ? (await windowsPicotool((l) => win?.webContents.send('run://stdout', l))) ?? 'picotool'
+      : 'picotool';
+    const convCode = await runFlashCommand(picotoolExe, ['uf2', 'convert', tmpElf, uf2Out], undefined, win);
+    if (convCode !== 0) {
+      win?.webContents.send('run://stderr', `[RP2350] picotool uf2 convert failed (exit ${convCode}).\n`);
+      win?.webContents.send('run://status', 'RP2350 flash failed: UF2 conversion error');
+      return;
+    }
+    // Clear extended attributes so the copy to the FAT volume is clean.
+    if (process.platform === 'darwin') await runFlashCommand('xattr', ['-c', uf2Out], undefined, win);
+
+    // The bootrom's drive, named RP2350 (/Volumes/RP2350, /media/<user>/RP2350, a drive letter)
+    const bootselVol = (await removableVolumes('RP2350'))[0] ?? '';
+    if (!bootselVol) {
+      win?.webContents.send('run://stderr', `[RP2350] The RP2350 drive is not mounted. Hold BOOTSEL while plugging in the cartridge, then Build & Run again.\n`);
+      win?.webContents.send('run://stdout', `[RP2350] UF2 ready at: ${uf2Out}\n`);
+      win?.webContents.send('run://status', 'RP2350 USB: hold BOOTSEL and retry');
+      return;
+    }
+
+    // macOS: cp -X avoids a cosmetic xattr error on the FAT volume.
+    const cpCode = process.platform === 'darwin'
+      ? await runFlashCommand('cp', ['-X', uf2Out, bootselVol + '/'], undefined, win)
+      : await fs.copyFile(uf2Out, join(bootselVol, basename(uf2Out))).then(() => 0, (e) => {
+          win?.webContents.send('run://stderr', `[RP2350] ${e?.message || e}\n`);
+          return 1;
+        });
+    if (cpCode !== 0) {
+      win?.webContents.send('run://stderr', `[RP2350] Failed to copy UF2 to ${bootselVol} (exit ${cpCode}).\n`);
+      win?.webContents.send('run://status', 'RP2350 flash failed: UF2 copy error');
+      return;
+    }
+    win?.webContents.send('run://stdout', `[RP2350] UF2 copied to ${bootselVol}. Cartridge will reboot into the new image.\n`);
+    win?.webContents.send('run://status', 'RP2350 flashed via USB');
+    return;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// External C/C++ projects (imported, built by their own make/cmake toolchain)
+// ---------------------------------------------------------------------------
+//
+// Unlike VPy projects (compiled by vpy_cli), an external project is described
+// by a `.cvproj` TOML manifest at its root and built by running its own build
+// command. For the `pitrex` target the produced bare-metal kernel image is
+// deployed to the SD card via the same copyPitrexToSDCard() path a VPy pitrex
+// build uses — same artifact (`kernel7l.img`), same SD bundle.
+interface ExternalProjectManifest {
+  project: { name: string; type: string; target?: 'pitrex' | 'rp2350' | 'uvm2' };
+  build: { command: string; args?: string[]; artifact: string; deploy_extra?: string[] };
+  // Per-hardware-target build overrides. When the IDE builds for a selected
+  // target (e.g. rp2350), these replace the default [build] command/args/
+  // artifact so a C project uses the CORRECT compiler per target instead of
+  // always the pitrex one. Declared in the .cvproj as `[targets.rp2350]` etc.
+  targets?: Record<string, { command?: string; args?: string[]; artifact?: string; deploy_extra?: string[];
+    /* THE EMULATOR (uvm2), for an image that is not one ELF: `emu_elf` the image's ELF when it
+     * is not beside the artifact, `emu_psram_elf` the ELF of a program the image loads into
+     * the PSRAM and jumps to (its SD calls are trapped at that ELF's addresses from then on),
+     * `emu_card` files of the build put on the simulated card as "card/path=build/path",
+     * over the card's size caps. ScummVM's loader + SCUMMVM.BIN is the case. */
+    emu_elf?: string; emu_psram_elf?: string; emu_card?: string[] }>;
+  // Optional simulator build: compiles the project to a WASM module (via
+  // emscripten) that runs in the IDE emulator panel against the host SDK shim.
+  // `module` is the emitted MODULARIZE loader (.js) with sibling .wasm/.data.
+  simulate?: { command: string; args?: string[]; module: string };
+  toolchain?: { path?: string };
+  env?: Record<string, string>;
+}
+
+// Resolve the emscripten bin dir (contains emcc) for the sim build. Checks
+// $EMSDK and the conventional ~/emsdk layout; returns null to fall back to PATH.
+function resolveEmscriptenDir(): string | null {
+  const candidates: string[] = [];
+  if (process.env.EMSDK) candidates.push(join(process.env.EMSDK, 'upstream', 'emscripten'));
+  const home = process.env.HOME || process.env.USERPROFILE || '';
+  if (home) candidates.push(join(home, 'emsdk', 'upstream', 'emscripten'));
+  for (const c of candidates) {
+    try { require('fs').accessSync(join(c, process.platform === 'win32' ? 'emcc.bat' : 'emcc')); return c; } catch {}
+  }
+  return null;
+}
+
+function isExternalManifest(parsed: any): parsed is ExternalProjectManifest {
+  return parsed?.project?.type === 'c-external'
+    && typeof parsed?.build?.command === 'string'
+    && typeof parsed?.build?.artifact === 'string';
+}
+
+// Build (and optionally deploy) an imported external C/C++ project.
+// Returns { ok, artifactPath } on success or { error } on failure.
+export async function executeExternalBuild(args: {
+  manifestPath: string;
+  deploy?: boolean;
+  sdPath?: string;
+  target?: 'pitrex' | 'rp2350' | 'uvm2';
+  preview?: boolean;   // rp2350: after building, push the .bin to the emulator panel
+  /* Variables de `make` extra, solo para uvm2: las pone el panel Advanced para poder
+   * compilar VARIAS versiones (un nucleo / dos, PIO / SIO, otro refresco) y compararlas
+   * en la CONSOLA, que es donde se decide. */
+  uvm2Flags?: string;
+  /** rp2350 "SWD debug" mode: build for the debugger (-Og: the locals stay where the
+   *  debugger can see and change them). Reaches the SDK's cartridge recipe as
+   *  UVM2_DEBUG_CFLAGS, which comes after the project's own -O. */
+  debugBuild?: boolean;
+}): Promise<{ ok: true; artifactPath: string } | { error: string; detail?: string }> {
+  const win = mainWindow ?? null;
+  const { manifestPath, deploy = false, sdPath = '', target, preview = false, uvm2Flags = '', debugBuild = false } = args || ({} as any);
+
+  let manifest: ExternalProjectManifest;
+  let rootDir: string;
+  try {
+    const content = await fs.readFile(manifestPath, 'utf-8');
+    const toml = await import('toml');
+    const parsed = toml.parse(content);
+    if (!isExternalManifest(parsed)) {
+      win?.webContents.send('run://stderr', `[C] Not a valid c-external manifest: ${manifestPath}\n`);
+      return { error: 'invalid_manifest' };
+    }
+    manifest = parsed;
+    rootDir = join(manifestPath, '..');
+  } catch (e: any) {
+    win?.webContents.send('run://stderr', `[C] Failed to read manifest: ${e?.message || e}\n`);
+    return { error: 'manifest_read_failed', detail: e?.message };
+  }
+
+  // The project's pinned SDK. A C project may not use it, so a failure only warns:
+  // its own build reports what is missing.
+  // uvm2 builds also need the pico-sdk that SDK version asks for.
+  const isUvm2 = (target || manifest.project.target) === 'uvm2';
+  const sdk = await resolveProjectSdk(manifestPath, logSdk, sendSdkProgress, { pico: isUvm2 });
+  if ('error' in sdk) {
+    win?.webContents.send('run://stderr', `[SDK] ${sdk.error}\n`);
+  } else {
+    win?.webContents.send('run://stdout', `[SDK] ${sdk.version} (${sdk.dir})${sdk.picoSdkDir ? `, pico-sdk ${sdk.picoSdkDir}` : ''}\n`);
+    await dropStaleSdkBuilds(dirname(manifestPath), sdk, (l) => win?.webContents.send('run://stdout', l));
+  }
+
+  // Compose the child env: IDE env + project SDK + optional toolchain PATH prefix + overrides.
+  // VPY_CLI: the IDE's compiler, for Makefiles that compile assets/ into headers
+  // (`$(VPY_CLI) compile-asset`, docs/ASSETS.md). The project's [env] still wins.
+  const vpyCli = resolveCompilerPath();
+  // The Arm compiler: uvm2 always; on Windows the rp2350 rule too (there is none on PATH).
+  const needsArm = isUvm2 || (process.platform === 'win32' && (target || manifest.project.target) === 'rp2350');
+  let env: NodeJS.ProcessEnv = { ...process.env, ...(vpyCli ? { VPY_CLI: await makeSafePath(vpyCli) } : {}), ...('error' in sdk ? {} : sdkEnv(sdk.dir, sdk.picoSdkDir)), ...(needsArm ? await armToolchainEnv((l) => win?.webContents.send('run://stdout', l)) : {}), ...(manifest.env || {}) };
+  if (isUvm2) await ensureUvm2Rust((l) => win?.webContents.send('run://stdout', l + '\n'));
+  // Windows: make, its shell and, for uvm2, CMake, Ninja, picotool and Rust (downloaded once).
+  if (process.platform === 'win32') {
+    env = await windowsBuildEnv({ base: env, sdkDir: 'error' in sdk ? null : sdk.dir, uvm2: isUvm2, log: (l) => win?.webContents.send('run://stdout', l) });
+  }
+  if (manifest.toolchain?.path) prependPath(env, [manifest.toolchain.path]);
+  if (debugBuild) env.UVM2_DEBUG_CFLAGS = '-Og';
+
+  // Pick the build recipe for the selected hardware target. Default = the
+  // [build] table (pitrex, back-compat); a [targets.<target>] table overrides
+  // command/args/artifact so each target uses its OWN compiler/make target
+  // (previously ANY target for a C project ran the pitrex build).
+  const effectiveTarget = target || manifest.project.target || 'pitrex';
+  const override = manifest.targets?.[effectiveTarget] || {};
+
+  // A manifest that declares per-target recipes but not this one silently fell
+  // back to the [build] table — so asking for uvm2 quietly built pitrex, and the
+  // log gave no hint. Say so instead.
+  if (manifest.targets && !manifest.targets[effectiveTarget]) {
+    // FOR A HARDWARE TARGET, REFUSE — do not build something else.
+    //
+    // The warning below was already here and it was not enough: the build still ran the
+    // default recipe, so asking for uvm2 produced an rp2350 .bin, the emulator had no
+    // .um2 to load, and the whole thing read as "the shortcut does not work for this
+    // project". Measured on aae_aztarac 2026-08-25. Failing here beats failing on the
+    // screen — the same rule uvm2_pico.cmake applies to VPY_DUAL_CORE.
+    if (effectiveTarget === 'uvm2' || effectiveTarget === 'pitrex' || effectiveTarget === 'rp2350') {
+      // NAME WHAT THE MANIFEST DOES HAVE. "Add [targets.pitrex]" reads like the recipe
+      // exists and is merely undeclared, and for the AAE ports it does not: their
+      // Makefiles have no rule that builds a PiTrex kernel at all (PITREX_SIM_SDK there
+      // is only the host shim the WASM `sim` build links against). Listing the declared
+      // targets answers "so what CAN I build?" in the same line.
+      const declarados = Object.keys(manifest.targets).sort().join(', ') || '(none)';
+      const msg = `${manifest.project.name} has no [targets.${effectiveTarget}] recipe, so ` +
+                  `nothing was built — the default [build] one would produce a different ` +
+                  `artifact. It declares: ${declarados}. To add ${effectiveTarget}, the ` +
+                  `Makefile needs a rule that produces it first, then declare it here.`;
+      win?.webContents.send('run://stderr', `[C] ${msg}\n`);
+      return { error: 'no_target_recipe', detail: msg };
+    }
+    win?.webContents.send('run://stderr',
+      `[C] ${manifest.project.name} has no [targets.${effectiveTarget}] recipe — ` +
+      `falling back to the default [build] one. Add it to the .cvproj to build for ${effectiveTarget}.\n`);
+  }
+  const buildCommand  = override.command  ?? manifest.build.command;
+  let   buildArgs     = override.args     ?? manifest.build.args ?? [];
+  const buildArtifact = override.artifact ?? manifest.build.artifact;
+
+  /* LAS PERILLAS DEL PANEL, AL FINAL DE LA ORDEN. Van despues de los argumentos del
+   * manifiesto porque en `make` gana la ULTIMA asignacion de la linea de ordenes, asi que
+   * asi se puede sobreescribir lo que el proyecto trae por defecto.
+   *
+   * Y SE IMPRIME LO QUE SE VA A EJECUTAR. Una perilla que no llega al compilador compila
+   * sin un aviso y produce un binario identico — ya paso en este proyecto, y la unica
+   * defensa barata es ver la orden. */
+  const extraUvm2 = (effectiveTarget === 'uvm2' ? (uvm2Flags || '') : '').trim();
+  if (extraUvm2) {
+    buildArgs = [...buildArgs, ...extraUvm2.split(/\s+/)];
+  } else if (effectiveTarget === 'uvm2') {
+    /* SAY SO WHEN THERE ARE NONE. Without this note, "I built three times and they came out
+     * the same size" has no explanation on screen: a knob that never arrives and a knob at
+     * its factory value produce the SAME binary, and read the same. */
+    win?.webContents.send('run://stderr',
+      `[build] uvm2: no flags from the panel — building the DEFAULT ` +
+      `(dual core + PIO/DMA). Change it in Settings -> UVM2 -> Advanced.\n`);
+  }
+  win?.webContents.send('run://stderr',
+    `[build] ${buildCommand} ${buildArgs.join(' ')}   (cwd ${rootDir})\n`);
+
+  win?.webContents.send('run://status', `Building ${manifest.project.name} (${effectiveTarget})...`);
+  const code = await runFlashCommand(buildCommand, buildArgs, rootDir, win, { env, label: 'C' });
+  if (code !== 0) {
+    win?.webContents.send('run://stderr', `[C] Build failed (exit ${code}).\n`);
+    win?.webContents.send('run://status', `Build failed: ${manifest.project.name}`);
+    return { error: 'build_failed' };
+  }
+
+  // Resolve the artifact relative to the project root.
+  const artifactPath = join(rootDir, buildArtifact);
+  try {
+    await fs.access(artifactPath);
+  } catch {
+    win?.webContents.send('run://stderr', `[C] Build reported success but artifact not found: ${artifactPath}\n`);
+    return { error: 'artifact_not_found', detail: artifactPath };
+  }
+  /* EL TAMANO, JUNTO A LOS FLAGS. Dos builds del mismo tamano son la MISMA imagen, y verlo
+   * aqui evita la pregunta cara: "he compilado tres veces y salen iguales". Si el tamano no
+   * se mueve al cambiar una perilla, la perilla no llego o no cambia nada — y eso es una
+   * respuesta, no un misterio. */
+  let tam = '';
+  try { tam = ` (${(await fs.stat(artifactPath)).size} bytes)`; } catch { /* ya se comprobo */ }
+  win?.webContents.send('run://stdout',
+    `[C] Built: ${artifactPath}${tam}${extraUvm2 ? `   flags: ${extraUvm2}` : ''}\n`);
+  win?.webContents.send('run://status', `Built ${manifest.project.name}`);
+
+  // Preview the RP2350 binary in the emulator panel: push the RAM-linked .bin
+  // to the renderer via the SAME `emu://compiledBin` event the VPy path uses.
+  // handleCompiledBin routes target=rp2350 to Rp2350System, and jsvecxCore
+  // loadArm detects the RAM-linked 'VPy2' entry (0x2004xxxx) → initRamGame → the
+  // svc dispatcher. So the actual RP2350 machine code runs in-panel (vs the WASM
+  // sim, which is the same C compiled natively against the host shim).
+  // TAMBIEN uvm2, Y ESTE ERA EL FALLO. La condicion decia solo 'rp2350', asi que un
+  // proyecto en C compilado para UVM2 generaba su .um2 correctamente... y NADIE se lo
+  // mandaba al panel: el emulador no se enteraba de nada.
+  //
+  // El sintoma era el peor posible: el build imprime "Build OK", el artefacto existe, y el
+  // emulador se queda en negro. Toda la cadena de aguas abajo ya estaba instrumentada
+  // —seis trazas entre handleCompiledBin y Uvm2System.init— y ninguna salia, porque el
+  // problema estaba ANTES de la primera. Un dia entero depurando el emulador que no se
+  // estaba ejecutando.
+  /* EN LA TERMINAL, no en DevTools. Las trazas del frontend van a la consola del
+   * renderer y las de aqui a la terminal donde corre run-ide.sh — son dos sitios
+   * distintos, y hoy hemos perdido un rato mirando el que no era. Esta linea sale junto a
+   * las de [FileWatcher], que es donde el usuario ya esta mirando. */
+  console.log(`[build] artifact=${artifactPath} target=${effectiveTarget} preview=${preview}`);
+  if (preview && (effectiveTarget === 'rp2350' || effectiveTarget === 'uvm2')) {
+    console.log(`[build] -> sending emu://compiledBin to the panel (${effectiveTarget})`);
+    try {
+      const buf = await fs.readFile(artifactPath);
+      // El ELF hermano, si el proyecto lo deja al lado con el mismo nombre
+      // (REDALARM.BIN -> REDALARM.elf). Con el, las trampas se registran por
+      // direccion de simbolo en vez de por heuristica de prologo. Sin el se
+      // arranca igual, solo que a ciegas — asi que es opcional, no un fallo.
+      // .bin -> .elf y .um2 -> .elf: el artefacto del UVM2 no es un .bin, asi que la
+      // sustitucion de antes no casaba y se perdia el ELF hermano en silencio.
+      // .bin -> .elf, .um2 -> .elf, Y TAMBIEN en el subdirectorio del build. El .um2 del
+      // UVM2 se copia a build_uvm2/ mientras su ELF se queda en build_uvm2/pico/, asi que
+      // buscar solo al lado no lo encontraba y el emulador se quedaba sin simbolos —
+      // "elf=0b" en la consola, en silencio.
+      const emuDecl = manifest.targets?.[effectiveTarget] || {};
+      const candidatos = [
+        ...(emuDecl.emu_elf ? [join(rootDir, emuDecl.emu_elf)] : []),
+        artifactPath.replace(/\.(bin|um2)$/i, '.elf'),
+        join(dirname(artifactPath), 'pico', basename(artifactPath).replace(/\.(bin|um2)$/i, '.elf')),
+      ];
+      let elfPath = candidatos[0];
+      for (const c of candidatos) { try { await fs.access(c); elfPath = c; break; } catch {} }
+      let elfBase64: string | null = null;
+      if (elfPath !== artifactPath) {
+        try {
+          elfBase64 = (await fs.readFile(elfPath)).toString('base64');
+          win?.webContents.send('run://stdout', `[C] Companion ELF: ${basename(elfPath)}\n`);
+        } catch { /* no ELF: prologue scan */ }
+      }
+      /* LA TARJETA SD SIMULADA, para el UVM2. Un juego del UVM2 lee su romset de la SD
+       * (uvm2_romzip_cargar -> uvm2_sd_leer "roms/<nombre>.zip"), asi que sin ella el
+       * emulador corre pero el juego pinta su X de "falta el romset" — que es exactamente
+       * lo que pasaba: dk_rom_error=1, uvm2_romzip_bytes=0.
+       *
+       * Se usa la MISMA carpeta que el simulador, ~/VectrexStudio/sd, para no inventar un
+       * segundo sitio donde poner las cosas. Solo se mandan ficheros pequenos: el romset de
+       * un juego cabe de sobra en el tope, y mandar la carpeta entera puede ser cientos de
+       * megas. */
+      let sdFiles: Record<string, string> | undefined;
+      let sdDeferred: Record<string, number> | undefined;
+      if (effectiveTarget === 'uvm2') {
+        sdDeferred = {};
+        sdFiles = await leerSdSimulada(sdDeferred);
+        console.log(`[build] simulated SD: ${Object.keys(sdFiles).length} files`);
+        for (const decl of emuDecl.emu_card ?? []) {
+          const eq = decl.indexOf('=');
+          if (eq <= 0) continue;
+          const enTarjeta = decl.slice(0, eq).trim().toLowerCase(), desde = join(rootDir, decl.slice(eq + 1).trim());
+          try {
+            sdFiles[enTarjeta] = (await fs.readFile(desde)).toString('base64');
+            win?.webContents.send('run://stdout', `[C] simulated card: ${enTarjeta} <- ${decl.slice(eq + 1).trim()}\n`);
+          } catch (e: any) {
+            win?.webContents.send('run://stderr', `[C] emu_card ${decl}: ${e?.message || e}\n`);
+          }
+        }
+      }
+      let psramElfBase64: string | null = null;
+      if (emuDecl.emu_psram_elf) {
+        try {
+          psramElfBase64 = (await fs.readFile(join(rootDir, emuDecl.emu_psram_elf))).toString('base64');
+          win?.webContents.send('run://stdout', `[C] PSRAM program ELF: ${emuDecl.emu_psram_elf}\n`);
+        } catch (e: any) {
+          win?.webContents.send('run://stderr', `[C] emu_psram_elf ${emuDecl.emu_psram_elf}: ${e?.message || e}\n`);
+        }
+      }
+      win?.webContents.send('emu://compiledBin', {
+        base64: buf.toString('base64'),
+        size: buf.length,
+        binPath: artifactPath,
+        target: effectiveTarget,
+        elfBase64,
+        sdFiles,
+        sdDeferred,
+        psramElfBase64,
+      });
+      win?.webContents.send('run://status',
+        `Previewing ${effectiveTarget} binary: ${manifest.project.name}`);
+      console.log(`[build] emu://compiledBin SENT: ${buf.length} bytes, elf=${elfBase64 ? 'yes' : 'no'}`);
+    } catch (e: any) {
+      win?.webContents.send('run://stderr', `[C] rp2350 preview: could not read ${artifactPath}: ${e?.message || e}\n`);
+    }
+  }
+
+  // Deploy: pitrex → SD (kernel image, reusing the VPy pitrex path); rp2350 →
+  // copy the RAM-linked game .bin onto the SD card so the cart launcher lists +
+  // launches it (same as the VPy "Build for SD"). The launcher lists `.BIN`
+  // files, so strip the internal `_sd` suffix for the on-card name.
+  if (deploy) {
+    if (effectiveTarget === 'pitrex') {
+      const extra = ((override.deploy_extra ?? manifest.build.deploy_extra) || []).map((f) => join(rootDir, f));
+      await copyPitrexToSDCard(artifactPath, sdPath, win, extra);
+    } else if (effectiveTarget === 'rp2350') {
+      if (!sdPath) {
+        win?.webContents.send('run://stderr', `[C] rp2350 deploy: no SD path set — copy ${basename(artifactPath)} to the card manually.\n`);
+      } else {
+        const sdName = basename(artifactPath).replace(/_sd\.bin$/i, '.bin');
+        try {
+          await fs.copyFile(artifactPath, join(sdPath, sdName));
+          win?.webContents.send('run://stdout', `[C] Copied ${sdName} to SD card (${sdPath}).\n`);
+        } catch (e: any) {
+          win?.webContents.send('run://stderr', `[C] rp2350 SD copy failed: ${e?.message || e}\n`);
+        }
+      }
+    } else if (effectiveTarget === 'uvm2') {
+      // The UVM2 firmware reads the `.um2` straight off the card, so the
+      // artifact goes across under its own name.
+      if (!sdPath) {
+        win?.webContents.send('run://stderr', `[C] uvm2 deploy: no SD path set — copy ${basename(artifactPath)} to the card manually.\n`);
+      } else {
+        try {
+          await fs.copyFile(artifactPath, join(sdPath, basename(artifactPath)));
+          win?.webContents.send('run://stdout', `[C] Copied ${basename(artifactPath)} to SD card (${sdPath}).\n`);
+        } catch (e: any) {
+          win?.webContents.send('run://stderr', `[C] uvm2 SD copy failed: ${e?.message || e}\n`);
+        }
+      }
+    } else {
+      win?.webContents.send('run://stderr', `[C] Deploy not supported for target=${effectiveTarget}.\n`);
+    }
+  }
+
+  return { ok: true, artifactPath };
+}
+
+// Build the simulator (WASM) module for an external project so it can run in
+// the IDE emulator panel. Injects the host SDK shim (PITREX_SIM_SDK) + emcc on
+// PATH; the project's declared [simulate] command links its C against the shim.
+// Returns { ok, modulePath } — the emitted MODULARIZE .js (with sibling
+// .wasm/.data) — or { error }.
+/* El romset del proyecto, por la MISMA convencion que la tarjeta: se llama como el
+ * binario del cartucho. El .cvproj ya dice cual es ([targets.rp2350] artifact =
+ * build_sd/REDALARM.BIN), asi que el nombre sale de ahi y no hay una segunda regla que
+ * aprender ni que mantener en sincronia. Sin seccion rp2350 se cae al nombre del
+ * proyecto. Devuelve null cuando no hay: eso no es un error — un puerto que aun
+ * incrusta su ROM no usa nada de esto. */
+async function romZipForManifest(manifest: ExternalProjectManifest, rootDir: string): Promise<string | null> {
+  const artefacto = (manifest as any).targets?.rp2350?.artifact as string | undefined;
+  const stem = (artefacto ? basename(artefacto).replace(/\.[^.]+$/, '') : manifest.project.name);
+  // Si el .bin de rp2350 ya esta construido, EL MANDA: lleva declarado el nombre real
+  // del romset. El stem es solo el ultimo recurso, y acierta por casualidad.
+  const declarado = artefacto ? await romsetDeclarado(join(rootDir, artefacto)) : null;
+  try {
+    const dir = join(os.homedir(), 'VectrexStudio', 'sd', 'roms');
+    const want = (declarado ?? (stem.toLowerCase() + '.zip')).toLowerCase();
+    const entries = await fs.readdir(dir);
+    const hit = entries.find(f => f.toLowerCase() === want);
+    if (!hit) {
+      mainWindow?.webContents.send('run://stderr',
+        `[SIM] no romset for "${stem}" in ${dir}` +
+        (entries.length ? ` — found: ${entries.join(', ')}` : ' (folder is empty)') + `\n`);
+      return null;
+    }
+    const buf = await fs.readFile(join(dir, hit));
+    mainWindow?.webContents.send('run://stdout', `[SIM] romset ${hit} (${buf.length} b)\n`);
+    return buf.toString('base64');
+  } catch {
+    return null;   // no hay carpeta roms/: normal en un proyecto que no la necesita
+  }
+}
+
+export async function executeSimBuild(args: {
+  manifestPath: string;
+}): Promise<{ ok: true; modulePath: string; romZipBase64: string | null } | { error: string; detail?: string }> {
+  const win = mainWindow ?? null;
+  const { manifestPath } = args || ({} as any);
+
+  let manifest: ExternalProjectManifest;
+  let rootDir: string;
+  try {
+    const content = await fs.readFile(manifestPath, 'utf-8');
+    const toml = await import('toml');
+    const parsed = toml.parse(content);
+    if (!isExternalManifest(parsed)) return { error: 'invalid_manifest' };
+    manifest = parsed;
+    rootDir = join(manifestPath, '..');
+  } catch (e: any) {
+    win?.webContents.send('run://stderr', `[SIM] Failed to read manifest: ${e?.message || e}\n`);
+    return { error: 'manifest_read_failed', detail: e?.message };
+  }
+
+  if (!manifest.simulate?.command || !manifest.simulate?.module) {
+    win?.webContents.send('run://stderr', `[SIM] No [simulate] section in manifest — nothing to run in the panel.\n`);
+    return { error: 'no_simulate_target' };
+  }
+
+  // The host SDK shim (pitrex-sim) and the C VPy runtime (vpy-c) come from the
+  // project's pinned SDK, downloaded if missing.
+  const sdk = await resolveProjectSdk(manifestPath, logSdk, sendSdkProgress);
+  if ('error' in sdk) {
+    win?.webContents.send('run://stderr', `[SIM] ${sdk.error}\n`);
+    return { error: 'sdk_unavailable', detail: sdk.error };
+  }
+  win?.webContents.send('run://stdout', `[SIM] SDK ${sdk.version} (${sdk.dir})\n`);
+  await dropStaleSdkBuilds(dirname(manifestPath), sdk, (l) => win?.webContents.send('run://stdout', l));
+  const { PITREX_SIM_SDK, VPY_C_SDK } = sdkEnv(sdk.dir);
+
+  // The project's [env] still wins, as in the hardware build: a port can point at its own checkout.
+  const simCli = resolveCompilerPath(); // VPY_CLI: compiles assets/ for the Makefile (docs/ASSETS.md)
+  let env: NodeJS.ProcessEnv = { ...process.env, ...(simCli ? { VPY_CLI: await makeSafePath(simCli) } : {}), PITREX_SIM_SDK, VPY_C_SDK, ...(manifest.env || {}) };
+  const emDir = process.platform === 'win32' ? null : resolveEmscriptenDir();
+  if (process.platform === 'win32') {
+    // make, its shell and emscripten (installed once by the IDE unless EMSDK points at one)
+    env = await windowsSimEnv({ base: env, log: (l) => win?.webContents.send('run://stdout', `[SIM] ${l}`) });
+  } else if (emDir) {
+    prependPath(env, [emDir]);
+  } else {
+    win?.webContents.send('run://stdout', `[SIM] emscripten not found in $EMSDK or ~/emsdk — relying on emcc being on PATH.\n`);
+  }
+
+  win?.webContents.send('run://status', `Building simulator: ${manifest.project.name}...`);
+  const code = await runFlashCommand(manifest.simulate.command, manifest.simulate.args || [], rootDir, win, { env, label: 'SIM' });
+  if (code !== 0) {
+    win?.webContents.send('run://stderr', `[SIM] Simulator build failed (exit ${code}).\n`);
+    win?.webContents.send('run://status', `Simulator build failed: ${manifest.project.name}`);
+    return { error: 'sim_build_failed' };
+  }
+
+  const modulePath = join(rootDir, manifest.simulate.module);
+  try {
+    await fs.access(modulePath);
+  } catch {
+    win?.webContents.send('run://stderr', `[SIM] Build succeeded but module not found: ${modulePath}\n`);
+    return { error: 'module_not_found', detail: modulePath };
+  }
+  win?.webContents.send('run://stdout', `[SIM] Built simulator module: ${modulePath}\n`);
+  win?.webContents.send('run://status', `Simulator ready: ${manifest.project.name}`);
+  return { ok: true, modulePath, romZipBase64: await romZipForManifest(manifest, rootDir) };
+}
+
 // Exported function for direct invocation (e.g. from MCP server)
-export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; compilerBackend?: 'buildtools' | 'core'; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; pitrexCopyToSD?: boolean; pitrexSdPath?: string; uvm2CopyToSD?: boolean; uvm2SdPath?: string }) {
+export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; pitrexCopyToSD?: boolean; pitrexSdPath?: string; uvm2CopyToSD?: boolean; uvm2SdPath?: string; uvm2Flags?: string; rp2350FlashMethod?: 'none' | 'swd' | 'usb'; rp2350FirmwareDir?: string; rp2350Ram?: boolean; rp2350SdPath?: string; debugBuild?: boolean; noPreview?: boolean }) {
   // CRITICAL: Log received args to debug compiler selection
   console.log('[RUN] executeCompilation received args:', JSON.stringify({ ...args, saveIfDirty: args?.saveIfDirty ? '...' : undefined }));
   
-  const { path, saveIfDirty, autoStart, outputPath, compilerBackend = 'buildtools', target = 'm6809', pitrexCopyToSD = false, pitrexSdPath = '', uvm2CopyToSD = false, uvm2SdPath = '' } = args || {} as any;
+  const { path, saveIfDirty, autoStart, outputPath, target = 'm6809', pitrexCopyToSD = false, pitrexSdPath = '', uvm2CopyToSD = false, uvm2SdPath = '', uvm2Flags = '', rp2350FlashMethod = 'none', rp2350FirmwareDir = '', rp2350Ram = false, rp2350SdPath = '', debugBuild = false, noPreview = false } = args || {} as any;
   
-  console.log('[RUN] Extracted compilerBackend:', compilerBackend);
   // Surface pitrex SD flags to the output panel so they're always visible
   if (target === 'pitrex') {
     mainWindow?.webContents.send('run://stdout', `[SD] pitrexCopyToSD=${pitrexCopyToSD} sdPath="${pitrexSdPath}"\n`);
@@ -1200,14 +2108,19 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
   // Re-extract outputPath after potentially reading from .vpyproj
   const finalOutputPath = args.outputPath || outputPath;
   
-  const compiler = resolveCompilerPath(compilerBackend);
+  const compiler = resolveCompilerPath();
   if (!compiler) return { error: 'compiler_not_found' };
   
   // CRITICAL: Always log compiler path for debugging binary resolution
-  console.log('[RUN] ✓ Resolved compiler:', compiler, '(backend:', compilerBackend, ')');
-  mainWindow?.webContents.send('run://stdout', `[Compiler] Using: ${compiler} (${compilerBackend})\n`);
+  console.log('[RUN] ✓ Resolved compiler:', compiler);
+  mainWindow?.webContents.send('run://stdout', `[Compiler] Using: ${compiler}\n`);
   
   const verbose = process.env.VPY_IDE_VERBOSE_RUN === '1';
+  // Marca de arranque, para la comprobacion de frescura de los artefactos derivados
+  // (.um2, .elf). Se toma ANTES de lanzar el compilador: cualquier fichero anterior a
+  // este instante es de otra compilacion, sin depender del orden en que la build
+  // escriba .bin, .elf y .um2. Ver resolveFreshArtifact mas abajo.
+  const compilacionIniciadaEn = Date.now();
   if (verbose) console.log('[RUN] spawning compiler', compiler, fsPath);
   mainWindow?.webContents.send('run://status', `Starting compilation: ${targetDisplay}`);
   return new Promise(async (resolvePromise) => {
@@ -1234,34 +2147,57 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
         await fs.mkdir(outputDir, { recursive: true });
       } catch {}
     }
+
+    // "Build for SD": a RAM-linked rp2350 game (loaded off the SD by the cart
+    // launcher, entry at 0x20010000). Write it to a distinct <name>_sd.bin so it
+    // never clobbers the runnable flash .bin, and never feed it to the emulator
+    // (which runs the flash-linked image).
+    const buildForSd = target === 'rp2350' && rp2350Ram;
+    if (buildForSd) {
+      finalBinPath = finalBinPath.replace(/\.bin$/, '_sd.bin');
+      // Keep outAsm in step so the post-build ASM-generated check (and the stale-
+      // file cleanup) look for <name>_sd.asm — the name vpy_cli derives from the
+      // _sd.bin output stem — not the plain <name>.asm (which never gets written).
+      outAsm = outAsm.replace(/\.asm$/, '_sd.asm');
+    }
+
+    // SAME REASON, FOR UVM2: its raw .bin is an ARM image, and the project's
+    // [build] output is the path the SIMULATOR loads. Building for uvm2 used to
+    // copy the ARM image straight over it, so the simulator was then handed a
+    // Cortex-M33 vector table where it expected the 'VPy2' magic — and the only
+    // symptom was "the simulator stopped working, only the emulator runs".
+    // The deliverable here is the .um2 anyway; the .bin is a by-product.
+    // Same trick as above: rename it, and keep outAsm in step because vpy_cli
+    // derives the .S/.asm name from the output stem.
+    if (target === 'uvm2') {
+      finalBinPath = finalBinPath.replace(/\.bin$/, '_uvm2.bin');
+      outAsm = outAsm.replace(/\.asm$/, '_uvm2.asm');
+    }
     
-    // Build compiler arguments based on backend
-    let argsv: string[];
-    
-    if (compilerBackend === 'core') {
-      // LEGACY CORE COMPILER (vectrexc) ARGUMENTS
-      // Usage: vectrexc build <file.vpy> --target vectrex --title TITLE --bin [--include-dir DIR]
-      argsv = ['build', fsPath, '--target', 'vectrex', '--title', basename(fsPath).replace(/\.[^.]+$/, '').toUpperCase(), '--bin', '--include-dir', workspaceRoot];
-    } else {
-      // NEW BUILDTOOLS COMPILER (vpy_cli) ARGUMENTS
-      const buildTarget = target ?? 'm6809';
-      argsv = ['build', fsPath, '--output', finalBinPath];
+    // vpy_cli arguments
+    const buildTarget = target ?? 'm6809';
+    const argsv: string[] = ['build', fsPath, '--output', finalBinPath];
 
-      // Add ROM size configuration if in project mode (read from .vpyproj if needed)
-      // Default: 32KB single-bank
-      argsv.push('--rom-size', '32768');
-      argsv.push('--bank-size', '32768');
+    // Add ROM size configuration if in project mode (read from .vpyproj if needed)
+    // Default: 32KB single-bank
+    argsv.push('--rom-size', '32768');
+    argsv.push('--bank-size', '32768');
 
-      // Target platform
-      argsv.push('--target', buildTarget);
+    // Target platform
+    argsv.push('--target', buildTarget);
 
-      // Always generate debug symbols
-      argsv.push('--debug');
+    // Build for SD: link the game to run from internal SRAM (0x20010000) so
+    // the cart's SD launcher can load it.
+    if (buildForSd) {
+      argsv.push('--ram');
+    }
 
-      // If verbose mode, add --verbose flag
-      if (verbose) {
-        argsv.push('--verbose');
-      }
+    // Always generate debug symbols
+    argsv.push('--debug');
+
+    // If verbose mode, add --verbose flag
+    if (verbose) {
+      argsv.push('--verbose');
     }
     
     // CRITICAL: Delete old .asm and .bin files before compilation to avoid stale files
@@ -1285,7 +2221,48 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
     mainWindow?.webContents.send('run://stdout', `[Compiler] Working dir: ${workspaceRoot}\n`);
     mainWindow?.webContents.send('run://stdout', `[Compiler] Mode: ${isProjectMode ? 'PROJECT (.vpyproj)' : 'FILE (.vpy)'}\n`);
     
-    const child = spawn(compiler, argsv, { stdio: ['ignore','pipe','pipe'], cwd: workspaceRoot });
+    /* LAS PERILLAS DEL UVM2 VAN POR EL ENTORNO EN ESTE CAMINO.
+     *
+     * `vpy_cli` no acepta argumentos para esto: configura su propio CMake y lee
+     * UVM2_DUAL_CORE / UVM2_PIO_STREAM / UVM2_EXTRA_DEFS del ENTORNO. Y sus defectos son
+     * los CONTRARIOS que los de `make uvm2`: un nucleo y SIO. Por eso el panel emite
+     * siempre el 0 o el 1 explicito, en vez de "solo lo que cambia".
+     *
+     * Sin esto, cuatro builds con nombres distintos salian con el MISMO md5 — comprobado
+     * sobre los .um2 de la tarjeta el 2026-08-25. */
+    const envHijo: NodeJS.ProcessEnv = { ...process.env };
+    // rp2350 "SWD debug" mode: a C-backend program built for the debugger (vpy_cli build_rp2350_c)
+    if (debugBuild) envHijo.UVM2_DEBUG_CFLAGS = '-Og';
+    // The project's pinned SDK (downloaded if missing), for the targets that use it.
+    if (isProjectMode && (target === 'uvm2' || target === 'pitrex')) {
+      const sdk = await resolveProjectSdk(targetPath, logSdk, sendSdkProgress, { pico: target === 'uvm2' });
+      if ('error' in sdk) {
+        mainWindow?.webContents.send('run://stderr', `[SDK] ${sdk.error}\n`);
+        if (target === 'uvm2') return { error: 'sdk_unavailable', detail: sdk.error };
+      } else {
+        Object.assign(envHijo, sdkEnv(sdk.dir, sdk.picoSdkDir));
+        if (target === 'uvm2') {
+          Object.assign(envHijo, await armToolchainEnv((l) => mainWindow?.webContents.send('run://stdout', l)));
+          await ensureUvm2Rust((l) => mainWindow?.webContents.send('run://stdout', l + '\n'));
+          // Windows: CMake, Ninja, picotool and Rust (downloaded once).
+          if (process.platform === 'win32') {
+            Object.assign(envHijo, await windowsBuildEnv({ base: envHijo, sdkDir: sdk.dir, uvm2: true, log: (l) => mainWindow?.webContents.send('run://stdout', l) }));
+          }
+        }
+        await dropStaleSdkBuilds(dirname(targetPath), sdk, (l) => mainWindow?.webContents.send('run://stdout', l));
+        mainWindow?.webContents.send('run://stdout', `[SDK] ${sdk.version} (${sdk.dir})\n`);
+      }
+    }
+    const flagsUvm2 = (target === 'uvm2' ? (uvm2Flags || '') : '').trim();
+    if (flagsUvm2) {
+      for (const par of flagsUvm2.split(/\s+/)) {
+        const i = par.indexOf('=');
+        if (i > 0) envHijo[par.slice(0, i)] = par.slice(i + 1);
+      }
+      mainWindow?.webContents.send('run://stderr', `[build] uvm2 (vpy_cli) environment: ${flagsUvm2}\n`);
+    }
+    if (verbose) console.log('[RUN] env uvm2:', flagsUvm2);
+    const child = spawn(compiler, argsv, { stdio: ['ignore','pipe','pipe'], cwd: workspaceRoot, env: envHijo });
     let stdoutBuf = '';
     let stderrBuf = '';
     child.stdout.on('data', (c: Buffer) => { const txt = c.toString('utf8'); stdoutBuf += txt; mainWindow?.webContents.send('run://stdout', txt); });
@@ -1306,44 +2283,51 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
       // Use finalBinPath which accounts for project output path
       const binPath = finalBinPath;
       
-      // Phase 1: Check if ASM was generated
-      mainWindow?.webContents.send('run://status', `✓ Compilation Phase 1: Checking ASM generation...`);
-      try {
-        const asmExists = await fs.access(outAsm).then(() => true).catch(() => false);
-        if (!asmExists) {
-          mainWindow?.webContents.send('run://stderr', `ERROR: ASM file not generated: ${outAsm}`);
-          mainWindow?.webContents.send('run://status', `❌ Phase 1 FAILED: ASM generation failed`);
-          
-          // Parse semantic errors from stdout/stderr even when ASM is not generated
-          const allOutput = stdoutBuf + '\n' + stderrBuf;
-          const diags = parseCompilerDiagnostics(allOutput, fsPath);
-          if (diags.length) {
-            mainWindow?.webContents.send('run://diagnostics', diags);
+      // Phase 1: Check if ASM was generated.
+      // Only m6809 writes a sibling `<name>.asm`; the ARM backends (pitrex/rp2350)
+      // write `build/<name>.s` instead, so the `.asm` existence check does not
+      // apply to them — the Phase 2 binary check (which validates the real
+      // .img/.bin artifact) is the authoritative success signal for ARM targets.
+      const isArmTarget = target === 'pitrex' || target === 'rp2350';
+      if (!isArmTarget) {
+        mainWindow?.webContents.send('run://status', `✓ Compilation Phase 1: Checking ASM generation...`);
+        try {
+          const asmExists = await fs.access(outAsm).then(() => true).catch(() => false);
+          if (!asmExists) {
+            mainWindow?.webContents.send('run://stderr', `ERROR: ASM file not generated: ${outAsm}`);
+            mainWindow?.webContents.send('run://status', `❌ Phase 1 FAILED: ASM generation failed`);
+
+            // Parse semantic errors from stdout/stderr even when ASM is not generated
+            const allOutput = stdoutBuf + '\n' + stderrBuf;
+            const diags = parseCompilerDiagnostics(allOutput, fsPath);
+            if (diags.length) {
+              mainWindow?.webContents.send('run://diagnostics', diags);
+            }
+
+            return resolvePromise({ error: 'asm_not_generated', detail: `Expected ASM file: ${outAsm}` });
           }
-          
-          return resolvePromise({ error: 'asm_not_generated', detail: `Expected ASM file: ${outAsm}` });
-        }
-        
-        const asmStats = await fs.stat(outAsm);
-        if (asmStats.size === 0) {
-          mainWindow?.webContents.send('run://stderr', `ERROR: ASM file is empty: ${outAsm}`);
-          mainWindow?.webContents.send('run://status', `❌ Phase 1 FAILED: Empty ASM file generated`);
-          
-          // Parse semantic errors from stdout/stderr even when compilation "succeeds" but generates empty ASM
-          const allOutput = stdoutBuf + '\n' + stderrBuf;
-          const diags = parseCompilerDiagnostics(allOutput, fsPath);
-          if (diags.length) {
-            mainWindow?.webContents.send('run://diagnostics', diags);
+
+          const asmStats = await fs.stat(outAsm);
+          if (asmStats.size === 0) {
+            mainWindow?.webContents.send('run://stderr', `ERROR: ASM file is empty: ${outAsm}`);
+            mainWindow?.webContents.send('run://status', `❌ Phase 1 FAILED: Empty ASM file generated`);
+
+            // Parse semantic errors from stdout/stderr even when compilation "succeeds" but generates empty ASM
+            const allOutput = stdoutBuf + '\n' + stderrBuf;
+            const diags = parseCompilerDiagnostics(allOutput, fsPath);
+            if (diags.length) {
+              mainWindow?.webContents.send('run://diagnostics', diags);
+            }
+
+            return resolvePromise({ error: 'empty_asm_file', detail: `ASM file exists but is empty: ${outAsm}` });
           }
-          
-          return resolvePromise({ error: 'empty_asm_file', detail: `ASM file exists but is empty: ${outAsm}` });
+
+          mainWindow?.webContents.send('run://status', `✓ Phase 1 SUCCESS: ASM generated (${asmStats.size} bytes)`);
+        } catch (e: any) {
+          mainWindow?.webContents.send('run://stderr', `ERROR checking ASM file: ${e.message}`);
+          mainWindow?.webContents.send('run://status', `❌ Phase 1 FAILED: Error checking ASM file`);
+          return resolvePromise({ error: 'asm_check_failed', detail: e.message });
         }
-        
-        mainWindow?.webContents.send('run://status', `✓ Phase 1 SUCCESS: ASM generated (${asmStats.size} bytes)`);
-      } catch (e: any) {
-        mainWindow?.webContents.send('run://stderr', `ERROR checking ASM file: ${e.message}`);
-        mainWindow?.webContents.send('run://status', `❌ Phase 1 FAILED: Error checking ASM file`);
-        return resolvePromise({ error: 'asm_check_failed', detail: e.message });
       }
       
       // Phase 2: Check if binary was assembled
@@ -1359,7 +2343,6 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
           // Binary not found - check for lwasm errors in stderr
           const lwasmeErrors = stderrBuf.split('\n').filter(line => 
             line.includes('lwasm') || 
-            line.includes('fallo') || 
             line.includes('failed') ||
             line.includes('error') ||
             line.includes('ERROR')
@@ -1435,36 +2418,193 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
           mainWindow?.webContents.send('run://stderr', `⚠ Warning: Failed to load .pdb: ${e.message}`);
         }
         
-        // For rp2350 builds, also load the .elf for symbol extraction in Rp2350System
-        let elfBase64: string | null = null;
-        if (target === 'rp2350') {
-          const elfPath = binPath.replace(/\.[^.]+$/, '.elf');
+        // The compiler writes the .s/.elf/etc. into the project's build/ dir, which
+        // is NOT necessarily next to the output binary (a .vpyproj without an
+        // explicit `[build] output = "build/…"` sends the .bin/.img to the project
+        // root while the .s/.elf still land in build/). Resolve an artifact by
+        // trying the sibling-of-binary path first, then build/<name>.<ext>.
+        const resolveArtifact = async (ext: string): Promise<string | null> => {
+          const sibling = binPath.replace(/\.[^.]+$/, ext);
+          if (await fs.access(sibling).then(() => true).catch(() => false)) return sibling;
+          const inBuild = join(dirname(binPath), 'build', basename(binPath).replace(/\.[^.]+$/, '') + ext);
+          if (await fs.access(inBuild).then(() => true).catch(() => false)) return inBuild;
+          return null;
+        };
+
+        // COMPROBACION DE FRESCURA — un artefacto derivado tiene que ser de ESTA
+        // compilacion, no "el que hubiera por ahi".
+        //
+        // resolveArtifact() busca por nombre y nada mas. Si una compilacion anterior
+        // dejo un .um2 o un .elf en build/ y la de ahora no los ha regenerado, se
+        // cargaba el viejo SIN DECIR NADA. Costo una tarde: un .um2 rancio de otro
+        // target se cargaba en el simulador de UVM2 y "no arrancaba", sin ningun
+        // mensaje que apuntara al fichero. Es la misma familia que aquel "Build for
+        // SD" que copiaba a la tarjeta el game.js del simulador.
+        //
+        // La regla: el derivado tiene que haberse escrito DESPUES de que arrancara
+        // esta compilacion (`compilacionIniciadaEn`, tomado antes de lanzar el
+        // compilador). Compararlo contra el instante de arranque y no contra la fecha
+        // del .bin es deliberado: asi da igual en que orden escriba la build sus
+        // ficheros, y no hay que adivinar un margen de tolerancia.
+        //
+        // Se descuenta 1 s por el redondeo de mtime de algunos sistemas de ficheros.
+        const FRESCURA_DESDE = compilacionIniciadaEn - 1000;
+        type Artefacto =
+          | { path: string }
+          | { rancio: string; atrasoMs: number }
+          | null;
+        const resolveFreshArtifact = async (ext: string): Promise<Artefacto> => {
+          const p = await resolveArtifact(ext);
+          if (!p) return null;
           try {
-            const elfBuf = await fs.readFile(elfPath);
-            elfBase64 = Buffer.from(elfBuf).toString('base64');
-          } catch (_e) { /* elf not available */ }
+            const st = await fs.stat(p);
+            if (st.mtimeMs < FRESCURA_DESDE) {
+              return { rancio: p, atrasoMs: compilacionIniciadaEn - st.mtimeMs };
+            }
+          } catch (_e) {
+            // Sin stat no se puede juzgar; se usa, que es el comportamiento de antes.
+          }
+          return { path: p };
+        };
+        const avisarRancio = (ext: string, r: { rancio: string; atrasoMs: number }) => {
+          const seg = Math.round(r.atrasoMs / 1000);
+          const cuanto = seg < 120 ? `${seg} s` : `${Math.round(seg / 60)} min`;
+          mainWindow?.webContents.send('run://stderr',
+            `[build] ${r.rancio} is from an EARLIER build (${cuanto} before this one ` +
+            `started). It is NOT used: a stale ${ext} looks like a bug in the GAME rather ` +
+            `than a failed BUILD, which is what makes it costly. ` +
+            `Delete it and build again.\n`);
+          console.warn(`[main] stale ${ext} discarded:`, r.rancio);
+        };
+
+        // uvm2 ships a `.um2` (20-byte header + the RAM image the cartridge
+        // loads), not the raw `.bin`. The simulator and the SD card both want
+        // that file, so send it in place of the binary.
+        let payloadBase64 = base64;
+        let um2Fresco: string | null = null;
+        if (target === 'uvm2') {
+          const r = await resolveFreshArtifact('.um2');
+          if (r && 'path' in r) {
+            try {
+              payloadBase64 = Buffer.from(await fs.readFile(r.path)).toString('base64');
+              um2Fresco = r.path;
+            } catch (_e) { /* fall back to the .bin */ }
+          } else if (r) {
+            avisarRancio('.um2', r);
+          } else {
+            mainWindow?.webContents.send('run://stderr',
+              `[build] No .um2 next to ${binPath} or in build/. The ` +
+              `UVM2 simulator cannot load a raw .bin: it lacks the ` +
+              `'2CMU' header.\n`);
+            console.warn('[main] uvm2: no .um2 next to', binPath, 'or in build/');
+          }
+        }
+
+        // For rp2350 builds, also load the .elf for symbol extraction in Rp2350System.
+        // Aqui la frescura importa MAS que en el .um2: Rp2350System engancha sus
+        // trampas por DIRECCION de simbolo (psg_write, psg_read, ...). Un .elf viejo
+        // da direcciones que ya no son las del binario cargado, y el sintoma es que
+        // el juego corre pero sin sonido o sin mandos — parece un fallo del juego.
+        let elfBase64: string | null = null;
+        if (target === 'rp2350' || target === 'uvm2') {
+          const r = await resolveFreshArtifact('.elf');
+          if (r && 'path' in r) {
+            try {
+              const elfBuf = await fs.readFile(r.path);
+              elfBase64 = Buffer.from(elfBuf).toString('base64');
+            } catch (_e) { /* elf not available */ }
+          } else if (r) {
+            avisarRancio('.elf', r);
+          } else {
+            console.warn(`[main] ${target}: could not find .elf next to`, binPath, 'or in build/');
+          }
         }
 
         // For pitrex builds, also read the .s assembly file for the in-browser ARM32 interpreter
         let sFileText: string | null = null;
+        let libvpyAsm: string | null = null;
         if (target === 'pitrex') {
-          // Derive .s path from binary path — handle .img, .bin, .elf, or any extension
-          const sPath = binPath.replace(/\.[^.]+$/, '.s');
-          try {
-            sFileText = await fs.readFile(sPath, 'utf8');
-            mainWindow?.webContents.send('run://status', `✅ pitrex .s file loaded (${sFileText.length} chars)`);
-          } catch (_e) {
-            // .s file not found at derived path — try sibling with project name
-            console.warn('[main] pitrex: could not load .s from', sPath);
+          // Resolve the .s (sibling-of-binary, else build/<name>.s) for the
+          // in-browser ARM32 interpreter.
+          const sPath = await resolveArtifact('.s');
+          if (sPath) {
+            try {
+              sFileText = await fs.readFile(sPath, 'utf8');
+              mainWindow?.webContents.send('run://status', `✅ pitrex .s file loaded (${sFileText.length} chars)`);
+              // Also read the sibling libvpy .s (vpy.c compiled at build time) so
+              // the sim can resolve bridged builtins (e.g. `bl vpy_draw_circle`).
+              // Absent for programs that use no bridged builtin — that's fine, the
+              // renderer just parses the program .s on its own.
+              const libvpyPath = sPath.replace(/\.s$/, '_libvpy.s');
+              try {
+                libvpyAsm = await fs.readFile(libvpyPath, 'utf8');
+                mainWindow?.webContents.send('run://status', `✅ pitrex libvpy .s loaded (${libvpyAsm.length} chars)`);
+              } catch (_e) {
+                // No libvpy .s — program uses no bridged builtin, or vpy-c absent.
+              }
+            } catch (_e) {
+              console.warn('[main] pitrex: could not read .s from', sPath);
+            }
+          } else {
+            console.warn('[main] pitrex: could not find .s next to', binPath, 'or in build/');
           }
         }
 
-        // Notify renderer to load binary
-        mainWindow?.webContents.send('emu://compiledBin', {
-          base64, size: buf.length, binPath, pdbData,
+        // A RAM-linked SD build is not runnable in the emulator (it images the
+        // flash-linked game); don't push it to the renderer or flash it. Instead
+        // copy it onto the SD card under the name the launcher expects: the
+        // uppercased project stem + ".BIN" (e.g. SnowBros -> SNOWBROS.BIN).
+        if (buildForSd) {
+          const stem = basename(binPath).replace(/_sd\.bin$/i, '');
+          const sdName = `${stem.toUpperCase()}.BIN`;
+          if (rp2350SdPath) {
+            // The SD folder must already exist — it's a mounted volume (e.g.
+            // /Volumes/VMC2), NOT something we create. If it's missing the card
+            // isn't mounted on this computer; say so plainly instead of failing
+            // with a raw ENOENT (and don't mkdir a /Volumes mount point).
+            try {
+              await fs.access(rp2350SdPath);
+            } catch {
+              mainWindow?.webContents.send('run://stderr',
+                `⚠ Built ${binPath}\n   but the SD folder "${rp2350SdPath}" isn't there — is the card mounted on this computer? Copy it manually as ${sdName}.\n`);
+              resolvePromise({ ok: true, binPath, size: buf.length, stdout: stdoutBuf, stderr: stderrBuf, savedMTime, pdbData });
+              return;
+            }
+            try {
+              const dest = join(rp2350SdPath, sdName);
+              await fs.copyFile(binPath, dest);
+              mainWindow?.webContents.send('run://status', `✅ Built for SD → ${dest} (${buf.length} bytes)`);
+            } catch (e: any) {
+              mainWindow?.webContents.send('run://stderr', `⚠ Built ${binPath} but copy to SD failed: ${e.message}\n`);
+            }
+          } else {
+            mainWindow?.webContents.send('run://status', `✅ Built for SD: ${binPath} — copy it to the card as ${sdName}`);
+          }
+          resolvePromise({ ok: true, binPath, size: buf.length, stdout: stdoutBuf, stderr: stderrBuf, savedMTime, pdbData });
+          return;
+        }
+
+        /* The simulated card, as for a C project: a uvm2 image reads its music, samples and
+         * romsets off the SD, and the emulator serves it at the ELF's uvm2_sd_* symbols. Without
+         * both, ROTJ's VPy port ran silent (no music, no SFX) while the C game played. */
+        let sdFiles: Record<string, string> | undefined;
+        let sdDeferred: Record<string, number> | undefined;
+        if (target === 'uvm2') {
+          sdDeferred = {};
+          sdFiles = await leerSdSimulada(sdDeferred);
+        }
+
+        // Notify renderer to load binary (not for a build that goes to the cartridge: Upload /
+        // Debug on Cartridge, UVMC2 -- the emulator would run it too, and the editor's
+        // breakpoints would stop the emulator instead of the console)
+        if (!noPreview) mainWindow?.webContents.send('emu://compiledBin', {
+          base64: payloadBase64, size: buf.length, binPath, pdbData,
           target: target || 'm6809',
           elfBase64,
           sFileText,
+          libvpyAsm,
+          sdFiles,
+          sdDeferred,
         });
 
         // Copy to SD card if requested (pitrex target only)
@@ -1472,9 +2612,46 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
           await copyPitrexToSDCard(binPath, pitrexSdPath, mainWindow ?? null);
         }
 
-        // Copy to SD card if requested (uvm2 target)
+        // Copy to SD card if requested (uvm2 target).
+        // The cartridge reads `.um2` — a 20-byte header plus the RAM image. The
+        // raw `.bin` has no '2CMU' magic, so copying that produces a card the
+        // firmware silently refuses to load.
+        //
+        // Aqui la frescura se comprueba IGUAL que para el simulador, y con mas razon:
+        // una imagen vieja en la tarjeta se descubre delante de la consola, con el
+        // cartucho fuera y el cable a medio poner. Se reutiliza el .um2 que ya se
+        // valido arriba; si no se valido (porque no se iba a simular), se revalida.
         if (target === 'uvm2' && uvm2CopyToSD) {
-          await copyUvm2ToSDCard(binPath, uvm2SdPath, mainWindow ?? null);
+          let um2ForSd = um2Fresco;
+          if (!um2ForSd) {
+            const r = await resolveFreshArtifact('.um2');
+            if (r && 'path' in r) um2ForSd = r.path;
+            else if (r) avisarRancio('.um2', r);
+          }
+          if (um2ForSd) {
+            await copyUvm2ToSDCard(um2ForSd, uvm2SdPath, mainWindow ?? null);
+          } else {
+            mainWindow?.webContents.send('run://stderr',
+              `[SD] Nothing copied: no .um2 from this build next to ` +
+              `${binPath} or in build/. The cartridge cannot load a raw .bin.\n`);
+          }
+        }
+
+        // Flash the RP2350 debug cartridge if requested (rp2350 target)
+        if (target === 'rp2350' && rp2350FlashMethod !== 'none') {
+          // A RAM image (the 'VPy2' header with its entry in PSRAM or SRAM: a C-backend
+          // program, `[rp2350] backend = "c"`) has no .s to embed in the firmware; an old .s
+          // beside it would be flashed instead. It runs from the SD card, or Debug on Cartridge.
+          const entry = buf.length >= 8 && buf.readUInt32LE(0) === 0x32795056 ? buf.readUInt32LE(4) : 0;
+          const ramImage = (entry >= 0x11000000 && entry < 0x11800000) || (entry >= 0x20000000 && entry < 0x20080000);
+          if (ramImage) {
+            mainWindow?.webContents.send('run://stderr',
+              `[RP2350] ${basename(binPath)} is a RAM image for the SD card (C backend), not a program to ` +
+              `embed in the firmware: not flashed. Copy it to the card, or use Debug on Cartridge.\n`);
+          } else {
+            const sPath = binPath.replace(/\.[^.]+$/, '.s');
+            await flashRp2350(sPath, rp2350FirmwareDir, rp2350FlashMethod, mainWindow ?? null);
+          }
         }
 
         resolvePromise({ 
@@ -1499,6 +2676,18 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
 // IPC handler wraps the exported function
 ipcMain.handle('run:compile', async (_e, args) => {
   return executeCompilation(args);
+});
+
+// Build (and optionally deploy) an imported external C/C++ project.
+// `args.target` (pitrex | rp2350) selects the per-target build recipe so the
+// correct compiler runs; omitted → the manifest default ([build], pitrex).
+ipcMain.handle('run:buildExternal', async (_e, args) => {
+  return executeExternalBuild(args);
+});
+
+// Build the WASM simulator module for an external project (for the panel).
+ipcMain.handle('run:buildSim', async (_e, args) => {
+  return executeSimBuild(args);
 });
 
 // Emulator: run until next frame (or max steps)
@@ -1527,6 +2716,194 @@ ipcMain.handle('file:read', async (_e, path: string) => {
     return { path, content, mtime: stat.mtimeMs, size: stat.size, name: basename(path) };
   } catch (e:any) {
     return { error: e?.message || 'read_failed' };
+  }
+});
+
+// Precompile a .vrec (JSON) into a binary .vrb via `vpy_cli vrec-compile`.
+function vrecToVrb(cli: string, input: string, output: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const child = spawn(cli, ['vrec-compile', input, output], { stdio: 'ignore' });
+    child.on('exit', (code) => resolve(code === 0));
+    child.on('error', () => resolve(false));
+  });
+}
+
+// Compile a single .vrec → its .vrb sibling (called after a recording is saved,
+// so every recording ships with its hardware-compatible binary preview).
+ipcMain.handle('vrec:compile', async (_e, vrecPath: string) => {
+  try {
+    if (!vrecPath || !vrecPath.toLowerCase().endsWith('.vrec')) return { ok: false, error: 'not a .vrec' };
+    const cli = resolveCompilerPath();
+    if (!cli) return { ok: false, error: 'compiler not found' };
+    const vrbPath = vrecPath.slice(0, -5) + '.vrb';
+    const ok = await vrecToVrb(cli, vrecPath, vrbPath);
+    return ok ? { ok: true, vrbPath } : { ok: false, error: 'vrec-compile failed' };
+  } catch (e:any) {
+    return { ok: false, error: e?.message || 'vrec_compile_failed' };
+  }
+});
+
+// Simulated SD card for the rp2350 emulator preview: a folder in the user's
+// home (`~/VectrexStudio/sd`, created if missing). Returns the uppercase stems
+// of its *.bin files — the game list the SD_FILE_COUNT/NAME traps serve.
+/** Los ficheros de ~/VectrexStudio/sd, por ruta relativa en minusculas, en base64.
+ *
+ * Recorre subdirectorios porque el UVM2 pide "roms/<juego>.zip". El tope por fichero y el
+ * total existen para que mandar la carpeta no bloquee el IPC: una SD de verdad puede tener
+ * gigas y aqui solo hacen falta los romsets. Lo que se pase se anuncia en la terminal, para
+ * que "falta el romset" nunca sea una sorpresa muda. */
+/** The files the inline caps leave out (path -> size): `deferred` collects them for a
+ *  consumer that can fetch them on demand with `sd:readSync` (the .um2 emulator: ROTJ's music
+ *  tracks are 2-3 MB each, ~100 MB in all, and only the one playing is ever read). */
+async function leerSdSimulada(deferred?: Record<string, number>): Promise<Record<string, string>> {
+  const raiz = join(os.homedir(), 'VectrexStudio', 'sd');
+  const MAX_FICHERO = 2 * 1024 * 1024;
+  const MAX_TOTAL   = 24 * 1024 * 1024;
+  const out: Record<string, string> = {};
+  let total = 0;
+  const anda = async (dir: string, rel: string): Promise<void> => {
+    let entradas: any[];
+    try { entradas = await fs.readdir(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entradas) {
+      if (e.name.startsWith('.')) continue;
+      const p = join(dir, e.name);
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) { await anda(p, r); continue; }
+      try {
+        const st = await fs.stat(p);
+        if (st.size > MAX_FICHERO || total + st.size > MAX_TOTAL) {
+          if (deferred) deferred[r.toLowerCase()] = st.size;
+          continue;
+        }
+        out[r.toLowerCase()] = (await fs.readFile(p)).toString('base64');
+        total += st.size;
+      } catch { /* un fichero ilegible no puede tumbar la lista entera */ }
+    }
+  };
+  await anda(raiz, '');
+  return out;
+}
+
+/* The simulated card WITH its contents and sub-folders, for the WASM simulator: a game built
+ * with the SDK's uvm2_sd_sim.c reads it from /sd in emscripten's file system, which the
+ * simulator view fills from this before main(). Same folder, same caps and same lower-case
+ * paths as the card F5 hands the .um2 emulator (leerSdSimulada). */
+ipcMain.handle('sd:simFiles', async () => {
+  try {
+    const deferred: Record<string, number> = {};
+    const files = await leerSdSimulada(deferred);
+    return { ok: true, dir: join(os.homedir(), 'VectrexStudio', 'sd'), files, deferred };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'sd_sim_files_failed' };
+  }
+});
+
+/* One file of the simulated card, SYNCHRONOUSLY: the .um2 emulator traps the game's
+ * uvm2_sd_open inside a frame and has to answer before the next instruction. Only for the
+ * files leerSdSimulada deferred, so a track costs one read when the game opens it. The path
+ * is the card's lower-case relative one; it is matched against the folder's real entries,
+ * so it can never leave the card. */
+ipcMain.on('sd:readSync', (e, rel: unknown) => {
+  try {
+    let dir = join(os.homedir(), 'VectrexStudio', 'sd');
+    for (const parte of String(rel ?? '').split('/')) {
+      const real = readdirSync(dir).find(n => !n.startsWith('.') && n.toLowerCase() === parte);
+      if (!real) { e.returnValue = null; return; }
+      dir = join(dir, real);
+    }
+    e.returnValue = new Uint8Array(readFileSync(dir));
+  } catch {
+    e.returnValue = null;
+  }
+});
+
+ipcMain.handle('sd:simList', async () => {
+  try {
+    const dir = join(os.homedir(), 'VectrexStudio', 'sd');
+    await fs.mkdir(dir, { recursive: true });
+    const entries = await fs.readdir(dir);
+    const files = entries
+      .filter(f => !f.startsWith('.') && f.toLowerCase().endsWith('.bin'))
+      .map(f => f.slice(0, -4).toUpperCase().slice(0, 12))
+      .sort()
+      .slice(0, 24);
+    // Precompile each preview .vrec → binary .vrb (cached by mtime) and return
+    // the .vrb bytes as base64. The .vrb is the hardware-compatible format the
+    // emulator parses — the same bytes the RP2350 firmware will stream from SD.
+    const previews: Record<string, string> = {};
+    try {
+      const pdir = join(dir, 'preview');
+      const cli = resolveCompilerPath();
+      const pentries = await fs.readdir(pdir);
+      for (const pe of pentries) {
+        if (pe.startsWith('.') || !pe.toLowerCase().endsWith('.vrec')) continue;
+        const key = pe.slice(0, -5).toUpperCase().slice(0, 12);
+        if (!files.includes(key)) continue;
+        const vrecPath = join(pdir, pe);
+        const vrbPath = vrecPath.slice(0, -5) + '.vrb';
+        try {
+          let needCompile = true;
+          try {
+            const [vs, bs] = await Promise.all([fs.stat(vrecPath), fs.stat(vrbPath)]);
+            needCompile = bs.mtimeMs < vs.mtimeMs; // rebuild if .vrb is stale
+          } catch { needCompile = true; }
+          if (needCompile && cli) await vrecToVrb(cli, vrecPath, vrbPath);
+          const vrb = await fs.readFile(vrbPath);
+          previews[key] = vrb.toString('base64');
+        } catch { /* skip this preview */ }
+      }
+    } catch { /* no preview/ subfolder */ }
+    return { ok: true, dir, files, previews };
+  } catch (e:any) {
+    return { ok: false, error: e?.message || 'sd_list_failed', files: [] as string[], previews: {} };
+  }
+});
+
+// Romset for the simulated SD (MAME model): ports no longer embed the ROM, they
+// read `roms/<STEM>.ZIP` off the card at boot. The layout mirrors the real card
+// exactly — ~/VectrexStudio/sd/roms/redalarm.zip is /Volumes/<SD>/roms/redalarm.zip
+// — so there is one convention to learn, not two.
+//
+// The match is by STEM, the same rule sd.rs uses on hardware (REDALARM.BIN looks
+// for REDALARM.ZIP). Case-insensitive here because macOS filenames are, and the
+// card's FAT names are uppercase; matching case-sensitively would find nothing and
+// look like a missing romset.
+/* EL NOMBRE DEL ROMSET SALE DEL BINARIO, no del nombre del fichero. Deducirlo del
+ * .bin solo acierta por casualidad: aae_asteroids_sd.bin necesita asteroid.zip. El
+ * juego lo declara en el bloque 'RSET' que va detras de su cabecera VPy2, y el
+ * firmware del cartucho lo lee de ahi — aqui se hace igual, o el simulador y la
+ * consola buscarian ficheros distintos. */
+async function romsetDeclarado(binPath: string): Promise<string | null> {
+  try {
+    const b = await fs.readFile(binPath);
+    if (b.length < 24 || b.readUInt32LE(16) !== 0x54455352) return null;   // 'RSET'
+    const off = b.readUInt32LE(20) - 0x11000000;
+    if (off < 0 || off >= b.length) return null;
+    const fin = b.indexOf(0, off);
+    return b.toString('latin1', off, fin < 0 ? b.length : fin) || null;
+  } catch { return null; }
+}
+
+ipcMain.handle('sd:romZip', async (_e, stem: string, binPath?: string) => {
+  if (!stem && !binPath) return { ok: false, error: 'no_stem' };
+  try {
+    const dir = join(os.homedir(), 'VectrexStudio', 'sd', 'roms');
+    const declarado = binPath ? await romsetDeclarado(binPath) : null;
+    const want = (declarado ?? (stem.toLowerCase() + '.zip')).toLowerCase();
+    let entries: string[];
+    try {
+      entries = await fs.readdir(dir);
+    } catch {
+      return { ok: false, error: 'no_roms_dir', dir };
+    }
+    const hit = entries.find(f => f.toLowerCase() === want);
+    // Report what IS there when the match fails: "no romset" and "the romset is
+    // named something else" are different problems and look identical otherwise.
+    if (!hit) return { ok: false, error: 'not_found', dir, want, have: entries.filter(f => f.toLowerCase().endsWith('.zip')) };
+    const buf = await fs.readFile(join(dir, hit));
+    return { ok: true, dir, name: hit, size: buf.length, base64: buf.toString('base64') };
+  } catch (e:any) {
+    return { ok: false, error: e?.message || 'romzip_failed' };
   }
 });
 
@@ -1719,6 +3096,378 @@ ipcMain.handle('file:saveAs', async (_e, args: { suggestedName?: string; content
   }
 });
 
+// ── Gameplay video export (WebM → MP4 via bundled ffmpeg) ─────────────────
+// The renderer records the emulator canvas + audio as a WebM MediaStream and
+// hands the raw bytes here. We write a temp .webm, transcode with ffmpeg to
+// H.264/AAC .mp4 (yuv420p + faststart = max player/upload compatibility),
+// then return the saved path. Chromium's MediaRecorder can't reliably emit
+// MP4, hence the WebM-in-renderer / transcode-in-main split.
+function resolveFfmpegPath(): string | null {
+  const p = ffmpegStatic as unknown as string | null;
+  if (!p) return null;
+  // In a packaged build the binary lives inside app.asar, which isn't
+  // executable — electron-builder's asarUnpack extracts it to
+  // app.asar.unpacked. Rewrite the path so spawn finds the real file.
+  return p.replace('app.asar', 'app.asar.unpacked');
+}
+
+ipcMain.handle('video:saveMp4', async (_e, args: { webmBytes: ArrayBuffer | Uint8Array; name?: string }) => {
+  const win = BrowserWindow.getFocusedWindow() || mainWindow;
+  if (!win) return { error: 'no_window' };
+
+  const ffmpegPath = resolveFfmpegPath();
+  if (!ffmpegPath || !existsSync(ffmpegPath)) {
+    return { error: 'ffmpeg binary not found (ffmpeg-static missing or not unpacked)' };
+  }
+
+  const rawName = (args?.name || 'gameplay').replace(/\.(mp4|webm)$/i, '').replace(/[^\w.-]+/g, '_') || 'gameplay';
+
+  // Ask the user where to save the final MP4.
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    defaultPath: join(app.getPath('desktop') || os.homedir(), `${rawName}.mp4`),
+    filters: [{ name: 'MP4 Video', extensions: ['mp4'] }],
+  });
+  if (canceled || !filePath) return { canceled: true };
+
+  const stamp = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const tmpWebm = join(os.tmpdir(), `vpy_gameplay_${stamp}.webm`);
+
+  try {
+    const buf = Buffer.isBuffer(args.webmBytes)
+      ? args.webmBytes
+      : Buffer.from(args.webmBytes as ArrayBuffer);
+    await fs.writeFile(tmpWebm, buf);
+
+    const ffArgs = [
+      '-y',
+      '-i', tmpWebm,
+      // Explicit stream mapping: take video + audio (audio optional via '?' so a
+      // video-only input doesn't fail). Guards against default stream selection
+      // silently dropping the audio track.
+      '-map', '0:v:0',
+      '-map', '0:a:0?',
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      '-preset', 'veryfast',
+      '-crf', '20',
+      '-c:a', 'aac',
+      '-b:a', '160k',
+      '-movflags', '+faststart',
+      filePath,
+    ];
+
+    const result = await new Promise<{ ok: boolean; stderr: string }>((resolve) => {
+      let stderr = '';
+      const proc = spawn(ffmpegPath, ffArgs, { windowsHide: true });
+      proc.stderr.on('data', (d) => { stderr += d.toString(); });
+      proc.on('error', (err) => resolve({ ok: false, stderr: String(err?.message || err) }));
+      proc.on('close', (code) => resolve({ ok: code === 0, stderr }));
+    });
+
+    // Clean up the temp WebM regardless of outcome.
+    await fs.unlink(tmpWebm).catch(() => {});
+
+    // Diagnostic: did the INPUT webm contain an audio stream? ffmpeg prints the
+    // input stream list ("Stream #0:N: Audio: opus ...") to stderr. This tells
+    // us whether the problem is upstream (MediaRecorder didn't encode audio) or
+    // here (ffmpeg dropped it). Extract just the Input section.
+    const inputSection = result.stderr.split(/Output #0|Stream mapping:/)[0];
+    const inputHadAudio = /Stream #\d+:\d+.*Audio:/i.test(inputSection);
+    const streamLines = (result.stderr.match(/Stream #\d+:\d+.*?(Video|Audio):[^\n]*/gi) || []).slice(0, 6);
+    console.log('[video:saveMp4] ffmpeg — inputHadAudio:', inputHadAudio, '| streams:', streamLines);
+
+    if (!result.ok) {
+      const tail = result.stderr.split('\n').slice(-12).join('\n').trim();
+      return { error: `ffmpeg failed: ${tail || 'unknown error'}` };
+    }
+    return { path: filePath, inputHadAudio, streams: streamLines };
+  } catch (e: any) {
+    await fs.unlink(tmpWebm).catch(() => {});
+    return { error: e?.message || 'video_export_failed' };
+  }
+});
+
+// Raw WebM save (no transcode) — isolates whether MediaRecorder encoded audio.
+ipcMain.handle('video:saveWebm', async (_e, args: { webmBytes: ArrayBuffer | Uint8Array; name?: string }) => {
+  const win = BrowserWindow.getFocusedWindow() || mainWindow;
+  if (!win) return { error: 'no_window' };
+  const rawName = (args?.name || 'gameplay').replace(/\.(mp4|webm)$/i, '').replace(/[^\w.-]+/g, '_') || 'gameplay';
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    defaultPath: join(app.getPath('desktop') || os.homedir(), `${rawName}.webm`),
+    filters: [{ name: 'WebM Video', extensions: ['webm'] }],
+  });
+  if (canceled || !filePath) return { canceled: true };
+  try {
+    const buf = Buffer.isBuffer(args.webmBytes) ? args.webmBytes : Buffer.from(args.webmBytes as ArrayBuffer);
+    await fs.writeFile(filePath, buf);
+    console.log('[video:saveWebm] wrote', buf.length, 'bytes →', filePath);
+    return { path: filePath };
+  } catch (e: any) {
+    return { error: e?.message || 'webm_save_failed' };
+  }
+});
+
+// ── Vector Movie converters (video → .vrec, audio → .vsmp) ────────────────
+// The VectorMovieEditor imports media by spawning the on-disk Python tools
+// (tools/video2vrec + tools/audio2vsmp). We resolve the repo root, spawn the
+// tool, stream its stderr progress ("[1/3] …") to the renderer via
+// 'movie://progress', and resolve with the produced file path.
+
+// Locate the repository root that holds the tools/ directory. Tries several
+// candidate roots (env override, dist-relative, cwd-relative) and returns the
+// first that actually contains tools/video2vrec/video2vrec.py.
+function resolveMovieRepoRoot(): string | null {
+  const candidates = [
+    process.env.VPY_REPO_ROOT,
+    // dev: compiled main lives in ide/electron/dist → up 3 = repo root
+    join(__dirname, '..', '..', '..'),
+    join(process.cwd(), '..', '..'),
+    process.cwd(),
+    // packaged: app dir sibling
+    app.isPackaged ? dirname(app.getPath('exe')) : undefined,
+  ].filter(Boolean) as string[];
+  for (const root of candidates) {
+    try {
+      if (existsSync(join(root, 'tools', 'video2vrec', 'video2vrec.py'))) return root;
+    } catch {}
+  }
+  return null;
+}
+
+// Environment for the movie converter/preview Python tools. They shell out to
+// ffmpeg — but a macOS GUI app inherits a STRIPPED PATH (no /opt/homebrew/bin,
+// no /usr/local/bin), so a bare `ffmpeg` isn't found and the tool hangs/fails
+// with a confusing error. Fix: hand the tools our BUNDLED ffmpeg-static via the
+// FFMPEG env var (self-contained, no PATH dependency), and also widen PATH as a
+// belt-and-suspenders for anything else the tools invoke.
+function movieSpawnEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  const ff = resolveFfmpegPath();
+  if (ff && existsSync(ff)) env.FFMPEG = ff;
+  const extra = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin'];
+  const sep = process.platform === 'win32' ? ';' : ':';
+  const cur = (env.PATH || '').split(sep).filter(Boolean);
+  env.PATH = [...new Set([...cur, ...extra])].join(sep);
+  return env;
+}
+
+// movie:convert — spawn a converter tool. args:
+//   kind:  'video' | 'audio'
+//   inputPath: absolute source media path
+//   outPath:   absolute destination (.vrec or .vsmp); parent dir auto-created
+//   opts:      converter flags (see below)
+// video opts: { mode, fps, epsilon, budget, threshold, invert, crop, borderMargin }
+// audio opts: { rate, normalize }
+ipcMain.handle('movie:convert', async (_e, args: {
+  kind: 'video' | 'audio';
+  inputPath: string;
+  outPath: string;
+  opts?: Record<string, any>;
+}) => {
+  const { kind, inputPath, outPath, opts = {} } = args || ({} as any);
+  if (!kind || !inputPath || !outPath) return { error: 'missing_args' };
+
+  const root = resolveMovieRepoRoot();
+  if (!root) {
+    return { error: 'Converter tools not found. Expected tools/video2vrec/video2vrec.py under the repo root (set VPY_REPO_ROOT to override).' };
+  }
+
+  // Ensure the destination directory exists (recordings/ or samples/).
+  try { await fs.mkdir(dirname(outPath), { recursive: true }); } catch {}
+
+  let cmd: string;
+  const cliArgs: string[] = [];
+
+  if (kind === 'video') {
+    // Prefer the tool's dedicated venv python (has opencv); fall back to python3.
+    const isWin = process.platform === 'win32';
+    const venvPy = isWin
+      ? join(root, 'tools', 'video2vrec', '.venv', 'Scripts', 'python.exe')
+      : join(root, 'tools', 'video2vrec', '.venv', 'bin', 'python');
+    cmd = existsSync(venvPy) ? venvPy : (isWin ? 'python' : 'python3');
+    cliArgs.push(join(root, 'tools', 'video2vrec', 'video2vrec.py'), inputPath, outPath);
+    if (opts.mode) cliArgs.push('--mode', String(opts.mode));
+    if (opts.fps) cliArgs.push('--fps', String(opts.fps));
+    if (opts.epsilon != null) cliArgs.push('--epsilon', String(opts.epsilon));
+    if (opts.budget != null) cliArgs.push('--budget', String(opts.budget));
+    if (opts.threshold != null) cliArgs.push('--threshold', String(opts.threshold));
+    if (opts.dark != null) cliArgs.push('--dark', String(opts.dark));
+    if (opts.light != null) cliArgs.push('--light', String(opts.light));
+    if (opts.cannyLo != null) cliArgs.push('--canny-lo', String(opts.cannyLo));
+    if (opts.cannyHi != null) cliArgs.push('--canny-hi', String(opts.cannyHi));
+    if (opts.minArea != null) cliArgs.push('--min-area', String(opts.minArea));
+    if (opts.invert) cliArgs.push('--invert');
+    if (opts.crop != null && Number(opts.crop) > 0) cliArgs.push('--crop', String(opts.crop));
+    if (opts.borderMargin != null) cliArgs.push('--border-margin', String(opts.borderMargin));
+    if (opts.start != null && Number(opts.start) > 0) cliArgs.push('--start', String(opts.start));
+    if (opts.duration != null && Number(opts.duration) > 0) cliArgs.push('--duration', String(opts.duration));
+  } else {
+    // audio: system python3 (only needs ffmpeg on PATH).
+    cmd = process.platform === 'win32' ? 'python' : 'python3';
+    cliArgs.push(join(root, 'tools', 'audio2vsmp', 'audio2vsmp.py'), inputPath, outPath);
+    if (opts.rate) cliArgs.push('--rate', String(opts.rate));
+    if (opts.normalize) cliArgs.push('--normalize');
+    if (opts.start != null && Number(opts.start) > 0) cliArgs.push('--start', String(opts.start));
+    if (opts.duration != null && Number(opts.duration) > 0) cliArgs.push('--duration', String(opts.duration));
+  }
+
+  return await new Promise((resolve) => {
+    let stderr = '';
+    let stdout = '';
+    let proc;
+    try {
+      proc = spawn(cmd, cliArgs, { cwd: root, windowsHide: true, env: movieSpawnEnv() });
+    } catch (err: any) {
+      resolve({ error: `Failed to spawn converter: ${err?.message || err}` });
+      return;
+    }
+    const pushProgress = (chunk: string) => {
+      for (const raw of chunk.split(/\r?\n/)) {
+        const line = raw.trim();
+        if (line) mainWindow?.webContents.send('movie://progress', line);
+      }
+    };
+    proc.stdout?.on('data', (d) => { const s = d.toString(); stdout += s; pushProgress(s); });
+    proc.stderr?.on('data', (d) => { const s = d.toString(); stderr += s; pushProgress(s); });
+    proc.on('error', (err) => {
+      resolve({ error: `Failed to run converter (${cmd}): ${err.message}. Ensure Python and ffmpeg are installed and on PATH.` });
+    });
+    proc.on('close', (code) => {
+      if (code === 0 && existsSync(outPath)) {
+        resolve({ ok: true, outPath, stdout, stderr });
+      } else {
+        const tail = (stderr || stdout).split('\n').slice(-8).join('\n').trim();
+        resolve({ error: `Converter exited with code ${code}: ${tail || 'unknown error'}` });
+      }
+    });
+  });
+});
+
+// movie:previewFrame — trace ONE frame of a video at a timestamp so the editor's
+// "Trace tuning" panel can show original-vs-traced and dial in params before a
+// full convert. Spawns preview_frame.py with --emit json, parses stdout, and
+// returns { segments, width, height, originalPng(base64) } or { error }.
+//   videoPath: absolute source video path
+//   time:      timestamp in seconds (frame / fps)
+//   opts:      same trace flags as movie:convert's video branch
+ipcMain.handle('movie:previewFrame', async (_e, args: {
+  videoPath: string;
+  time: number;
+  opts?: Record<string, any>;
+}) => {
+  const { videoPath, time = 0, opts = {} } = args || ({} as any);
+  if (!videoPath) return { error: 'missing_args' };
+
+  const root = resolveMovieRepoRoot();
+  if (!root) {
+    return { error: 'Converter tools not found. Expected tools/video2vrec/preview_frame.py under the repo root (set VPY_REPO_ROOT to override).' };
+  }
+
+  const isWin = process.platform === 'win32';
+  const venvPy = isWin
+    ? join(root, 'tools', 'video2vrec', '.venv', 'Scripts', 'python.exe')
+    : join(root, 'tools', 'video2vrec', '.venv', 'bin', 'python');
+  const cmd = existsSync(venvPy) ? venvPy : (isWin ? 'python' : 'python3');
+
+  const cliArgs: string[] = [
+    join(root, 'tools', 'video2vrec', 'preview_frame.py'),
+    videoPath, '/dev/stdout',
+    '--time', String(time),
+    '--emit', 'json',
+  ];
+  if (opts.mode) cliArgs.push('--mode', String(opts.mode));
+  if (opts.threshold != null) cliArgs.push('--threshold', String(opts.threshold));
+  if (opts.dark != null) cliArgs.push('--dark', String(opts.dark));
+  if (opts.light != null) cliArgs.push('--light', String(opts.light));
+  if (opts.cannyLo != null) cliArgs.push('--canny-lo', String(opts.cannyLo));
+  if (opts.cannyHi != null) cliArgs.push('--canny-hi', String(opts.cannyHi));
+  if (opts.epsilon != null) cliArgs.push('--epsilon', String(opts.epsilon));
+  if (opts.budget != null) cliArgs.push('--budget', String(opts.budget));
+  if (opts.minArea != null) cliArgs.push('--min-area', String(opts.minArea));
+  if (opts.invert) cliArgs.push('--invert');
+  if (opts.crop != null && Number(opts.crop) > 0) cliArgs.push('--crop', String(opts.crop));
+  if (opts.borderMargin != null) cliArgs.push('--border-margin', String(opts.borderMargin));
+
+  return await new Promise((resolve) => {
+    let stdout = '';
+    let stderr = '';
+    let proc;
+    try {
+      proc = spawn(cmd, cliArgs, { cwd: root, windowsHide: true, env: movieSpawnEnv() });
+    } catch (err: any) {
+      resolve({ error: `Failed to spawn preview: ${err?.message || err}` });
+      return;
+    }
+    proc.stdout?.on('data', (d) => { stdout += d.toString(); });
+    proc.stderr?.on('data', (d) => { stderr += d.toString(); });
+    proc.on('error', (err) => {
+      resolve({ error: `Failed to run preview (${cmd}): ${err.message}. Ensure Python and ffmpeg are installed and on PATH.` });
+    });
+    proc.on('close', (code) => {
+      if (code !== 0) {
+        const tail = (stderr || stdout).split('\n').slice(-8).join('\n').trim();
+        resolve({ error: `Preview exited with code ${code}: ${tail || 'unknown error'}` });
+        return;
+      }
+      try {
+        const parsed = JSON.parse(stdout);
+        resolve({
+          segments: parsed.segments || [],
+          width: parsed.width || 0,
+          height: parsed.height || 0,
+          originalPng: parsed.originalPng || '',
+          maskPng: parsed.maskPng || '',
+        });
+      } catch (err: any) {
+        resolve({ error: `Could not parse preview output: ${err?.message || err}` });
+      }
+    });
+  });
+});
+
+// movie:probe — get a video's duration (seconds) so the editor can bound the
+// from/to trim range. Uses the bundled ffmpeg (`ffmpeg -i` prints the duration
+// to stderr) rather than ffprobe, which ffmpeg-static doesn't ship.
+ipcMain.handle('movie:probe', async (_e, args: { videoPath: string }) => {
+  const videoPath = args?.videoPath;
+  if (!videoPath) return { error: 'missing_args' };
+  const ff = resolveFfmpegPath();
+  if (!ff || !existsSync(ff)) return { error: 'ffmpeg binary not found' };
+  return await new Promise((resolve) => {
+    let stderr = '';
+    let proc;
+    try {
+      proc = spawn(ff, ['-i', videoPath], { windowsHide: true, env: movieSpawnEnv() });
+    } catch (err: any) {
+      resolve({ error: `Failed to probe: ${err?.message || err}` });
+      return;
+    }
+    proc.stderr?.on('data', (d) => { stderr += d.toString(); });
+    proc.on('error', (err) => resolve({ error: `Failed to probe: ${err.message}` }));
+    // `ffmpeg -i` with no output exits non-zero ("At least one output file...")
+    // but still prints "Duration: HH:MM:SS.ss" — parse it regardless of code.
+    proc.on('close', () => {
+      const m = stderr.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
+      if (!m) { resolve({ error: 'could not parse duration' }); return; }
+      const durationSec = (+m[1]) * 3600 + (+m[2]) * 60 + parseFloat(m[3]);
+      const hasAudio = /Stream #\d+:\d+(?:\[[^\]]*\])?(?:\([^)]*\))?: Audio:/.test(stderr);
+      resolve({ durationSec, hasAudio });
+    });
+  });
+});
+
+// movie:pickFile — native open dialog for importing source media.
+ipcMain.handle('movie:pickFile', async (_e, args: { kind: 'video' | 'audio' }) => {
+  const win = BrowserWindow.getFocusedWindow() || mainWindow;
+  if (!win) return null;
+  const filters = args?.kind === 'audio'
+    ? [{ name: 'Audio / Video', extensions: ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac', 'mov', 'mp4', 'mkv', 'webm', 'avi'] }]
+    : [{ name: 'Video', extensions: ['mp4', 'mov', 'mkv', 'webm', 'avi', 'gif', 'm4v'] }];
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, { properties: ['openFile'], filters });
+  if (canceled || filePaths.length === 0) return null;
+  return { path: filePaths[0], name: basename(filePaths[0]) };
+});
+
 ipcMain.handle('file:openFolder', async () => {
   const win = BrowserWindow.getFocusedWindow() || mainWindow;
   if (!win) return null;
@@ -1796,6 +3545,72 @@ ipcMain.handle('file:delete', async (_e, filePath: string) => {
   }
 });
 
+/* ── The file tree's context menu (FileTreePanel) ──────────────────────────────────────
+ * Every handler takes absolute paths and refuses to overwrite: a name that is taken comes
+ * back as `exists`, so the tree can say so instead of losing a file. */
+const exists = (p: string) => fs.stat(p).then(() => true, () => false);
+const validName = (n: string) => !!n && n !== '.' && n !== '..' && !/[\\/]/.test(n);
+
+ipcMain.handle('file:mkdir', async (_e, dirPath: string) => {
+  if (!dirPath) return { error: 'no_path' };
+  if (!validName(basename(dirPath))) return { error: 'invalid_name' };
+  if (await exists(dirPath)) return { error: 'exists' };
+  try { await fs.mkdir(dirPath, { recursive: true }); return { ok: true, path: dirPath }; }
+  catch (e: any) { return { error: e?.message || 'mkdir_failed' }; }
+});
+
+ipcMain.handle('file:create', async (_e, filePath: string) => {
+  if (!filePath) return { error: 'no_path' };
+  if (!validName(basename(filePath))) return { error: 'invalid_name' };
+  try { await fs.writeFile(filePath, '', { flag: 'wx' }); return { ok: true, path: filePath }; }
+  catch (e: any) { return { error: e?.code === 'EEXIST' ? 'exists' : (e?.message || 'create_failed') }; }
+});
+
+ipcMain.handle('file:rename', async (_e, args: { path: string; newName: string }) => {
+  const { path: from, newName } = args ?? ({} as any);
+  if (!from || !validName(newName)) return { error: 'invalid_name' };
+  const to = join(dirname(from), newName);
+  if (to === from) return { ok: true, path: to };
+  // A change of case only (Foo -> foo) on a case-insensitive disk "exists" as itself.
+  if (to.toLowerCase() !== from.toLowerCase() && await exists(to)) return { error: 'exists' };
+  try { await fs.rename(from, to); return { ok: true, path: to }; }
+  catch (e: any) { return { error: e?.message || 'rename_failed' }; }
+});
+
+/* A copy into targetDir under a free name: "x.vec", then "x copy.vec", "x copy 2.vec"... */
+ipcMain.handle('file:copy', async (_e, args: { sourcePath: string; targetDir: string }) => {
+  const { sourcePath, targetDir } = args ?? ({} as any);
+  if (!sourcePath || !targetDir) return { error: 'missing_paths' };
+  const sep = targetDir.includes('\\') ? '\\' : '/';
+  if ((targetDir + sep).startsWith(sourcePath + sep)) return { error: 'into_itself' };
+  try {
+    const name = basename(sourcePath);
+    const st = await fs.stat(sourcePath);
+    const dot = st.isDirectory() ? -1 : name.lastIndexOf('.');
+    const stem = dot > 0 ? name.slice(0, dot) : name, ext = dot > 0 ? name.slice(dot) : '';
+    let target = join(targetDir, name);
+    for (let n = 1; await exists(target); n++)
+      target = join(targetDir, `${stem} copy${n > 1 ? ' ' + n : ''}${ext}`);
+    await fs.cp(sourcePath, target, { recursive: true, errorOnExist: true, force: false });
+    return { ok: true, targetPath: target };
+  } catch (e: any) {
+    return { error: e?.message || 'copy_failed' };
+  }
+});
+
+/* Delete from the tree = to the system's trash, so a wrong click can be undone there. */
+ipcMain.handle('file:trash', async (_e, filePath: string) => {
+  if (!filePath) return { error: 'no_path' };
+  try { await shell.trashItem(filePath); return { ok: true, path: filePath }; }
+  catch (e: any) { return { error: e?.message || 'trash_failed' }; }
+});
+
+ipcMain.handle('file:reveal', async (_e, filePath: string) => {
+  if (!filePath) return { error: 'no_path' };
+  shell.showItemInFolder(filePath);
+  return { ok: true };
+});
+
 // Move file or directory
 ipcMain.handle('file:move', async (_e, args: { sourcePath: string; targetDir: string }) => {
   const { sourcePath, targetDir } = args;
@@ -1833,152 +3648,13 @@ ipcMain.handle('recents:write', async (_e, list: any[]) => {
 });
 
 // Update native macOS menu with recent projects
-ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: string; path: string}>) => {
-  if (process.platform !== 'darwin' || !mainWindow) return;
-  
-  const template: Electron.MenuItemConstructorOptions[] = [
-    {
-      label: 'Vectrex Studio',
-      submenu: [
-        { role: 'about' },
-        { type: 'separator' },
-        { role: 'services' },
-        { type: 'separator' },
-        { role: 'hide' },
-        { role: 'hideOthers' },
-        { role: 'unhide' },
-        { type: 'separator' },
-        { role: 'quit' }
-      ]
-    },
-    {
-      label: 'File',
-      submenu: [
-        {
-          label: 'New',
-          submenu: [
-            { label: 'Project...', click: () => mainWindow?.webContents.send('command', 'project.new') },
-            { type: 'separator' },
-            { label: 'VPy File', accelerator: 'CmdOrCtrl+N', click: () => mainWindow?.webContents.send('command', 'file.new.vpy') },
-            { label: 'C/C++ File', click: () => mainWindow?.webContents.send('command', 'file.new.c') },
-            { label: 'Vector List (.vec)', click: () => mainWindow?.webContents.send('command', 'file.new.vec') },
-            { label: 'Music File (.vmus)', click: () => mainWindow?.webContents.send('command', 'file.new.vmus') },
-            { label: 'Sound Effect (.vsfx)', click: () => mainWindow?.webContents.send('command', 'file.new.vsfx') },
-            { label: 'Animation (.vanim)', click: () => mainWindow?.webContents.send('command', 'file.new.vanim') },
-            { label: 'Instrument (.vinstr)', click: () => mainWindow?.webContents.send('command', 'file.new.vinstr') },
-            { label: 'Enemy (.venemy)', click: () => mainWindow?.webContents.send('command', 'file.new.venemy') }
-          ]
-        },
-        {
-          label: 'Open',
-          submenu: [
-            { label: 'Project...', accelerator: 'CmdOrCtrl+Shift+O', click: () => mainWindow?.webContents.send('command', 'project.open') },
-            { label: 'File...', accelerator: 'CmdOrCtrl+O', click: () => mainWindow?.webContents.send('command', 'file.open') }
-          ]
-        },
-        { type: 'separator' },
-        { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => mainWindow?.webContents.send('command', 'file.save') },
-        { label: 'Save As...', accelerator: 'CmdOrCtrl+Shift+S', click: () => mainWindow?.webContents.send('command', 'file.saveAs') },
-        { type: 'separator' },
-        { label: 'Close File', click: () => mainWindow?.webContents.send('command', 'file.close') },
-        { label: 'Close Project', click: () => mainWindow?.webContents.send('command', 'project.close') },
-        { type: 'separator' },
-        {
-          label: 'Recent Projects',
-          submenu: recents.length > 0 
-            ? recents.map(r => ({
-                label: r.name,
-                click: () => {
-                  // Send project path as payload
-                  mainWindow?.webContents.send('command', 'project.openRecent', r.path);
-                }
-              }))
-            : [{ label: 'No recent projects', enabled: false }]
-        },
-        { type: 'separator' },
-        { label: 'Reset Layout', click: () => mainWindow?.webContents.send('command', 'layout.reset') }
-      ]
-    },
-    {
-      label: 'Edit',
-      submenu: [
-        { label: 'Undo', accelerator: 'CmdOrCtrl+Z', role: 'undo' },
-        { label: 'Redo', accelerator: 'CmdOrCtrl+Y', role: 'redo' },
-        { type: 'separator' },
-        { label: 'Cut', accelerator: 'CmdOrCtrl+X', role: 'cut' },
-        { label: 'Copy', accelerator: 'CmdOrCtrl+C', role: 'copy' },
-        { label: 'Paste', accelerator: 'CmdOrCtrl+V', role: 'paste' },
-        { type: 'separator' },
-        { label: 'Select All', accelerator: 'CmdOrCtrl+A', role: 'selectAll' },
-        { type: 'separator' },
-        { label: 'Toggle Comment', accelerator: 'CmdOrCtrl+/', enabled: false },
-        { label: 'Format Document', accelerator: 'Shift+Alt+F', enabled: false }
-      ]
-    },
-    {
-      label: 'Build',
-      submenu: [
-        { label: 'Build', accelerator: 'F7', click: () => mainWindow?.webContents.send('command', 'build.build') },
-        { label: 'Build & Run', accelerator: 'F5', click: () => mainWindow?.webContents.send('command', 'build.run') },
-        { label: 'Clean', click: () => mainWindow?.webContents.send('command', 'build.clean') }
-      ]
-    },
-    {
-      label: 'Debug',
-      submenu: [
-        { label: 'Start Debugging', accelerator: 'CmdOrCtrl+F5', click: () => mainWindow?.webContents.send('command', 'debug.start') },
-        { label: 'Stop Debugging', accelerator: 'Shift+F5', click: () => mainWindow?.webContents.send('command', 'debug.stop') },
-        { type: 'separator' },
-        { label: 'Step Over', accelerator: 'F10', click: () => mainWindow?.webContents.send('command', 'debug.stepOver') },
-        { label: 'Step Into', accelerator: 'F11', click: () => mainWindow?.webContents.send('command', 'debug.stepInto') },
-        { label: 'Step Out', accelerator: 'Shift+F11', click: () => mainWindow?.webContents.send('command', 'debug.stepOut') },
-        { type: 'separator' },
-        { label: 'Toggle Breakpoint', accelerator: 'F9', click: () => mainWindow?.webContents.send('command', 'debug.toggleBreakpoint') }
-      ]
-    },
-    {
-      label: 'View',
-      submenu: [
-        { label: 'Emulator', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.emulator') },
-        { label: 'Dual Test', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.dual-emulator') },
-        { label: 'Debug', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.debug') },
-        { label: 'Errors', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.errors') },
-        { label: 'Output', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.output') },
-        { label: 'Build Output', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.build-output') },
-        { label: 'Compiler Output', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.compiler-output') },
-        { label: 'Memory', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.memory') },
-        { label: 'Trace', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.trace') },
-        { label: 'PSG Log', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.psglog') },
-        { label: 'PyPilot', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.ai-assistant') },
-        { type: 'separator' },
-        { label: 'Hide Active Panel', click: () => mainWindow?.webContents.send('command', 'view.hideActivePanel') },
-        { label: 'Pin/Unpin Active Panel', click: () => mainWindow?.webContents.send('command', 'view.togglePinActivePanel') },
-        { type: 'separator' },
-        { role: 'reload' },
-        { role: 'forceReload' },
-        { type: 'separator' },
-        { role: 'resetZoom' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
-        { type: 'separator' },
-        { role: 'togglefullscreen' }
-      ]
-    },
-    {
-      label: 'Window',
-      submenu: [
-        { role: 'minimize' },
-        { role: 'zoom' },
-        { type: 'separator' },
-        { role: 'front' },
-        { role: 'close' }
-      ]
-    }
-  ];
-  
-  const menu = Menu.buildFromTemplate(template);
-  Menu.setApplicationMenu(menu);
-});
+// EL SEGUNDO `menu:updateRecentProjects` VIVIA AQUI Y ESTABA MUERTO.
+//
+// Era una copia casi literal del de mas arriba (solo cambiaba el comando del click de un
+// proyecto reciente: project.openRecent en vez de project.openPath). `ipcMain.handle`
+// LANZA al registrar un segundo manejador para el mismo canal, asi que este no llegaba a
+// existir nunca — pero su plantilla si divergia de la otra, y quien leyera esta se llevaba
+// una idea equivocada de que aceleradores tiene la aplicacion. Borrado 2026-08-25.
 
 // ============================================
 // Shell Command Execution (for Ollama installation)
@@ -2103,108 +3779,136 @@ ipcMain.handle('project:read', async (_e, projectPath: string) => {
   }
 });
 
-// Create new project
-ipcMain.handle('project:create', async (_e, args: { name: string; location?: string }) => {
+// Create new project. The files come from projectTemplates.ts — the same module the MCP
+// tool project_create uses — so the dialog and the AI hand out the same projects.
+ipcMain.handle('project:defaultLocation', async () => ensureDefaultProjectsDir());
+
+ipcMain.handle('project:create', async (_e, args: { name: string; location?: string; kind?: 'vpy' | 'c' }) => {
   try {
     let targetDir: string;
     
-    if (args.location) {
-      targetDir = args.location;
-    } else {
-      // Ask user for location
-      const result = await dialog.showOpenDialog(mainWindow!, {
-        title: 'Select Project Location',
-        properties: ['openDirectory', 'createDirectory']
-      });
-      if (result.canceled || result.filePaths.length === 0) {
-        return { canceled: true };
-      }
-      targetDir = result.filePaths[0];
-    }
-    
-    const projectDir = join(targetDir, args.name);
-    const srcDir = join(projectDir, 'src');
-    const assetsDir = join(projectDir, 'assets');
-    const buildDir = join(projectDir, 'build');
-    
-    // Create directories
-    await fs.mkdir(srcDir, { recursive: true });
-    await fs.mkdir(join(assetsDir, 'vectors'), { recursive: true });     // Vector graphics (.vec)
-    await fs.mkdir(join(assetsDir, 'animations'), { recursive: true });  // Animated vector sequences
-    await fs.mkdir(join(assetsDir, 'music'), { recursive: true });       // Music data
-    await fs.mkdir(join(assetsDir, 'sfx'), { recursive: true });         // Sound effects
-    await fs.mkdir(join(assetsDir, 'voices'), { recursive: true });      // Voice samples (AtariVox)
-    await fs.mkdir(buildDir, { recursive: true });
-    
-    // Create project file (TOML)
-    const projectContent = `[project]
-name = "${args.name}"
-version = "0.1.0"
-entry = "src/main.vpy"
+    // No location: the default workspace, ~/VectrexStudio/projects.
+    targetDir = args.location || await ensureDefaultProjectsDir();
 
-[build]
-output = "build/${args.name}.bin"
-optimization = 2
-debug_symbols = true
-
-[sources]
-vpy = ["src/**/*.vpy"]
-
-[resources]
-vectors = ["assets/vectors/*.vec"]
-animations = ["assets/animations/*.anim"]
-music = ["assets/music/*.mus"]
-sfx = ["assets/sfx/*.sfx"]
-voices = ["assets/voices/*.vox"]
-`;
-    const projectFile = join(projectDir, `${args.name}.vpyproj`);
-    await fs.writeFile(projectFile, projectContent, 'utf-8');
-    
-    // Create main.vpy with valid VPy syntax
-    const mainContent = `# ${args.name} - Main entry point
-# VPy game for Vectrex
-
-META TITLE = "${args.name}"
-
-def main():
-    # Called once at startup
-    Set_Intensity(127)
-
-def loop():
-    # Game loop - called every frame
-    Wait_Recal()
-    
-    # Draw something to show it works
-    Move(0, 0)
-    Draw_To(50, 50)
-    Draw_To(-50, 50)
-    Draw_To(-50, -50)
-    Draw_To(50, -50)
-    Draw_To(50, 50)
-`;
-    await fs.writeFile(join(srcDir, 'main.vpy'), mainContent, 'utf-8');
-    
-    // Create .gitignore
-    const gitignore = `# Build artifacts
-/build/
-*.bin
-*.o
-
-# IDE
-.vscode/
-*.swp
-*~
-`;
-    await fs.writeFile(join(projectDir, '.gitignore'), gitignore, 'utf-8');
+    // New projects pin the latest SDK, so their builds are reproducible.
+    const sdkTag = await latestSdkTag();
+    const created = await createProjectFromTemplate({
+      kind: args.kind === 'c' ? 'c' : 'vpy',
+      name: args.name,
+      parentDir: targetDir,
+      sdkVersion: sdkTag,
+    });
     
     return {
       ok: true,
-      projectFile,
-      projectDir,
+      projectFile: created.projectFile,
+      projectDir: created.projectDir,
+      entryFile: created.entryFile,
+      kind: created.kind,
       name: args.name
     };
   } catch (e: any) {
     return { error: e.message || 'Failed to create project' };
+  }
+});
+
+// Import an external C/C++ project: pick a folder with a Makefile, scaffold a
+// `.cvproj` manifest (prefilled by sniffing the Makefile for a pitrex target),
+// and return its path. The user can tweak the manifest afterwards.
+ipcMain.handle('project:importC', async (_e, args?: { dir?: string }) => {
+  try {
+    let projectDir = args?.dir?.trim() || '';
+    if (!projectDir) {
+      const result = await dialog.showOpenDialog(mainWindow!, {
+        title: 'Import C/C++ Project (select folder with a Makefile)',
+        properties: ['openDirectory'],
+      });
+      if (result.canceled || result.filePaths.length === 0) return { canceled: true };
+      projectDir = result.filePaths[0];
+    }
+
+    const name = basename(projectDir);
+    const manifestPath = join(projectDir, `${name}.cvproj`);
+
+    // Don't clobber an existing manifest — just open it. Any .cvproj counts: a project
+    // copied into a folder of another name keeps its own (return_of_the_jedi.cvproj in rotj/).
+    try {
+      const existing = (await fs.readdir(projectDir)).filter((f) => /\.cvproj$/i.test(f)).sort();
+      const own = existing.find((f) => f.toLowerCase() === `${name}.cvproj`.toLowerCase()) ?? existing[0];
+      if (own) return { ok: true, manifestPath: join(projectDir, own), existed: true };
+    } catch { /* unreadable folder: scaffold below reports it */ }
+
+    // Sniff the Makefile for per-target build rules (pitrex + rp2350).
+    let buildArg = '';
+    let rp2350Arg = '';
+    try {
+      const mk = await fs.readFile(join(projectDir, 'Makefile'), 'utf-8');
+      const mp = mk.match(/^([A-Za-z0-9_.-]*pitrex[A-Za-z0-9_.-]*)\s*:/m);
+      if (mp) buildArg = mp[1];
+      const mr = mk.match(/^([A-Za-z0-9_.-]*rp2350[A-Za-z0-9_.-]*)\s*:/m);
+      if (mr) rp2350Arg = mr[1];
+    } catch { /* no Makefile / unreadable — leave build arg blank for the user */ }
+
+    // Any .wad in the project root is a likely deploy payload (e.g. DOOM).
+    let deployExtra: string[] = [];
+    try {
+      const entries = await fs.readdir(projectDir);
+      deployExtra = entries.filter((e) => e.toLowerCase().endsWith('.wad'));
+    } catch {}
+
+    const argsToml = buildArg ? `["${buildArg}"]` : `[]`;
+    const extraToml = deployExtra.length ? `[${deployExtra.map((f) => `"${f}"`).join(', ')}]` : `[]`;
+    // If the Makefile has an rp2350 rule, declare a per-target override so the
+    // IDE builds the RAM-linked SD game when the rp2350 target is selected
+    // (otherwise a C project would build pitrex for every target).
+    const rp2350Toml = rp2350Arg
+      ? `
+# rp2350 override: RAM-linked game .bin the cart launcher loads off the SD card.
+[targets.rp2350]
+args = ["${rp2350Arg}"]
+artifact = "build_rp2350/${name}_sd.bin"
+`
+      : '';
+    const sdkTag = await latestSdkTag();
+    const manifest = `# External C/C++ project imported into Vectrex Studio.
+# Built by running the command below; deployed to the PiTrex SD card.
+[project]
+name = "${name}"
+type = "c-external"
+target = "pitrex"
+
+[build]
+command = "make"
+args = ${argsToml}          # Makefile target(s) to build
+artifact = "kernel7l.img"    # produced image, relative to this folder
+deploy_extra = ${extraToml}  # extra files copied to the SD root
+${rp2350Toml}
+# Optional: a WASM build that runs in the IDE emulator panel (compiled against
+# the host SDK shim via emscripten). Declare a make target that emits a
+# MODULARIZE loader; the IDE injects $PITREX_SIM_SDK + emcc.
+# [simulate]
+# command = "make"
+# args = ["sim"]
+# module = "build_wasm/game.js"
+
+# Optional: prepend a toolchain bin dir to PATH for the build.
+# [toolchain]
+# path = "/opt/arm-toolchain/bin"
+
+# Optional: environment overrides passed to the build.
+# [env]
+# PITREX_SDK = "/Users/you/projects/pitrex-baremetal"
+
+# Vectrex Studio SDK version (uvmc2-sdk). The IDE downloads it into
+# ~/VectrexStudio/sdk/<version>/ and passes its paths to the build:
+# $UVMC2_SDK, $UVM2_SDK_DIR, $VPY_C_SDK, $PITREX_SIM_SDK, $RP2350_SDK.
+[sdk]
+version = "${sdkTag ?? ''}"
+`;
+    await fs.writeFile(manifestPath, manifest, 'utf-8');
+    return { ok: true, manifestPath, existed: false, detectedTarget: buildArg || null };
+  } catch (e: any) {
+    return { error: e.message || 'Failed to import C project' };
   }
 });
 
@@ -2253,6 +3957,13 @@ ipcMain.handle('file:watchDirectory', async (_e, dirPath: string) => {
       /\.pdb$/,
       /\.map$/,
       /[/\\]build[/\\]/,
+      /* BUILD OUTPUT AND VENDORED TREES ARE NOT WATCHED. A C project with build_<target>/
+       * folders and a cloned dependency in third_party/ (ScummVM: ~35,000 files, thousands
+       * rewritten by every build) flooded the renderer with one event per object file, each
+       * one a full workspace refresh; the main process died in V8 (SIGABRT, node::OnFatalError)
+       * on 2026-10-11 during builds. Nothing the editor shows lives in them. */
+      /[/\\](build(_[^/\\]*)?|third_party|node_modules)([/\\]|$)/,
+      /\.(o|a|d|obj|elf|wasm|um2|uf2)$/,
     ];
 
     const watcher = chokidar.watch(dirPath, {
@@ -2269,6 +3980,11 @@ ipcMain.handle('file:watchDirectory', async (_e, dirPath: string) => {
       const recent = recentChanges.get(fullPath);
       if (recent && (now - recent.timestamp) < 300) return;
       recentChanges.set(fullPath, { timestamp: now, type });
+      /* the debounce table only needs the last second: it grew by one entry per file ever
+       * changed and was never emptied */
+      if (recentChanges.size > 2000) {
+        for (const [k, v] of recentChanges) if (now - v.timestamp > 1000) recentChanges.delete(k);
+      }
 
       // Send the full absolute path so the renderer can match reliably
       console.log(`[FileWatcher] ${type}: ${fullPath}`);
@@ -3264,6 +4980,9 @@ app.whenReady().then(() => {
   
   // Register AI proxy handlers
   registerAIProxyHandlers();
+  registerTerminalHandlers(() => mainWindow);
+  registerHwDebug(() => mainWindow);
+  registerUvmc2Serial();
   if (verbose) console.log('[IDE] AI Proxy registered');
   
   createWindow();

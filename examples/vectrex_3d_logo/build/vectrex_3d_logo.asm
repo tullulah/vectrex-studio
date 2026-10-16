@@ -124,6 +124,7 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    CLR DRAW_VEC_INTENSITY ; 0 = use recorded/vector intensity (no override)
     LDA #$F8
     STA TEXT_SCALE_H      ; Default height = -8 (normal size)
     LDA #$48
@@ -409,8 +410,8 @@ IF_END_12:
     JSR DRAW_VECTOR_3D_RUNTIME
     LDD #0
     STD RESULT
-; VPy_LINE:48
-; NATIVE_CALL: DRAW_VECTOR at line 48
+; VPy_LINE:46
+; NATIVE_CALL: DRAW_VECTOR at line 46
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: text (index=1, 13 paths)
     LDD #0
@@ -468,8 +469,8 @@ IF_END_12:
 DRVEC_SKIP_4:
     LDD #0
     STD RESULT
-; VPy_LINE:49
-; NATIVE_CALL: SET_TEXT_SIZE at line 49
+; VPy_LINE:47
+; NATIVE_CALL: SET_TEXT_SIZE at line 47
     LDD #8
     STD TMPPTR2     ; Save n (TMPPTR2+1 = n)
     NEGB            ; B = -n -> TEXT_SCALE_H
@@ -480,8 +481,8 @@ DRVEC_SKIP_4:
     ASLB            ; n*8
     ADDB TMPPTR2+1  ; n*8 + n = n*9 -> TEXT_SCALE_W
     STB >TEXT_SCALE_W
-; VPy_LINE:50
-; NATIVE_CALL: PRINT_TEXT at line 50
+; VPy_LINE:48
+; NATIVE_CALL: PRINT_TEXT at line 48
     ; PRINT_TEXT: Print text at position
     LDD #-35
     STD >VAR_ARG0
@@ -613,8 +614,7 @@ _TEXT_PATH1:    ; Path 1
     FCB 85              ; path1: intensity
     FCB $12,$F4,0,0        ; path1: header (y=18, x=-12)
     FCB $FF,$00,$F1          ; flag=-1, dy=0, dx=-15
-    FCB $FF,$FC,$FD          ; flag=-1, dy=-4, dx=-3
-    FCB $FF,$FA,$FD          ; flag=-1, dy=-6, dx=-3
+    FCB $FF,$F6,$FA          ; flag=-1, dy=-10, dx=-6
     FCB $FF,$F8,$03          ; flag=-1, dy=-8, dx=3
     FCB $FF,$FD,$04          ; flag=-1, dy=-3, dx=4
     FCB $FF,$00,$0E          ; flag=-1, dy=0, dx=14
@@ -647,8 +647,7 @@ _TEXT_PATH2:    ; Path 2
     FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
     FCB $FF,$02,$03          ; flag=-1, dy=2, dx=3
     FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
-    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
-    FCB $FF,$00,$F4          ; flag=-1, dy=0, dx=-12
+    FCB $FF,$00,$F1          ; flag=-1, dy=0, dx=-15
     FCB 2                ; End marker (path complete)
 
 _TEXT_PATH3:    ; Path 3

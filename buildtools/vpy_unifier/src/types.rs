@@ -1,14 +1,14 @@
 //! Type system infrastructure for VPy
 //!
 //! Provides structured type information for variables, including:
-//! - Type name (u8, i8, u16, i16)
-//! - Size in bytes (1 or 2)
+//! - Type name (u8, i8, u16, i16, u32, i32; the 32-bit ones exist on the ARM targets only)
+//! - Size in bytes (1, 2 or 4)
 //! - Signedness (signed/unsigned)
 
 /// Represents a variable type with size and signedness information
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VarType {
-    /// Type name: "u8", "i8", "u16", "i16"
+    /// Type name: "u8", "i8", "u16", "i16", "u32", "i32"
     pub name: &'static str,
     /// Size in bytes
     pub size_bytes: usize,
@@ -51,13 +51,23 @@ impl VarType {
                 size_bytes: 2,
                 signed: true,
             }),
+            "u32" => Some(VarType {
+                name: "u32",
+                size_bytes: 4,
+                signed: false,
+            }),
+            "i32" => Some(VarType {
+                name: "i32",
+                size_bytes: 4,
+                signed: true,
+            }),
             _ => None,
         }
     }
 
     /// Check if a type name is valid
     pub fn is_valid_type_name(name: &str) -> bool {
-        matches!(name, "u8" | "i8" | "u16" | "i16")
+        matches!(name, "u8" | "i8" | "u16" | "i16" | "u32" | "i32")
     }
 
     /// Get the default type for an optional type annotation
@@ -117,7 +127,8 @@ mod tests {
 
     #[test]
     fn test_var_type_invalid_name() {
-        assert!(VarType::from_str("u32").is_none());
+        assert_eq!(VarType::from_str("u32").unwrap().size_bytes, 4);
+        assert_eq!(VarType::from_str("i32").unwrap().size_bytes, 4);
         assert!(VarType::from_str("f32").is_none());
         assert!(VarType::from_str("invalid").is_none());
     }
@@ -128,7 +139,9 @@ mod tests {
         assert!(VarType::is_valid_type_name("i8"));
         assert!(VarType::is_valid_type_name("u16"));
         assert!(VarType::is_valid_type_name("i16"));
-        assert!(!VarType::is_valid_type_name("u32"));
+        assert!(VarType::is_valid_type_name("u32"));
+        assert!(VarType::is_valid_type_name("i32"));
+        assert!(!VarType::is_valid_type_name("u64"));
         assert!(!VarType::is_valid_type_name("invalid"));
     }
 

@@ -1,0 +1,64 @@
+{
+  "version": "1.0",
+  "name": "roll-1",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "chain_0",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {
+              "x": 3,
+              "y": 2
+            },
+            {
+              "x": 4,
+              "y": 3
+            }
+          ]
+        },
+        {
+          "name": "chain_1",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {
+              "x": 3,
+              "y": 3
+            },
+            {
+              "x": 4,
+              "y": 2
+            }
+          ]
+        },
+        {
+          "name": "chain_2",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {
+              "x": 5,
+              "y": 6
+            },
+            {
+              "x": 8,
+              "y": 3
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 6,
+  "center_y": 4
+}

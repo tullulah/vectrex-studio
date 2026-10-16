@@ -1,7 +1,7 @@
 {
   "name": "vpy-ide-frontend",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.4.0",
   "type": "module",
   "engines": {
     "node": ">=22.12.0"
@@ -18,7 +18,12 @@
     "jsvecx:bundle": "node tools/bundle_jsvecx.cjs"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "5.3.0",
     "@monaco-editor/react": "4.7.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-unicode11": "^0.9.0",
+    "@xterm/addon-web-links": "^0.12.0",
+    "@xterm/xterm": "^6.0.0",
     "dxf-parser": "^1.1.2",
     "flexlayout-react": "^0.8.17",
     "i18next": "25.5.2",

@@ -385,7 +385,7 @@ const MidiImportDialog: React.FC<MidiImportDialogProps> = ({ importData, onImpor
           </div>
         </div>        <p style={{ color: '#888', fontSize: '13px', margin: '0 0 8px 0' }}>
           {multiplexMode
-            ? 'Multiplex: hasta 6 canales virtuales, sin descartar notas.'
+            ? 'Multiplex: up to 6 virtual channels, no notes dropped.'
             : mergeMode 
               ? 'Select tracks to merge. Notes will be dynamically assigned to A/B/C.' 
               : 'Select up to 3 tracks. Each becomes a fixed channel.'}
@@ -492,7 +492,7 @@ const MidiImportDialog: React.FC<MidiImportDialogProps> = ({ importData, onImpor
             style={{ ...btnStyle, background: selectedTracks.length > 0 ? '#4a4' : '#333' }}
           >
             {multiplexMode
-              ? `Multiplex (${selectedTracks.length} canales)`
+              ? `Multiplex (${selectedTracks.length} channel${selectedTracks.length !== 1 ? 's' : ''})`
               : mergeMode
                 ? `Merge ${selectedTracks.length} Track${selectedTracks.length !== 1 ? 's' : ''}`
                 : `Import ${selectedTracks.length} Channel${selectedTracks.length !== 1 ? 's' : ''}`
@@ -806,11 +806,13 @@ export const MusicEditor: React.FC<MusicEditorProps> = ({
       ctx.stroke();
     }
 
-    // Draw loop region
-    const loopStartX = resource.loopStart * tickW - scrollX;
-    const loopEndX = resource.loopEnd * tickW - scrollX;
-    ctx.fillStyle = 'rgba(100, 200, 100, 0.15)';
-    ctx.fillRect(loopStartX, 0, loopEndX - loopStartX, visibleHeight);
+    // Draw loop region (only when the track actually loops)
+    if (resource.loop !== false) {
+      const loopStartX = resource.loopStart * tickW - scrollX;
+      const loopEndX = resource.loopEnd * tickW - scrollX;
+      ctx.fillStyle = 'rgba(100, 200, 100, 0.15)';
+      ctx.fillRect(loopStartX, 0, loopEndX - loopStartX, visibleHeight);
+    }
 
   }, [resource, scrollX, scrollY, visibleWidth, visibleHeight, zoom, playheadPosition, selectedNotes, viewChannel]);
 
@@ -971,9 +973,20 @@ export const MusicEditor: React.FC<MusicEditorProps> = ({
         }
         
         pos++;
-        if (pos >= resource.loopEnd) pos = resource.loopStart;
+        if (resource.loop === false) {
+          // One-shot: stop at the end of the track instead of looping back.
+          if (pos >= resource.totalTicks) {
+            if (playIntervalRef.current) clearInterval(playIntervalRef.current);
+            psgRef.current?.stopAll();
+            setIsPlaying(false);
+            setPlayheadPosition(0);
+            return;
+          }
+        } else if (pos >= resource.loopEnd) {
+          pos = resource.loopStart;
+        }
         setPlayheadPosition(pos);
-        
+
         // Auto-scroll to keep playhead visible
         if (autoScroll) {
           const playheadX = pos * tickWidth;
@@ -1023,7 +1036,18 @@ export const MusicEditor: React.FC<MusicEditorProps> = ({
         if (activeNote && pos >= activeNote.start + activeNote.duration) { if (!notesToPlay.find((n: NoteEvent) => n.channel === ch && n.start === pos)) { psgRef.current?.stopChannel(ch); activeNotePerChannel[ch] = null; } }
       }
       pos++;
-      if (pos >= resource.loopEnd) pos = resource.loopStart;
+      if (resource.loop === false) {
+        // One-shot: stop at the end of the track instead of looping back.
+        if (pos >= resource.totalTicks) {
+          if (playIntervalRef.current) clearInterval(playIntervalRef.current);
+          psgRef.current?.stopAll();
+          setIsPlaying(false);
+          setPlayheadPosition(0);
+          return;
+        }
+      } else if (pos >= resource.loopEnd) {
+        pos = resource.loopStart;
+      }
       setPlayheadPosition(pos);
     }, msPerTick);
     return () => { if (playIntervalRef.current) { clearInterval(playIntervalRef.current); playIntervalRef.current = null; } };
@@ -1220,7 +1244,16 @@ export const MusicEditor: React.FC<MusicEditorProps> = ({
         >
           {autoScroll ? '📍 Auto' : '📍 Off'}
         </button>
-        
+
+        {/* Loopable toggle */}
+        <button
+          onClick={() => updateResource({ ...resource, loop: resource.loop === false })}
+          style={{ ...btnStyle, background: resource.loop !== false ? '#5a5a8e' : '#3a3a5e', fontSize: '11px', padding: '4px 8px' }}
+          title="Loop this track (off = play once)"
+        >
+          {resource.loop !== false ? '🔁 Loopable' : '➡️ One-shot'}
+        </button>
+
         <div style={{ width: '1px', height: '24px', background: '#4a4a6e' }} />
         
         <button onClick={() => setTool('pan')} style={{ ...btnStyle, background: tool === 'pan' ? '#5a5a8e' : '#3a3a5e' }}>✋ Pan</button>

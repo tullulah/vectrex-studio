@@ -1,0 +1,32 @@
+{
+  "version": "1.0",
+  "name": "frog_walk",
+  "loop": true,
+  "base_refs": [],
+  "frames": [
+    {
+      "index": 0,
+      "duration_ticks": 8,
+      "vec_refs": [
+        "frog_walk1"
+      ],
+      "paths": []
+    },
+    {
+      "index": 1,
+      "duration_ticks": 8,
+      "vec_refs": [
+        "frog_walk2"
+      ],
+      "paths": []
+    },
+    {
+      "index": 2,
+      "duration_ticks": 8,
+      "vec_refs": [
+        "frog_walk3"
+      ],
+      "paths": []
+    }
+  ]
+}

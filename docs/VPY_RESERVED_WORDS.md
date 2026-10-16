@@ -20,9 +20,11 @@ maximum = 100
 
 ## Language keywords
 
-These are reserved by the parser and cannot be used as identifiers:
+These are reserved by the lexer (case-insensitively) and cannot be used as identifiers:
 
-`def`, `return`, `for`, `in`, `range`, `if`, `elif`, `else`, `while`, `break`, `continue`, `and`, `or`, `not`, `const`, `var`, `let`, `switch`, `case`, `default`, `meta`, `vectorlist`, `struct`, `import`, `from`, `as`, `pass`
+`def`, `return`, `for`, `in`, `range`, `if`, `elif`, `else`, `while`, `break`, `continue`, `pass`, `and`, `or`, `not`, `true`, `false`, `const`, `switch`, `case`, `default`, `meta`, `vectorlist`, `struct`, `self`, `import`, `from`, `as`, `export`
+
+`let`, `var` and `global` are **not** keywords: VPy declares variables by plain assignment (see [MANUAL.md](MANUAL.md#2-variables-and-constants)).
 
 ---
 

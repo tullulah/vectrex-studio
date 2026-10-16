@@ -1,0 +1,140 @@
+{
+  "version": "1.0",
+  "name": "enemy_alien",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "head",
+          "intensity": 127,
+          "closed": true,
+          "points": [
+            {
+              "x": -4,
+              "y": 3
+            },
+            {
+              "x": -4,
+              "y": 8
+            },
+            {
+              "x": 5,
+              "y": 8
+            },
+            {
+              "x": 5,
+              "y": 3
+            }
+          ]
+        },
+        {
+          "name": "body",
+          "intensity": 127,
+          "closed": true,
+          "points": [
+            {
+              "x": -4,
+              "y": 3
+            },
+            {
+              "x": -4,
+              "y": -6
+            },
+            {
+              "x": 5,
+              "y": -6
+            },
+            {
+              "x": 5,
+              "y": 3
+            }
+          ]
+        },
+        {
+          "name": "antenna_left",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {
+              "x": -4,
+              "y": 8
+            },
+            {
+              "x": -4,
+              "y": 9
+            }
+          ]
+        },
+        {
+          "name": "antenna_right",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {
+              "x": 5,
+              "y": 8
+            },
+            {
+              "x": 5,
+              "y": 9
+            }
+          ]
+        },
+        {
+          "name": "tentacle_1",
+          "intensity": 90,
+          "closed": false,
+          "points": [
+            {
+              "x": -4,
+              "y": -6
+            },
+            {
+              "x": -4,
+              "y": -9
+            }
+          ]
+        },
+        {
+          "name": "tentacle_2",
+          "intensity": 90,
+          "closed": false,
+          "points": [
+            {
+              "x": 0,
+              "y": -6
+            },
+            {
+              "x": 0,
+              "y": -9
+            }
+          ]
+        },
+        {
+          "name": "tentacle_3",
+          "intensity": 90,
+          "closed": false,
+          "points": [
+            {
+              "x": 5,
+              "y": -6
+            },
+            {
+              "x": 5,
+              "y": -9
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 1,
+  "center_y": 0
+}

@@ -13,3 +13,6 @@ vpy = ["src/**/*.vpy"]
 
 [resources]
 vectors = ["assets/vectors/**/*.vec"]
+
+[sdk]
+version = "v1.3.2"

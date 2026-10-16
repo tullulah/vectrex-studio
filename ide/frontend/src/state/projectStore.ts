@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Project, FileNode } from '../types/models.js';
 import { logger } from '../utils/logger.js';
+import i18n from '../i18n';
 
 // Lazy import to avoid circular dependency
 let editorStoreRef: any = null;
@@ -31,12 +32,21 @@ export interface ProjectConfig {
     author?: string;
     description?: string;
     entry: string;
+    // Discriminates an external C/C++ project (.cvproj) from a VPy project.
+    // Absent / "game" / "library" => VPy project (default behaviour).
+    type?: string;
+    target?: string;
   };
   build: {
     output: string;
     target?: string;
     optimization?: number;
     debug_symbols?: boolean;
+    // External C/C++ (.cvproj) build fields.
+    command?: string;
+    args?: string[];
+    artifact?: string;
+    deploy_extra?: string[];
   };
   sources?: {
     vpy?: string[];
@@ -47,6 +57,12 @@ export interface ProjectConfig {
     vectors?: string[];
     music?: string[];
     sfx?: string[];
+    animations?: string[];
+    levels?: string[];
+    enemies?: string[];
+    instruments?: string[];
+    recordings?: string[];
+    samples?: string[];
     data?: string[];
   };
   dependencies?: Record<string, string | { path?: string; version?: string }>;
@@ -59,6 +75,13 @@ export interface LoadedVpyProject {
   projectFile: string;
   rootDir: string;
   config: ProjectConfig;
+  // True when this is an external C/C++ project (config.project.type === 'c-external').
+  // VPy projects leave this falsy and behave exactly as before.
+  isExternal?: boolean;
+  // For external projects, the path to the .cvproj manifest (same as projectFile).
+  manifestPath?: string;
+  // Resolved build target (e.g. "pitrex") for external projects.
+  target?: string;
 }
 
 interface ProjectState {
@@ -88,6 +111,7 @@ interface ProjectState {
   setVpyProject: (project: LoadedVpyProject | undefined) => void;
   openVpyProject: (projectFile: string) => Promise<boolean>;
   closeVpyProject: () => void;
+  leaveProject: (nextRoot: string) => boolean;
   hasVpyProject: () => boolean;
   getEntryPath: () => string | null;
   getOutputPath: () => string | null;
@@ -110,6 +134,7 @@ export const useProjectStore = create<ProjectState>()(
       
       // Actions
       setProject: (rootPath, files, name) => {
+        if (!get().leaveProject(rootPath)) return;
         const workspaceName = name || rootPath.split(/[/\\]/).pop() || 'Workspace';
         logger.debug('Project', 'Setting project', { rootPath, workspaceName, filesCount: files.length });
         logger.debug('Project', 'Files structure:', files);
@@ -284,17 +309,42 @@ export const useProjectStore = create<ProjectState>()(
             return false;
           }
           
+          // The project open until now closes its tabs first (or keeps everything, if the
+          // user chose to keep unsaved changes).
+          if (!get().leaveProject(result.rootDir)) return false;
+
+          const config = result.config as ProjectConfig;
+          const isExternal = config.project?.type === 'c-external';
           const loaded: LoadedVpyProject = {
             projectFile: result.path,
             rootDir: result.rootDir,
-            config: result.config as ProjectConfig,
+            config,
+            isExternal,
+            manifestPath: isExternal ? result.path : undefined,
+            target: isExternal ? config.project?.target : undefined,
           };
-          
+
           get().setVpyProject(loaded);
-          
+
           // Store project path globally for breakpoint persistence
           (window as any).__currentProjectPath__ = result.path;
-          
+
+          // External C/C++ projects have no VPy sources: skip breakpoints, PDB
+          // and debug-symbol loading (Phase 1 is build & deploy only).
+          if (isExternal) {
+            // Set workspace/file explorer to the manifest's folder and return.
+            const extFiles = await (window as any).files?.readDirectory?.(loaded.rootDir);
+            if (extFiles?.files) {
+              set({
+                project: { rootPath: loaded.rootDir, files: extFiles.files },
+                workspaceName: loaded.config.project.name,
+                lastWorkspacePath: loaded.rootDir
+              });
+            }
+            logger.info('Project', 'Opened external C/C++ project:', loaded.config.project.name);
+            return true;
+          }
+
           // Load breakpoints from database for this project
           if (typeof (window as any).__editorStore__ !== 'undefined') {
             const editorStore = (window as any).__editorStore__.getState();
@@ -304,7 +354,7 @@ export const useProjectStore = create<ProjectState>()(
               });
             }
           }
-          
+
           // Load existing PDB file if available
           const debugAPI = (window as any).debug;
           if (debugAPI && result.config.project.entry) {
@@ -340,6 +390,30 @@ export const useProjectStore = create<ProjectState>()(
         }
       },
       
+      /** Switching to another project or folder: the tabs of the one open until now are
+       *  remembered (reopening it brings them back) and closed, so its files do not stay open
+       *  in the next one. Unsaved changes ask first; false = the user kept them, and nothing
+       *  changes. Files from outside the project (File > Open) stay open. */
+      leaveProject: (nextRoot: string) => {
+        const { project, vpyProject, saveProjectState } = get();
+        const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '');
+        const oldRoot = project?.rootPath ? norm(project.rootPath) : '';
+        if (!oldRoot || !editorStoreRef || oldRoot === norm(nextRoot)) return true;
+        const { documents, active, closeDocument } = editorStoreRef.getState();
+        const inside = (p: string, root: string) => (norm(p) + '/').startsWith(root + '/');
+        // (a file that is also in the next one, a folder opened as a project inside it, stays)
+        const mine = (documents as any[]).filter(d => d.diskPath && inside(d.diskPath, oldRoot) && !inside(d.diskPath, norm(nextRoot)));
+        const unsaved = mine.filter(d => d.dirty);
+        if (unsaved.length > 0) {
+          const names = unsaved.map(d => norm(d.diskPath).split('/').pop()).join(', ');
+          if (!window.confirm(i18n.t('project.switchUnsaved', { count: unsaved.length, names }))) return false;
+        }
+        if (vpyProject) saveProjectState(vpyProject.projectFile, mine.map(d => d.uri), active);
+        for (const d of mine) closeDocument(d.uri);
+        logger.info('Project', `Closed ${mine.length} file(s) of the previous project`);
+        return true;
+      },
+
       closeVpyProject: () => {
         const { vpyProject, saveProjectState } = get();
         
@@ -369,7 +443,8 @@ export const useProjectStore = create<ProjectState>()(
         const { vpyProject } = get();
         if (!vpyProject) return null;
         
-        const entry = vpyProject.config.project.entry;
+        const entry = vpyProject.config.project?.entry;
+        if (!entry) return null; // a C project need not name an entry file
         const rootDir = vpyProject.rootDir.replace(/\\/g, '/');
         const entryPath = entry.replace(/\\/g, '/');
         

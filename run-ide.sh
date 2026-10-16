@@ -211,10 +211,8 @@ if [ "$NO_RUST_BUILD" = false ]; then
       echo '[INFO] cargo build --release (vpy_cli)'
     fi
 
-    # Build vpy_cli (buildtools compiler) and vpy_lsp (legacy core LSP). The
-    # legacy core compiler binary (vectrexc) is deprecated and the IDE defaults
-    # to buildtools, but the LSP still lives in core/ and powers diagnostics
-    # inside the editor — without it, the IDE silently runs yesterday's LSP.
+    # Build vpy_cli (the compiler) and vpy_lsp (the editor's language server),
+    # both from buildtools — without the copy, the IDE silently runs yesterday's.
     (cd "$ROOT" && cargo build --profile "$CARGO_PROFILE" --bin vpy_cli --bin vpy_lsp)
     if [ $? -ne 0 ]; then
       echo '[ERR ] cargo build (vpy_cli + vpy_lsp) falló'
@@ -227,7 +225,7 @@ if [ "$NO_RUST_BUILD" = false ]; then
 fi
 
 # Comprobar binario LSP esperado (heurística) y avisar si falta
-LSP_BIN="$ROOT/target/debug/vpy_lsp"
+LSP_BIN="$ROOT/ide/electron/resources/vpy_lsp"
 if [ ! -f "$LSP_BIN" ]; then
   echo "[WARN] Binario LSP no encontrado en $LSP_BIN (spawn podría fallar)"
 fi
@@ -265,6 +263,18 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 echo '[OK  ] dist/ actualizado'
+
+# ALWAYS rebuild the Electron main process too (ide/electron/dist/main.js). Electron
+# runs the COMPILED main from dist/, so edits to ide/electron/src/*.ts (IPC, the
+# compile pipeline, emulator payloads) are invisible until this tsc runs — the same
+# "silently runs yesterday's bundle" trap as the frontend above.
+echo '[INFO] Construyendo Electron main (dist/) ...'
+(cd "$ROOT/ide/electron" && npm run build)
+if [ $? -ne 0 ]; then
+  echo '[ERR ] Electron main build falló (tsc)'
+  exit 1
+fi
+echo '[OK  ] Electron main actualizado'
 
 if [ "$PRODUCTION" = true ]; then
   echo '[INFO] Modo producción - sin hot reload'

@@ -38,6 +38,17 @@ export const InputDialog: React.FC<InputDialogProps> = ({
     }
   }, [isOpen, defaultValue]);
 
+  // Opened from the macOS menu bar, the page may not have the keyboard yet when the
+  // timeout above runs: take the input's focus back as soon as the window gets it.
+  useEffect(() => {
+    if (!isOpen) return;
+    const refocus = () => {
+      if (document.activeElement !== inputRef.current) inputRef.current?.focus();
+    };
+    window.addEventListener('focus', refocus);
+    return () => window.removeEventListener('focus', refocus);
+  }, [isOpen]);
+
   const handleConfirm = () => {
     if (validateFn) {
       const validationError = validateFn(value);

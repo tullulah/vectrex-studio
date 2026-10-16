@@ -8,9 +8,9 @@ use std::collections::{HashMap, HashSet};
 
 /// Variable size metadata (bytes allocated + signedness)
 /// Used to determine correct load/store instructions and array stride
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct VarSize {
-    /// Bytes allocated: 1 for u8/i8, 2 for u16/i16
+    /// Bytes allocated: 1 for u8/i8, 2 for u16/i16, 4 for u32/i32 (ARM targets only)
     pub bytes: usize,
     /// Whether type is signed: true for i8/i16, false for u8/u16
     pub signed: bool,
@@ -24,12 +24,40 @@ impl VarSize {
             signed: true,
         }
     }
+
+    /// Size of a declared type annotation: u8/i8 = 1 byte, u16/i16 = 2, u32/i32 = 4,
+    /// none = i16. (m6809 rejects the 32-bit types before code generation.)
+    pub fn from_annotation(type_annotation: &Option<String>) -> Self {
+        match type_annotation.as_deref() {
+            Some("u8") => VarSize { bytes: 1, signed: false },
+            Some("i8") => VarSize { bytes: 1, signed: true },
+            Some("u16") => VarSize { bytes: 2, signed: false },
+            Some("u32") => VarSize { bytes: 4, signed: false },
+            Some("i32") => VarSize { bytes: 4, signed: true },
+            _ => VarSize::default_i16(),
+        }
+    }
+
+    /// Type name for messages.
+    pub fn type_name(self) -> &'static str {
+        match (self.bytes, self.signed) {
+            (1, false) => "u8",
+            (1, true) => "i8",
+            (4, false) => "u32",
+            (4, true) => "i32",
+            (_, false) => "u16",
+            (_, true) => "i16",
+        }
+    }
 }
 
 thread_local! {
     /// Set of array names that are mutable (GlobalLet, stored in RAM)
     /// Const arrays are not in this set (stored in ROM)
     static MUTABLE_ARRAYS: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
+
+    /// Set of global const array names (Item::Const with a list literal, stored in ROM)
+    static CONST_ARRAYS: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
 
     /// Map of variable names (lowercase, no VAR_ prefix) to their size metadata
     /// Used to emit correct load/store instructions and allocation sizes
@@ -46,9 +74,25 @@ thread_local! {
     /// Interleaved frames count (2 or 3). 0 means disabled.
     static INTERLEAVED_N: RefCell<u8> = RefCell::new(0);
 
-    /// Map of current function parameter names (lowercase) → ARG index (0-4).
-    /// When set, identifiers matching a param are emitted as VAR_ARGn instead of VAR_NAME.
-    static CURRENT_PARAMS: RefCell<HashMap<String, usize>> = RefCell::new(HashMap::new());
+    /// Frames (parameters + locals) of every function, from `frames::analyze`.
+    static FRAMES: RefCell<super::frames::FrameLayout> = RefCell::new(super::frames::FrameLayout::default());
+
+    /// Element type of every array PARAMETER, per function: m6809 label (upper-case)
+    /// → parameter name (lower-case) → element size. Filled by `array_params::analyze`
+    /// from the arrays passed at the call sites. Absent = 16-bit (the default).
+    static PARAM_ARRAY_ELEMS: RefCell<HashMap<String, HashMap<String, VarSize>>> = RefCell::new(HashMap::new());
+
+    /// m6809 label of the function whose body is being generated ("" outside one).
+    static CURRENT_FUNCTION: RefCell<String> = const { RefCell::new(String::new()) };
+}
+
+/// Where the elements of an indexable name live.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ArrayBase {
+    /// A global array: its data label is the base address (link-time constant).
+    Label(String),
+    /// A parameter holding an array's base address: the label of its 16-bit slot.
+    Pointer(String),
 }
 
 /// Initialize the mutable arrays context
@@ -68,6 +112,32 @@ pub fn is_mutable_array(name: &str) -> bool {
     })
 }
 
+/// Register the global const arrays (Item::Const with a list literal, stored in ROM)
+pub fn set_const_arrays(arrays: HashSet<String>) {
+    CONST_ARRAYS.with(|ca| {
+        *ca.borrow_mut() = arrays;
+    });
+}
+
+/// Base address label of a global array, or None if `name` is not a global array
+/// (or is shadowed by a parameter of the function being generated).
+///
+/// A global array name used as a value evaluates to its base address, a link-time
+/// constant: `VAR_<NAME>_DATA` (RAM copy of a mutable array) or `ARRAY_<NAME>_DATA`
+/// (ROM data of a const array). There is no pointer variable in RAM.
+pub fn global_array_base_label(name: &str) -> Option<String> {
+    if local_slot(name).is_some() {
+        return None;
+    }
+    if is_mutable_array(name) {
+        Some(format!("VAR_{}_DATA", name.to_uppercase()))
+    } else if CONST_ARRAYS.with(|ca| ca.borrow().contains(name)) {
+        Some(format!("ARRAY_{}_DATA", name.to_uppercase()))
+    } else {
+        None
+    }
+}
+
 /// Register a variable's size metadata
 /// Call this during allocation for every user variable and local
 /// name: lowercase variable name (no VAR_ prefix)
@@ -83,6 +153,11 @@ pub fn set_var_size(name: &str, bytes: usize, signed: bool) {
 /// Returns the registered size, or default i16 (2 bytes, signed) if not found
 /// name: lowercase variable name (no VAR_ prefix)
 pub fn get_var_size(name: &str) -> VarSize {
+    // A parameter or local lives in its function's frame slot, whatever a global
+    // of the same name is declared as.
+    if let Some(slot) = local_slot(name) {
+        return slot.size;
+    }
     VAR_SIZES.with(|vs| {
         vs.borrow()
             .get(name)
@@ -109,6 +184,11 @@ pub fn set_const_value(name: &str, value: i64) {
 /// Look up a compile-time const value.
 /// Returns Some(value) if the name is a const, None if it is a runtime variable.
 pub fn get_const_value(name: &str) -> Option<i64> {
+    // A parameter of the function being generated shadows a const of the same
+    // name (names are case-insensitive: parameter `b` vs `const B`).
+    if local_slot(name).is_some() {
+        return None;
+    }
     CONST_VALUES.with(|cv| {
         cv.borrow().get(&name.to_lowercase()).copied()
     })
@@ -137,39 +217,77 @@ pub fn get_interleaved_n() -> u8 {
     INTERLEAVED_N.with(|inl| *inl.borrow())
 }
 
-/// Set the current function's parameter mapping (param name lowercase → ARG index).
-/// Call at the start of generating a user function with parameters.
-pub fn set_current_params(params: &[String]) {
-    CURRENT_PARAMS.with(|cp| {
-        let mut map = cp.borrow_mut();
-        map.clear();
-        // Keep in sync with MAX_USER_ARGS in expressions.rs.
-        for (i, p) in params.iter().enumerate().take(8) {
-            map.insert(p.to_lowercase(), i);
+/// Register the frames of every function (see `frames`).
+pub fn set_frames(layout: super::frames::FrameLayout) {
+    FRAMES.with(|f| *f.borrow_mut() = layout);
+}
+
+/// The frames of every function.
+pub fn frames() -> super::frames::FrameLayout {
+    FRAMES.with(|f| f.borrow().clone())
+}
+
+/// The frame of the function labelled `label`, if it is a user function.
+pub fn frame_of(label: &str) -> Option<super::frames::Frame> {
+    FRAMES.with(|f| f.borrow().frames.get(label).cloned())
+}
+
+/// The parameter or local `name` of the function being generated, if any.
+pub fn local_slot(name: &str) -> Option<super::frames::Slot> {
+    CURRENT_FUNCTION.with(|cur| {
+        let cur = cur.borrow();
+        if cur.is_empty() {
+            return None;
         }
-    });
-}
-
-/// Clear the current function parameter mapping.
-/// Call after generating a user function body.
-pub fn clear_current_params() {
-    CURRENT_PARAMS.with(|cp| {
-        cp.borrow_mut().clear();
-    });
-}
-
-/// Look up whether a variable name is a function parameter.
-/// Returns Some(index) if it is (should use VAR_ARGn), None if not.
-pub fn get_param_index(name: &str) -> Option<usize> {
-    CURRENT_PARAMS.with(|cp| {
-        cp.borrow().get(&name.to_lowercase()).copied()
+        FRAMES.with(|f| f.borrow().frames.get(cur.as_str()).and_then(|fr| fr.slot(name).cloned()))
     })
+}
+
+/// The parameter `name` of the function being generated, if any.
+pub fn param_slot(name: &str) -> Option<super::frames::Slot> {
+    local_slot(name).filter(|s| s.kind == super::frames::SlotKind::Param)
+}
+
+/// Register the element type of every array parameter (see `array_params`).
+pub fn set_param_array_elems(map: HashMap<String, HashMap<String, VarSize>>) {
+    PARAM_ARRAY_ELEMS.with(|m| *m.borrow_mut() = map);
+}
+
+/// Record the m6809 label of the function whose body is being generated.
+pub fn set_current_function(label: &str) {
+    CURRENT_FUNCTION.with(|f| *f.borrow_mut() = label.to_string());
+}
+
+/// How to index `name`: its base address and element size, or None when `name`
+/// is neither a global array nor a parameter of the current function.
+///
+/// A parameter is a pointer to the array the caller passed. Its element type
+/// comes from the arrays passed at the call sites; with none known it is 16-bit.
+pub fn resolve_array(name: &str) -> Option<(ArrayBase, VarSize)> {
+    if let Some(slot) = param_slot(name) {
+        let elem = CURRENT_FUNCTION.with(|f| {
+            PARAM_ARRAY_ELEMS.with(|m| {
+                m.borrow()
+                    .get(f.borrow().as_str())
+                    .and_then(|params| params.get(&name.to_lowercase()).copied())
+            })
+        });
+        return Some((
+            ArrayBase::Pointer(slot.label),
+            elem.unwrap_or_else(VarSize::default_i16),
+        ));
+    }
+    let label = global_array_base_label(name)?;
+    Some((ArrayBase::Label(label), get_var_size(name)))
 }
 
 /// Clear all compilation context (mutable arrays, variable sizes, const values, frame groups)
 pub fn clear_context() {
     MUTABLE_ARRAYS.with(|ma| {
         ma.borrow_mut().clear();
+    });
+    CONST_ARRAYS.with(|ca| {
+        ca.borrow_mut().clear();
     });
     clear_var_sizes();
     CONST_VALUES.with(|cv| {
@@ -181,9 +299,9 @@ pub fn clear_context() {
     INTERLEAVED_N.with(|inl| {
         *inl.borrow_mut() = 0;
     });
-    CURRENT_PARAMS.with(|cp| {
-        cp.borrow_mut().clear();
-    });
+    FRAMES.with(|f| *f.borrow_mut() = super::frames::FrameLayout::default());
+    PARAM_ARRAY_ELEMS.with(|m| m.borrow_mut().clear());
+    CURRENT_FUNCTION.with(|f| f.borrow_mut().clear());
 }
 
 #[cfg(test)]
