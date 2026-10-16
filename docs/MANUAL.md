@@ -878,8 +878,9 @@ On m6809, `wait`, `peek`, `poke` and `beep(period, frames)` with non-constant ar
 Meshes (`.vmesh`, anywhere under `assets/meshes/`) and scenes (`.vscene`, in
 `assets/scenes/`) drawn in perspective with hidden-line removal, occluders and fog. These
 builtins call the SDK's vpy3d — the same 3D layer C games use — which vpy_cli compiles
-into the `.um2` when the program uses any of them. On m6809, rp2350 and pitrex they are a
-compile error. See [ASSETS.md](ASSETS.md) for the `.vmesh` / `.vscene` formats.
+into the `.um2` when the program uses any of them. On rp2350 they work when the program is
+built through C (`[rp2350] backend = "c"`, or inherited from `[uvm2] backend`); on m6809,
+pitrex and rp2350 with the ARM backend they are a compile error. See [ASSETS.md](ASSETS.md) for the `.vmesh` / `.vscene` formats.
 
 **Transforms** are global `i32` arrays of 12 elements (a Q14 rotation, 16384 = 1.0, then a
 translation); declare one per placement you need:
