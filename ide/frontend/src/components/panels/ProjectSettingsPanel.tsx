@@ -3,6 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../../state/projectStore';
 import { useSettings } from '../../state/settingsStore';
 import './SettingsPanel.css';
+
+/** On Linux the toolchain is a distribution package (found on the PATH, /usr/bin). */
+const IS_LINUX = typeof navigator !== 'undefined' && /Linux/i.test(navigator.userAgent) && !/Android/i.test(navigator.userAgent);
+const LINUX_TOOLCHAIN_APT =
+  'sudo apt install gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib cmake build-essential pkg-config libusb-1.0-0-dev git rustup';
 import './ProjectSettingsPanel.css';
 
 /** Parse "vX.Y.Z[-suffix]" into numeric parts; unknown shapes sort last. */
@@ -93,9 +98,16 @@ const ArmToolchainSection: React.FC<{ needed: boolean }> = ({ needed }) => {
               ? t('projectSettings.toolchain.missingNeeded', 'This project builds for UVM2, and no usable Arm GNU Toolchain was found: the build will fail.')
               : t('projectSettings.toolchain.missing', 'No Arm GNU Toolchain found. Only UVM2 builds need it.')}
           </div>
-          <div className="ps-small">
-            {t('projectSettings.toolchain.howTo', 'Install the "arm-none-eabi" (bare-metal AArch32) toolchain from developer.arm.com — not the Homebrew one — or set UVM2_ARM_TOOLCHAIN to its arm-none-eabi folder before starting the IDE.')}
-          </div>
+          {IS_LINUX ? (
+            <div className="ps-small">
+              {t('projectSettings.toolchain.howToLinux', "Install your distribution's packages (Debian/Ubuntu below — the Vectrex Studio .deb recommends them, so apt usually has; Fedora: arm-none-eabi-gcc-cs arm-none-eabi-newlib gcc-c++ libusb1-devel rustup; Arch/Manjaro: arm-none-eabi-gcc arm-none-eabi-newlib base-devel libusb rustup), then Check again. The first UVM2 build sets up Rust's toolchain and Cortex-M33 target through rustup.")}
+              <pre className="ps-path" style={{ userSelect: 'text', whiteSpace: 'pre-wrap', margin: '4px 0' }}>{LINUX_TOOLCHAIN_APT}</pre>
+            </div>
+          ) : (
+            <div className="ps-small">
+              {t('projectSettings.toolchain.howTo', 'Install the "arm-none-eabi" (bare-metal AArch32) toolchain from developer.arm.com — not the Homebrew one — or set UVM2_ARM_TOOLCHAIN to its arm-none-eabi folder before starting the IDE.')}
+            </div>
+          )}
           {rejected.length > 0 && (
             <ul className="ps-small ps-candidates">
               {rejected.map(c => (

@@ -283,6 +283,7 @@
   "projectSettings.toolchain.missingNeeded": "Este proyecto compila para UVM2 y no se ha encontrado ninguna toolchain Arm GNU válida: la build fallará.",
   "projectSettings.toolchain.missing": "No se ha encontrado la toolchain Arm GNU. Solo la necesitan las builds UVM2.",
   "projectSettings.toolchain.howTo": "Instala la toolchain \"arm-none-eabi\" (bare-metal AArch32) desde developer.arm.com —no la de Homebrew— o define UVM2_ARM_TOOLCHAIN con su carpeta arm-none-eabi antes de abrir el IDE.",
+  "projectSettings.toolchain.howToLinux": "Instala los paquetes de tu distribución (abajo, Debian/Ubuntu: el .deb de Vectrex Studio los recomienda, así que apt suele haberlos instalado; Fedora: arm-none-eabi-gcc-cs arm-none-eabi-newlib gcc-c++ libusb1-devel rustup; Arch/Manjaro: arm-none-eabi-gcc arm-none-eabi-newlib base-devel libusb rustup) y pulsa Comprobar de nuevo. La primera build UVM2 prepara con rustup el toolchain de Rust y el target Cortex-M33.",
   "projectSettings.toolchain.download": "Abrir página de descarga",
   "projectSettings.toolchain.recheck": "Comprobar de nuevo",
   "panel.terminal": "Terminal",

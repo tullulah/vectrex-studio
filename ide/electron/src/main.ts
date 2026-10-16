@@ -26,7 +26,7 @@ import { writeClaudeMcpConfig } from './shellIntegration.js';
 import { createProjectFromTemplate, ensureDefaultProjectsDir, syncCompileFlags } from './projectTemplates.js';
 import { registerTerminalHandlers } from './terminal.js';
 import {
-  ARM_TOOLCHAIN_DOWNLOAD_URL, detectArmToolchain, ensureSdk, isSdkInstalled, isValidSdkTag, latestSdkTag, listInstalledSdks, listRemoteSdkTags,
+  ARM_TOOLCHAIN_DOWNLOAD_URL, armToolchainEnv, detectArmToolchain, ensureUvm2Rust, ensureSdk, isSdkInstalled, isValidSdkTag, latestSdkTag, listInstalledSdks, listRemoteSdkTags,
   projectSdkVersion, resolveProjectSdk, dropStaleSdkBuilds, sdkEnv, sdkRootDir, writeProjectSdkVersion, type SdkProgress,
 } from './sdkManager.js';
 import { storageGet, storageSet, storageDelete, storageKeys, storageClear, getStoragePath, StorageKeys } from './storage.js';
@@ -1598,7 +1598,8 @@ export async function executeExternalBuild(args: {
   // VPY_CLI: the IDE's compiler, for Makefiles that compile assets/ into headers
   // (`$(VPY_CLI) compile-asset`, docs/ASSETS.md). The project's [env] still wins.
   const vpyCli = resolveCompilerPath();
-  const env: NodeJS.ProcessEnv = { ...process.env, ...(vpyCli ? { VPY_CLI: vpyCli } : {}), ...('error' in sdk ? {} : sdkEnv(sdk.dir, sdk.picoSdkDir)), ...(manifest.env || {}) };
+  const env: NodeJS.ProcessEnv = { ...process.env, ...(vpyCli ? { VPY_CLI: vpyCli } : {}), ...('error' in sdk ? {} : sdkEnv(sdk.dir, sdk.picoSdkDir)), ...(await armToolchainEnv()), ...(manifest.env || {}) };
+  if (isUvm2) await ensureUvm2Rust((l) => win?.webContents.send('run://stdout', l + '\n'));
   if (manifest.toolchain?.path) {
     env.PATH = `${manifest.toolchain.path}${require('path').delimiter}${env.PATH || ''}`;
   }
@@ -2165,6 +2166,10 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
         if (target === 'uvm2') return { error: 'sdk_unavailable', detail: sdk.error };
       } else {
         Object.assign(envHijo, sdkEnv(sdk.dir, sdk.picoSdkDir));
+        if (target === 'uvm2') {
+          Object.assign(envHijo, await armToolchainEnv());
+          await ensureUvm2Rust((l) => mainWindow?.webContents.send('run://stdout', l + '\n'));
+        }
         await dropStaleSdkBuilds(dirname(targetPath), sdk, (l) => mainWindow?.webContents.send('run://stdout', l));
         mainWindow?.webContents.send('run://stdout', `[SDK] ${sdk.version} (${sdk.dir})\n`);
       }
@@ -2175,7 +2180,7 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
         const i = par.indexOf('=');
         if (i > 0) envHijo[par.slice(0, i)] = par.slice(i + 1);
       }
-      mainWindow?.webContents.send('run://stderr', `[build] uvm2 (vpy_cli) entorno: ${flagsUvm2}\n`);
+      mainWindow?.webContents.send('run://stderr', `[build] uvm2 (vpy_cli) environment: ${flagsUvm2}\n`);
     }
     if (verbose) console.log('[RUN] env uvm2:', flagsUvm2);
     const child = spawn(compiler, argsv, { stdio: ['ignore','pipe','pipe'], cwd: workspaceRoot, env: envHijo });

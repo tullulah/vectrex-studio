@@ -13,8 +13,10 @@
 //!   2. `<pico_home>/<version>/`, only if its marker exists
 //!
 //! The Arm GNU Toolchain is too big and too platform-specific to download: it is found, not
-//! fetched — `UVM2_ARM_TOOLCHAIN`, then the standard install locations. It must be the Arm
-//! build: Homebrew's arm-none-eabi-gcc ships no nosys.specs and the pico-sdk link needs it.
+//! fetched — `UVM2_ARM_TOOLCHAIN`, then the standard install locations, then the
+//! `arm-none-eabi-gcc` on the PATH (a Linux distribution's package: /usr/bin). It needs
+//! newlib's nosys.specs, which the pico-sdk link uses: the Arm build and the Debian/Ubuntu
+//! packages have it, Homebrew's arm-none-eabi-gcc does not.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -105,6 +107,20 @@ pub fn standard_toolchain_candidates() -> Vec<PathBuf> {
         found.sort_by(|a, b| version_key(b).cmp(&version_key(a)));
         out.extend(found);
     }
+    // The compiler on the PATH: its folder's parent is the toolchain (/usr for a distro
+    // package, so PICO_TOOLCHAIN_PATH/bin/arm-none-eabi-gcc is /usr/bin/arm-none-eabi-gcc).
+    if let Some(path) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path) {
+            if dir.join(gcc_name()).is_file() {
+                if let Some(root) = dir.parent() {
+                    if !out.iter().any(|p| p == root) {
+                        out.push(root.to_path_buf());
+                    }
+                }
+                break;
+            }
+        }
+    }
     out
 }
 
@@ -123,13 +139,65 @@ fn gcc_name() -> &'static str {
 
 /// Usable = has the compiler and the newlib nosys.specs the pico-sdk link needs.
 fn toolchain_problem(dir: &Path) -> Option<String> {
-    if !dir.join("bin").join(gcc_name()).is_file() {
+    let gcc = dir.join("bin").join(gcc_name());
+    if !gcc.is_file() {
         return Some(format!("no bin/{}", gcc_name()));
     }
+    const NO_NOSYS: &str = "no nosys.specs (the Homebrew build? the pico-sdk link needs newlib's)";
+    // Ask the compiler where its nosys.specs is: it answers with a full path when it has
+    // one, the bare name when not. That covers every layout, /usr included, without a scan.
+    if let Ok(out) = std::process::Command::new(&gcc).arg("-print-file-name=nosys.specs").output() {
+        if out.status.success() {
+            let answer = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            let p = Path::new(&answer);
+            return if p.is_absolute() && p.is_file() { None } else { Some(NO_NOSYS.into()) };
+        }
+    }
+    // A compiler that does not run here: look for the file in its folder.
     if !contains_file(dir, "nosys.specs", 6) {
-        return Some("no nosys.specs (the Homebrew build? the pico-sdk link needs the Arm one)".into());
+        return Some(NO_NOSYS.into());
     }
     None
+}
+
+/// How to install CMake, for this machine.
+pub fn cmake_install_help() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "Install it: brew install cmake (or the .dmg from https://cmake.org/download/)."
+    } else if cfg!(target_os = "linux") {
+        "Install it with the rest of what a uvm2 build needs on Linux:\n    \
+         Debian/Ubuntu: sudo apt install cmake build-essential pkg-config libusb-1.0-0-dev git rustup\n    \
+         Fedora:        sudo dnf install cmake gcc-c++ pkgconf libusb1-devel git\n    \
+         Arch/Manjaro:  sudo pacman -S cmake base-devel libusb git\n  \
+         and Rust (rustup; the IDE sets up the toolchain on the first uvm2 build)."
+    } else {
+        "Install it from https://cmake.org/download/ and put it on the PATH."
+    }
+}
+
+/// How to install a toolchain the pico-sdk can use, for this machine.
+pub fn toolchain_install_help() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "Install the Arm GNU Toolchain for macOS (the .pkg for arm-none-eabi, \"AArch32 bare-metal \
+         target\") from https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads ;\n  \
+         it goes to /Applications/ArmGNUToolchain and is found there. Homebrew's \
+         arm-none-eabi-gcc does not work (no nosys.specs)."
+    } else if cfg!(target_os = "linux") {
+        "Install your distribution's packages (the toolchain, plus what the pico-sdk needs to\n  \
+         build picotool: a host C/C++ compiler and libusb):\n    \
+         Debian/Ubuntu: sudo apt install gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib \
+         cmake build-essential pkg-config libusb-1.0-0-dev git rustup\n    \
+         Fedora:        sudo dnf install arm-none-eabi-gcc-cs arm-none-eabi-gcc-cs-c++ arm-none-eabi-newlib \
+         cmake gcc-c++ pkgconf libusb1-devel git\n    \
+         Arch/Manjaro:  sudo pacman -S arm-none-eabi-gcc arm-none-eabi-newlib cmake base-devel libusb git\n  \
+         UVM2 builds also need Rust (rustup: the IDE installs the toolchain and the Cortex-M33 target on\n  \
+         the first uvm2 build; from a terminal: `rustup default stable && rustup target add thumbv8m.main-none-eabi`).\n  \
+         Or unpack the Arm GNU Toolchain (arm-none-eabi, for your machine: x86_64 or aarch64) from\n  \
+         https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads into /opt/arm-gnu-toolchain-<version>."
+    } else {
+        "Install the Arm GNU Toolchain (arm-none-eabi, \"AArch32 bare-metal target\") from\n  \
+         https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads"
+    }
 }
 
 fn contains_file(dir: &Path, name: &str, depth: u32) -> bool {
@@ -162,12 +230,13 @@ pub fn resolve_arm_toolchain(env: Option<PathBuf>, candidates: &[PathBuf]) -> Re
         }
     }
     if looked.is_empty() {
-        looked.push_str("    - /Applications/ArmGNUToolchain/*, /opt/arm-gnu-toolchain*, /usr/local/arm-gnu-toolchain* (none present)\n");
+        looked.push_str("    - /Applications/ArmGNUToolchain/*, /opt/arm-gnu-toolchain*, /usr/local/arm-gnu-toolchain*, \
+                         arm-none-eabi-gcc on the PATH (none present)\n");
     }
     Err(format!(
-        "Arm GNU Toolchain not found.\n  Looked in:\n{looked}  \
-         Install it from developer.arm.com (arm-gnu-toolchain, bare-metal AArch32 arm-none-eabi),\n  \
-         or point the build at yours: UVM2_ARM_TOOLCHAIN=/path/to/arm-none-eabi"
+        "Arm GNU Toolchain not found (UVM2 builds need it).\n  Looked in:\n{looked}  {}\n  \
+         Or point the build at one: UVM2_ARM_TOOLCHAIN=/path/to/the/folder/with/bin/arm-none-eabi-gcc",
+        toolchain_install_help()
     ))
 }
 

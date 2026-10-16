@@ -9,7 +9,7 @@
 // plain extracted tarball of a tag is a complete install: no git, no build step.
 
 import { promises as fs, createWriteStream } from 'fs';
-import { basename, join } from 'path';
+import { basename, delimiter, dirname, join } from 'path';
 import * as os from 'os';
 import { spawn } from 'child_process';
 
@@ -410,6 +410,27 @@ function otherVersionsIn(text: string, root: string, current: string): string[] 
   return [...out];
 }
 
+/**
+ * A CMake cache CMake would refuse: made in another folder (a project copied from another
+ * machine or moved: "The current CMakeCache.txt directory ... is different"), or for a
+ * source folder that no longer exists (an SDK since removed). The reason, or null.
+ */
+async function cacheMadeElsewhere(text: string, cacheDir: string): Promise<string | null> {
+  const value = (key: string) => {
+    const m = new RegExp(`^${key}:[A-Z]+=(.*)$`, 'm').exec(text);
+    return m ? m[1].trim() : null;
+  };
+  const real = async (p: string) => { try { return await fs.realpath(p); } catch { return null; } };
+  const madeIn = value('CMAKE_CACHEFILE_DIR');
+  if (madeIn) {
+    const [a, b] = [await real(madeIn), await real(cacheDir)];
+    if (a === null || a !== b) return `was made in another folder (${madeIn})`;
+  }
+  const source = value('CMAKE_HOME_DIRECTORY');
+  if (source && (await real(source)) === null) return `was made for a source folder that is gone (${source})`;
+  return null;
+}
+
 async function findStaleReference(dir: string, roots: Array<{ root: string; current: string; what: string }>): Promise<string | null> {
   let seen = 0;
   const walk = async (d: string, depth: number): Promise<string | null> => {
@@ -430,9 +451,13 @@ async function findStaleReference(dir: string, roots: Array<{ root: string; curr
         const st = await fs.stat(p);
         if (st.size > STALE_SCAN_MAX_BYTES) continue;
         const text = await fs.readFile(p, 'utf8');
+        if (e.name === 'CMakeCache.txt') {
+          const moved = await cacheMadeElsewhere(text, d);
+          if (moved) return `${p} ${moved}`;
+        }
         for (const r of roots) {
           const other = otherVersionsIn(text, r.root, r.current);
-          if (other.length) return `${p} was made with ${r.what} ${other[0]}`;
+          if (other.length) return `${p} was made with another ${r.what} version (${other[0]})`;
         }
       } catch { /* unreadable: not ours to judge */ }
     }
@@ -443,7 +468,9 @@ async function findStaleReference(dir: string, roots: Array<{ root: string; curr
 
 /**
  * Delete the project's top-level `build`, `build_*` or `build-*` folders made with another SDK / pico-sdk
- * version than the one this build uses. Returns the folders deleted.
+ * version than the one this build uses, or holding a CMake cache made in another folder (a
+ * project copied from another machine) or for a source folder that is gone. Returns the
+ * folders deleted.
  */
 export async function dropStaleSdkBuilds(
   projectDir: string,
@@ -463,7 +490,7 @@ export async function dropStaleSdkBuilds(
     try {
       await fs.rm(dir, { recursive: true, force: true });
       dropped.push(dir);
-      log(`[SDK] ${e.name}/ was built with another SDK version (${why.slice(dir.length + 1)}): deleted, the build recreates it\n`);
+      log(`[SDK] ${e.name}/ is stale: ${why.slice(dir.length + 1)}. Deleted, the build recreates it\n`);
     } catch (err: any) {
       log(`[SDK] could not delete stale ${dir}: ${err?.message || err}\n`);
     }
@@ -474,9 +501,11 @@ export async function dropStaleSdkBuilds(
 // ─── Arm GNU Toolchain (uvm2 builds) ───────────────────────────────────────
 //
 // Found, never downloaded: it is large and platform-specific. Same search as vpy_cli's
-// pico.rs and the SDK's uvm2.mk, so what the panel says is what the build will find:
-// $UVM2_ARM_TOOLCHAIN, then the standard install locations, newest first. It must be the
-// Arm build — Homebrew's arm-none-eabi-gcc ships no nosys.specs, which the pico-sdk link needs.
+// pico.rs, so what the panel says is what the build will find: $UVM2_ARM_TOOLCHAIN, then
+// the standard install locations, newest first, then the arm-none-eabi-gcc on the PATH (a
+// Linux distribution's package, /usr). The one found is passed to every build as
+// $UVM2_ARM_TOOLCHAIN (the SDK's uvm2.mk only looks in the standard locations). It needs
+// newlib's nosys.specs, which the pico-sdk link uses: Homebrew's arm-none-eabi-gcc has none.
 
 export const ARM_TOOLCHAIN_DOWNLOAD_URL =
   'https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads';
@@ -536,10 +565,37 @@ async function containsFile(dir: string, name: string, depth: number): Promise<b
 
 const gccName = process.platform === 'win32' ? 'arm-none-eabi-gcc.exe' : 'arm-none-eabi-gcc';
 
+/** The compiler's own answer for nosys.specs: a full path when it has one, else null. */
+function gccNosysSpecs(gcc: string): Promise<string | null | undefined> {
+  return new Promise(resolve => {
+    const child = spawn(gcc, ['-print-file-name=nosys.specs'], { stdio: ['ignore', 'pipe', 'ignore'] });
+    let out = '';
+    child.stdout.on('data', (c: Buffer) => { out += c.toString(); });
+    child.on('error', () => resolve(undefined));          // does not run here
+    child.on('close', code => {
+      const p = out.trim();
+      resolve(code !== 0 ? undefined : (p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p)) ? p : null);
+    });
+  });
+}
+
 async function toolchainProblem(dir: string): Promise<string | null> {
-  try { await fs.access(join(dir, 'bin', gccName)); } catch { return `no bin/${gccName}`; }
-  if (!(await containsFile(dir, 'nosys.specs', 6))) {
-    return 'no nosys.specs (the Homebrew build? the pico-sdk link needs the Arm one)';
+  const gcc = join(dir, 'bin', gccName);
+  try { await fs.access(gcc); } catch { return `no bin/${gccName}`; }
+  const noNosys = 'no nosys.specs (the Homebrew build? the pico-sdk link needs newlib\'s)';
+  const specs = await gccNosysSpecs(gcc);
+  if (specs !== undefined) {
+    if (specs === null) return noNosys;
+    try { await fs.access(specs); return null; } catch { return noNosys; }
+  }
+  if (!(await containsFile(dir, 'nosys.specs', 6))) return noNosys;
+  return null;
+}
+
+/** The toolchain folder of the arm-none-eabi-gcc on the PATH (its bin's parent), if any. */
+async function pathToolchainDir(): Promise<string | null> {
+  for (const d of (process.env.PATH || '').split(delimiter).filter(Boolean)) {
+    try { await fs.access(join(d, gccName)); return dirname(d); } catch { /* next */ }
   }
   return null;
 }
@@ -561,10 +617,84 @@ export async function detectArmToolchain(): Promise<ToolchainStatus> {
     ...(env ? [{ dir: env, source: '$UVM2_ARM_TOOLCHAIN' }] : []),
     ...(await standardToolchainDirs()).map(dir => ({ dir, source: 'standard location' })),
   ];
+  const onPath = await pathToolchainDir();
+  if (onPath && !tried.some(t => t.dir === onPath)) tried.push({ dir: onPath, source: 'PATH' });
   for (const { dir, source } of tried) {
     const problem = await toolchainProblem(dir);
     candidates.push({ dir, source, problem });
     if (!problem) return { found: { dir, source, version: await gccVersion(dir) }, candidates };
   }
   return { found: null, candidates };
+}
+
+/**
+ * `UVM2_ARM_TOOLCHAIN` for a build's environment: the toolchain the panel shows, so a
+ * build finds the same one (a distro's /usr included, which uvm2.mk does not look for).
+ * Empty when the variable is already set or no usable toolchain is installed.
+ */
+export async function armToolchainEnv(): Promise<Record<string, string>> {
+  if (process.env.UVM2_ARM_TOOLCHAIN) return {};
+  const { found } = await detectArmToolchain();
+  return found ? { UVM2_ARM_TOOLCHAIN: found.dir } : {};
+}
+
+// ─── Rust for uvm2 builds ──────────────────────────────────────────────────
+//
+// The SDK's drawing layer is Rust, built for the Cortex-M33: a uvm2 build needs cargo and
+// the thumbv8m.main-none-eabi target. The toolchain is per user (~/.rustup), so no package
+// can set it up; with rustup installed (Linux: the .deb recommends the distribution's
+// rustup), the first uvm2 build does it, said in the build output: `rustup default stable`
+// when there is no toolchain yet, then `rustup target add`. Without rustup it only says
+// what to install; the SDK's own CMake check reports the missing cargo.
+
+export const UVM2_RUST_TARGET = 'thumbv8m.main-none-eabi';
+
+function runTool(cmd: string, args: string[], onLine?: (line: string) => void): Promise<{ code: number | null; out: string; missing: boolean }> {
+  return new Promise(resolve => {
+    let out = '';
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch {
+      resolve({ code: null, out: '', missing: true });
+      return;
+    }
+    const take = (c: Buffer) => {
+      const s = c.toString();
+      out += s;
+      if (onLine) for (const l of s.split(/\r?\n|\r/)) if (l.trim()) onLine(l.trim());
+    };
+    child.stdout?.on('data', take);
+    child.stderr?.on('data', take);
+    child.on('error', (e: NodeJS.ErrnoException) => resolve({ code: null, out, missing: e.code === 'ENOENT' }));
+    child.on('close', code => resolve({ code, out, missing: false }));
+  });
+}
+
+/** Make sure a uvm2 build will find cargo with the Cortex-M33 target; log what it does. */
+export async function ensureUvm2Rust(log: (line: string) => void): Promise<void> {
+  const list = await runTool('rustup', ['target', 'list', '--installed']);
+  if (list.code === 0 && list.out.split(/\s+/).includes(UVM2_RUST_TARGET)) return;
+
+  if (list.missing) {
+    const cargo = await runTool('cargo', ['--version']);
+    if (!cargo.missing) {
+      log(`[Rust] cargo found but no rustup: make sure the ${UVM2_RUST_TARGET} target is installed for it.`);
+    } else {
+      log(process.platform === 'linux'
+        ? `[Rust] uvm2 builds need Rust: sudo apt install rustup (or https://rustup.rs). The IDE then sets it up on the next build.`
+        : `[Rust] uvm2 builds need Rust: install rustup (https://rustup.rs, or brew install rustup). The IDE then sets it up on the next build.`);
+    }
+    return;
+  }
+
+  if (list.code !== 0) {
+    // rustup without a toolchain yet ("no default is configured")
+    log('[Rust] No Rust toolchain yet: installing the stable one (a one-time download, a few minutes)…');
+    const d = await runTool('rustup', ['default', 'stable'], l => log(`[Rust] ${l}`));
+    if (d.code !== 0) { log('[Rust] rustup default stable failed; run it in a terminal to see why.'); return; }
+  }
+  log(`[Rust] Adding the ${UVM2_RUST_TARGET} target (one time)…`);
+  const a = await runTool('rustup', ['target', 'add', UVM2_RUST_TARGET], l => log(`[Rust] ${l}`));
+  if (a.code !== 0) log(`[Rust] rustup target add ${UVM2_RUST_TARGET} failed; run it in a terminal to see why.`);
 }

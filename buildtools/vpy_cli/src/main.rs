@@ -2661,7 +2661,7 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         .arg(format!("-DUVM2_GAME_OPTS={}",
             std::env::var("UVM2_DEBUG_CFLAGS").unwrap_or_default().split_whitespace().collect::<Vec<_>>().join(";")))
         .output()
-        .map_err(|e| anyhow::anyhow!("cmake not found: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("cmake not found ({}): UVM2 builds need it.\n  {}", e, pico::cmake_install_help()))?;
     if !cfg.status.success() {
         return Err(anyhow::anyhow!("cmake configure failed:\n{}\n{}",
             String::from_utf8_lossy(&cfg.stdout), String::from_utf8_lossy(&cfg.stderr)));

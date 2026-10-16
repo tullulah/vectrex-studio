@@ -160,11 +160,45 @@ releases.
   `~/VectrexStudio/pico-sdk/<version>/`; it never downloads. `uvm2.mk` reads the same
   variables. A CMake cache made with a different pico-sdk is discarded and reconfigured.
 
-The **Arm GNU Toolchain** is not downloaded: it is large and platform-specific. vpy_cli
-and `uvm2.mk` look for it in `UVM2_ARM_TOOLCHAIN`, then `/Applications/ArmGNUToolchain/*`,
-`/opt/arm-gnu-toolchain*` and `/usr/local/arm-gnu-toolchain*` (newest first). It must be
-the Arm build from developer.arm.com: Homebrew's `arm-none-eabi-gcc` ships no
-`nosys.specs`, which the pico-sdk link needs, and is rejected with that reason.
+The **Arm GNU Toolchain** is not downloaded: it is large and platform-specific.
+
+- **Where it is looked for.** vpy_cli and the IDE look in this order:
+  1. `UVM2_ARM_TOOLCHAIN`;
+  2. `/Applications/ArmGNUToolchain/*`, `/opt/arm-gnu-toolchain*` and `/usr/local/arm-gnu-toolchain*`, newest first;
+  3. the `arm-none-eabi-gcc` on the `PATH`, whose `bin/`'s parent is the toolchain (`/usr` for a Linux distribution's package).
+- **Passed to builds.** The IDE passes the one it finds to every uvm2 build as `UVM2_ARM_TOOLCHAIN`. That covers `uvm2.mk`, which by itself only looks in the standard locations.
+- **nosys.specs.** The toolchain needs newlib's `nosys.specs`, because the pico-sdk links with it. The compiler is asked where that file is (`-print-file-name=nosys.specs`).
+  - It is there in the Arm build from developer.arm.com and in the Debian/Ubuntu packages.
+  - Homebrew's `arm-none-eabi-gcc` has none and is rejected with that reason.
+
+**Installing it:**
+
+- **macOS:** the Arm `.pkg` (arm-none-eabi, AArch32 bare-metal target), which installs into `/Applications/ArmGNUToolchain`.
+- **Linux:** the distribution's packages. A uvm2 build also needs:
+  - a host C/C++ compiler and libusb, because the pico-sdk builds `picotool` from source when it is not installed;
+  - Rust with the Cortex-M33 target, because the SDK's drawing layer is Rust.
+
+  Tested on Ubuntu 24.04 arm64: `gcc-arm-none-eabi` 13.2 builds a `.um2`.
+
+  ```sh
+  # Debian/Ubuntu (the Vectrex Studio .deb recommends all of these, so apt installs them with it)
+  sudo apt install gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib \
+                   cmake build-essential pkg-config libusb-1.0-0-dev git rustup
+  # Fedora
+  sudo dnf install arm-none-eabi-gcc-cs arm-none-eabi-gcc-cs-c++ arm-none-eabi-newlib \
+                   cmake gcc-c++ pkgconf libusb1-devel git
+  # Arch/Manjaro
+  sudo pacman -S arm-none-eabi-gcc arm-none-eabi-newlib cmake base-devel libusb git
+  # Rust, where the distribution has no rustup package
+  curl -sSf https://sh.rustup.rs | sh
+  ```
+
+  **Rust is set up by the IDE, once.** The Rust toolchain lives in each user's `~/.rustup`, so no package can install it.
+  - Before a uvm2 build, the IDE checks for the `thumbv8m.main-none-eabi` target.
+  - If it is missing and rustup is installed, it runs `rustup default stable` when there is no toolchain yet, then `rustup target add`. Every step shows in the build output.
+
+When no toolchain is found, the build error and the Project Settings panel show these
+instructions for the machine they run on.
 
 ## Related
 
