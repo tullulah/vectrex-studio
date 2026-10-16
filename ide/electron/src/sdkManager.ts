@@ -12,6 +12,7 @@ import { promises as fs, createWriteStream } from 'fs';
 import { basename, delimiter, dirname, join } from 'path';
 import * as os from 'os';
 import { spawn } from 'child_process';
+import { createHash } from 'crypto';
 
 export const SDK_REPO = 'tullulah/uvmc2-sdk';
 
@@ -138,6 +139,10 @@ function installSdk(tag: string, onProgress?: (p: SdkProgress) => void): Promise
 async function installTarball(o: {
   what: string; url: string; root: string; name: string; mustContain: string;
   marker: Record<string, string>; progressTag: string; onProgress?: (p: SdkProgress) => void;
+  /** The archive's extension (default tar.gz; tar.xz and zip too: `tar -xf` reads all three). */
+  ext?: string;
+  /** Expected SHA-256 of the download: a mismatch is refused before anything is extracted. */
+  sha256?: string;
 }): Promise<string> {
   const dest = join(o.root, o.name);
   try {
@@ -147,7 +152,7 @@ async function installTarball(o: {
 
   await fs.mkdir(o.root, { recursive: true });
   const stamp = `${process.pid}-${Date.now()}`;
-  const tarball = join(o.root, `.download-${o.name}-${stamp}.tar.gz`);
+  const tarball = join(o.root, `.download-${o.name}-${stamp}.${o.ext ?? 'tar.gz'}`);
   const staging = join(o.root, `.extract-${o.name}-${stamp}`);
   const tag = o.progressTag;
 
@@ -162,20 +167,26 @@ async function installTarball(o: {
     const total = Number(res.headers.get('content-length')) || null;
     let received = 0;
     const out = createWriteStream(tarball);
+    const hash = createHash('sha256');
     const reader = res.body.getReader();
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
       received += value.length;
+      hash.update(value);
       if (!out.write(value)) await new Promise<void>(r => out.once('drain', () => r()));
       o.onProgress?.({ tag, phase: 'download', received, total });
     }
     await new Promise<void>((resolve, reject) => out.end((err?: Error | null) => (err ? reject(err) : resolve())));
+    const got = hash.digest('hex');
+    if (o.sha256 && got !== o.sha256.toLowerCase()) {
+      throw new Error(`${o.what}: the download does not match its checksum (got ${got}, expected ${o.sha256})`);
+    }
 
     // 2. Extract next to the final folder, so the rename below is atomic.
     o.onProgress?.({ tag, phase: 'extract', received, total });
     await fs.mkdir(staging, { recursive: true });
-    await runTar(['-xzf', tarball, '-C', staging, '--strip-components=1']);
+    await runTar(['-xf', tarball, '-C', staging, '--strip-components=1']);
 
     // 3. Refuse a tarball that isn't what we expected.
     try {
@@ -518,15 +529,58 @@ export async function dropStaleSdkBuilds(
 
 // ─── Arm GNU Toolchain (uvm2 builds) ───────────────────────────────────────
 //
-// Found, never downloaded: it is large and platform-specific. Same search as vpy_cli's
-// pico.rs, so what the panel says is what the build will find: $UVM2_ARM_TOOLCHAIN, then
-// the standard install locations, newest first, then the arm-none-eabi-gcc on the PATH (a
-// Linux distribution's package, /usr). The one found is passed to every build as
-// $UVM2_ARM_TOOLCHAIN (the SDK's uvm2.mk only looks in the standard locations). It needs
-// newlib's nosys.specs, which the pico-sdk link uses: Homebrew's arm-none-eabi-gcc has none.
+// ONE VERSION, 15.2.rel1, ON EVERY MACHINE. The same game came out ~4 KB bigger with Ubuntu's
+// gcc 14.2 than with Arm's 15.2 on the Mac, and return of the jedi, a few hundred bytes from
+// full, linked on one and not the other. So uvm2 builds use Arm GNU Toolchain 15.2.rel1:
+//   1. $UVM2_ARM_TOOLCHAIN, if set (any version: the user's call, said in the build output);
+//   2. a 15.2 already installed: the IDE's (~/VectrexStudio/toolchains/15.2.rel1), Arm's
+//      macOS installer (/Applications/ArmGNUToolchain/15.2.rel1), /opt, /usr/local, the PATH;
+//   3. else the IDE downloads Arm's archive for this machine (checksum pinned below) into
+//      ~/VectrexStudio/toolchains on the first uvm2 build.
+// Other versions are listed in the panel with the reason, never used. The one found is passed
+// to every build as $UVM2_ARM_TOOLCHAIN (the SDK's uvm2.mk only looks in standard places).
 
 export const ARM_TOOLCHAIN_DOWNLOAD_URL =
   'https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads';
+
+export const ARM_TOOLCHAIN_VERSION = '15.2.rel1';
+/** gcc -dumpversion of that release. */
+const ARM_GCC_VERSION = '15.2.1';
+const ARM_TOOLCHAIN_BASE = `https://developer.arm.com/-/media/Files/downloads/gnu/${ARM_TOOLCHAIN_VERSION}/binrel`;
+/** Arm's archive per host (`${platform}-${arch}`), with its published SHA-256. No Intel Mac
+ *  build of 15.2 exists: there the IDE uses what is installed, and says so. */
+const ARM_TOOLCHAIN_ARCHIVES: Record<string, { file: string; sha256: string }> = {
+  'darwin-arm64': { file: `arm-gnu-toolchain-${ARM_TOOLCHAIN_VERSION}-darwin-arm64-arm-none-eabi.tar.xz`, sha256: '1938a84b7105c192e3fb4fa5e893ba25f425f7ddab40515ae608cd40f68669a8' },
+  'linux-x64':    { file: `arm-gnu-toolchain-${ARM_TOOLCHAIN_VERSION}-x86_64-arm-none-eabi.tar.xz`, sha256: '597893282ac8c6ab1a4073977f2362990184599643b4c5ee34870a8215783a16' },
+  'linux-arm64':  { file: `arm-gnu-toolchain-${ARM_TOOLCHAIN_VERSION}-aarch64-arm-none-eabi.tar.xz`, sha256: 'd061559d814b205ed30c5b7c577c03317ec447ca51cd5a159d26b12a5bbeb20c' },
+  'win32-x64':    { file: `arm-gnu-toolchain-${ARM_TOOLCHAIN_VERSION}-mingw-w64-x86_64-arm-none-eabi.zip`, sha256: '7936cac895611023ffb22a64b8e426098c7104cb689778c1894572ca840b9ece' },
+};
+
+export function armToolchainRootDir(): string {
+  return process.env.VECTREX_STUDIO_TOOLCHAIN_DIR || join(os.homedir(), 'VectrexStudio', 'toolchains');
+}
+
+let armTcInFlight: Promise<string> | null = null;
+
+/** Download and install Arm GNU Toolchain 15.2.rel1 for this machine (once). Its folder. */
+export function ensureArmToolchain(onProgress?: (p: SdkProgress) => void): Promise<string> {
+  const a = ARM_TOOLCHAIN_ARCHIVES[`${process.platform}-${process.arch}`];
+  if (!a) return Promise.reject(new Error(`Arm publishes no GNU Toolchain ${ARM_TOOLCHAIN_VERSION} for ${process.platform}-${process.arch}: install one and set UVM2_ARM_TOOLCHAIN`));
+  if (armTcInFlight) return armTcInFlight;
+  armTcInFlight = installTarball({
+    what: `Arm GNU Toolchain ${ARM_TOOLCHAIN_VERSION}`,
+    url: `${ARM_TOOLCHAIN_BASE}/${a.file}`,
+    root: armToolchainRootDir(),
+    name: ARM_TOOLCHAIN_VERSION,
+    mustContain: join('bin', gccName),
+    marker: { version: ARM_TOOLCHAIN_VERSION, file: a.file },
+    progressTag: `arm-gnu-toolchain-${ARM_TOOLCHAIN_VERSION}`,
+    ext: a.file.endsWith('.zip') ? 'zip' : 'tar.xz',
+    sha256: a.sha256,
+    onProgress,
+  }).finally(() => { armTcInFlight = null; });
+  return armTcInFlight;
+}
 
 export type ToolchainCandidate = { dir: string; source: string; problem: string | null };
 export type ToolchainStatus = {
@@ -631,29 +685,58 @@ function gccVersion(dir: string): Promise<string | null> {
 export async function detectArmToolchain(): Promise<ToolchainStatus> {
   const candidates: ToolchainCandidate[] = [];
   const env = process.env.UVM2_ARM_TOOLCHAIN;
+  if (env) {
+    const problem = await toolchainProblem(env);
+    candidates.push({ dir: env, source: '$UVM2_ARM_TOOLCHAIN', problem });
+    if (!problem) return { found: { dir: env, source: '$UVM2_ARM_TOOLCHAIN', version: await gccVersion(env) }, candidates };
+  }
   const tried: Array<{ dir: string; source: string }> = [
-    ...(env ? [{ dir: env, source: '$UVM2_ARM_TOOLCHAIN' }] : []),
+    { dir: join(armToolchainRootDir(), ARM_TOOLCHAIN_VERSION), source: 'Vectrex Studio' },
     ...(await standardToolchainDirs()).map(dir => ({ dir, source: 'standard location' })),
   ];
   const onPath = await pathToolchainDir();
   if (onPath && !tried.some(t => t.dir === onPath)) tried.push({ dir: onPath, source: 'PATH' });
   for (const { dir, source } of tried) {
-    const problem = await toolchainProblem(dir);
+    try { await fs.access(dir); } catch { continue; }
+    let problem = await toolchainProblem(dir);
+    const version = problem ? null : await gccVersion(dir);
+    if (!problem && version !== ARM_GCC_VERSION) {
+      problem = `gcc ${version ?? '?'}, not ${ARM_GCC_VERSION} (Arm GNU Toolchain ${ARM_TOOLCHAIN_VERSION}): another version builds a different-size image`;
+    }
     candidates.push({ dir, source, problem });
-    if (!problem) return { found: { dir, source, version: await gccVersion(dir) }, candidates };
+    if (!problem) return { found: { dir, source, version }, candidates };
   }
   return { found: null, candidates };
 }
 
 /**
- * `UVM2_ARM_TOOLCHAIN` for a build's environment: the toolchain the panel shows, so a
- * build finds the same one (a distro's /usr included, which uvm2.mk does not look for).
- * Empty when the variable is already set or no usable toolchain is installed.
+ * `UVM2_ARM_TOOLCHAIN` for a uvm2 build: Arm GNU Toolchain 15.2.rel1, downloaded on the
+ * spot when this machine has none (said in the build output). Empty when the variable is
+ * already set (said, with its version) or the download fails (said; the build then reports
+ * the missing toolchain itself).
  */
-export async function armToolchainEnv(): Promise<Record<string, string>> {
-  if (process.env.UVM2_ARM_TOOLCHAIN) return {};
-  const { found } = await detectArmToolchain();
-  return found ? { UVM2_ARM_TOOLCHAIN: found.dir } : {};
+export async function armToolchainEnv(log: (line: string) => void = () => {}): Promise<Record<string, string>> {
+  const status = await detectArmToolchain();
+  if (process.env.UVM2_ARM_TOOLCHAIN) {
+    const v = status.found?.version;
+    if (v && v !== ARM_GCC_VERSION) log(`[toolchain] UVM2_ARM_TOOLCHAIN is gcc ${v}, not Arm GNU Toolchain ${ARM_TOOLCHAIN_VERSION}: the image may differ from other machines'\n`);
+    return {};
+  }
+  if (status.found) return { UVM2_ARM_TOOLCHAIN: status.found.dir };
+  log(`[toolchain] No Arm GNU Toolchain ${ARM_TOOLCHAIN_VERSION} on this machine: downloading it into ${armToolchainRootDir()} (about 150 MB, once)...\n`);
+  let last = -1;
+  try {
+    const dir = await ensureArmToolchain((p) => {
+      if (p.phase !== 'download' || !p.total) return;
+      const pct = Math.floor((p.received / p.total) * 10) * 10;
+      if (pct !== last) { last = pct; log(`[toolchain] ${pct}%\n`); }
+    });
+    log(`[toolchain] Arm GNU Toolchain ${ARM_TOOLCHAIN_VERSION} installed: ${dir}\n`);
+    return { UVM2_ARM_TOOLCHAIN: dir };
+  } catch (e: any) {
+    log(`[toolchain] Could not install Arm GNU Toolchain ${ARM_TOOLCHAIN_VERSION}: ${e?.message || e}\n`);
+    return {};
+  }
 }
 
 // ─── Rust for uvm2 builds ──────────────────────────────────────────────────

@@ -1622,7 +1622,7 @@ export async function executeExternalBuild(args: {
   // VPY_CLI: the IDE's compiler, for Makefiles that compile assets/ into headers
   // (`$(VPY_CLI) compile-asset`, docs/ASSETS.md). The project's [env] still wins.
   const vpyCli = resolveCompilerPath();
-  const env: NodeJS.ProcessEnv = { ...process.env, ...(vpyCli ? { VPY_CLI: await makeSafePath(vpyCli) } : {}), ...('error' in sdk ? {} : sdkEnv(sdk.dir, sdk.picoSdkDir)), ...(await armToolchainEnv()), ...(manifest.env || {}) };
+  const env: NodeJS.ProcessEnv = { ...process.env, ...(vpyCli ? { VPY_CLI: await makeSafePath(vpyCli) } : {}), ...('error' in sdk ? {} : sdkEnv(sdk.dir, sdk.picoSdkDir)), ...(isUvm2 ? await armToolchainEnv((l) => win?.webContents.send('run://stdout', l)) : {}), ...(manifest.env || {}) };
   if (isUvm2) await ensureUvm2Rust((l) => win?.webContents.send('run://stdout', l + '\n'));
   if (manifest.toolchain?.path) {
     env.PATH = `${manifest.toolchain.path}${require('path').delimiter}${env.PATH || ''}`;
@@ -2191,7 +2191,7 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
       } else {
         Object.assign(envHijo, sdkEnv(sdk.dir, sdk.picoSdkDir));
         if (target === 'uvm2') {
-          Object.assign(envHijo, await armToolchainEnv());
+          Object.assign(envHijo, await armToolchainEnv((l) => mainWindow?.webContents.send('run://stdout', l)));
           await ensureUvm2Rust((l) => mainWindow?.webContents.send('run://stdout', l + '\n'));
         }
         await dropStaleSdkBuilds(dirname(targetPath), sdk, (l) => mainWindow?.webContents.send('run://stdout', l));

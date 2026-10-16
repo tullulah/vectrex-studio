@@ -90,6 +90,13 @@ pub fn resolve_pico_sdk(
 /// newest version first within each location.
 pub fn standard_toolchain_candidates() -> Vec<PathBuf> {
     let mut out = Vec::new();
+    // Vectrex Studio's own (it downloads Arm GNU Toolchain 15.2.rel1 there on the first uvm2 build)
+    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
+        let ide = PathBuf::from(home).join("VectrexStudio").join("toolchains").join("15.2.rel1");
+        if ide.join("bin").is_dir() {
+            out.push(ide);
+        }
+    }
     for (base, prefix) in [
         ("/Applications/ArmGNUToolchain", ""),   // macOS installer
         ("/opt", "arm-gnu-toolchain"),            // Linux tarball convention
@@ -177,27 +184,12 @@ pub fn cmake_install_help() -> &'static str {
 
 /// How to install a toolchain the pico-sdk can use, for this machine.
 pub fn toolchain_install_help() -> &'static str {
-    if cfg!(target_os = "macos") {
-        "Install the Arm GNU Toolchain for macOS (the .pkg for arm-none-eabi, \"AArch32 bare-metal \
-         target\") from https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads ;\n  \
-         it goes to /Applications/ArmGNUToolchain and is found there. Homebrew's \
-         arm-none-eabi-gcc does not work (no nosys.specs)."
-    } else if cfg!(target_os = "linux") {
-        "Install your distribution's packages (the toolchain, plus what the pico-sdk needs to\n  \
-         build picotool: a host C/C++ compiler and libusb):\n    \
-         Debian/Ubuntu: sudo apt install gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib \
-         cmake build-essential pkg-config libusb-1.0-0-dev git rustup\n    \
-         Fedora:        sudo dnf install arm-none-eabi-gcc-cs arm-none-eabi-gcc-cs-c++ arm-none-eabi-newlib \
-         cmake gcc-c++ pkgconf libusb1-devel git\n    \
-         Arch/Manjaro:  sudo pacman -S arm-none-eabi-gcc arm-none-eabi-newlib cmake base-devel libusb git\n  \
-         UVM2 builds also need Rust (rustup: the IDE installs the toolchain and the Cortex-M33 target on\n  \
-         the first uvm2 build; from a terminal: `rustup default stable && rustup target add thumbv8m.main-none-eabi`).\n  \
-         Or unpack the Arm GNU Toolchain (arm-none-eabi, for your machine: x86_64 or aarch64) from\n  \
-         https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads into /opt/arm-gnu-toolchain-<version>."
-    } else {
-        "Install the Arm GNU Toolchain (arm-none-eabi, \"AArch32 bare-metal target\") from\n  \
-         https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads"
-    }
+    "Vectrex Studio installs Arm GNU Toolchain 15.2.rel1 by itself, into ~/VectrexStudio/toolchains,\n  \
+     on the first uvm2 build. From the command line, use that same version (other versions build a\n  \
+     different-size image): unpack Arm's archive for your machine from\n  \
+     https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads (15.2.rel1, AArch32\n  \
+     bare-metal, arm-none-eabi) into ~/VectrexStudio/toolchains/15.2.rel1 or /opt/arm-gnu-toolchain-15.2.rel1,\n  \
+     or install Arm's macOS .pkg (/Applications/ArmGNUToolchain/15.2.rel1)."
 }
 
 fn contains_file(dir: &Path, name: &str, depth: u32) -> bool {

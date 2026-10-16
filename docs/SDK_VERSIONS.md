@@ -168,48 +168,35 @@ releases.
   `~/VectrexStudio/pico-sdk/<version>/`; it never downloads. `uvm2.mk` reads the same
   variables. A CMake cache made with a different pico-sdk is discarded and reconfigured.
 
-The **Arm GNU Toolchain** is not downloaded: it is large and platform-specific.
+**One compiler and one Rust everywhere.** The same game used to build to different sizes on
+different machines: Ubuntu's gcc 14.2 made return of the jedi ~4 KB bigger than Arm's 15.2 on
+the Mac, and a fresh machine's Rust 1.99 another ~3 KB. A game that fitted on one machine
+overflowed on another. So uvm2 builds pin both:
 
-- **Where it is looked for.** vpy_cli and the IDE look in this order:
-  1. `UVM2_ARM_TOOLCHAIN`;
-  2. `/Applications/ArmGNUToolchain/*`, `/opt/arm-gnu-toolchain*` and `/usr/local/arm-gnu-toolchain*`, newest first;
-  3. the `arm-none-eabi-gcc` on the `PATH`, whose `bin/`'s parent is the toolchain (`/usr` for a Linux distribution's package).
-- **Passed to builds.** The IDE passes the one it finds to every uvm2 build as `UVM2_ARM_TOOLCHAIN`. That covers `uvm2.mk`, which by itself only looks in the standard locations.
-- **nosys.specs.** The toolchain needs newlib's `nosys.specs`, because the pico-sdk links with it. The compiler is asked where that file is (`-print-file-name=nosys.specs`).
-  - It is there in the Arm build from developer.arm.com and in the Debian/Ubuntu packages.
-  - Homebrew's `arm-none-eabi-gcc` has none and is rejected with that reason.
+- **Arm GNU Toolchain 15.2.rel1** (gcc 15.2.1). The IDE uses, in this order:
+  1. `UVM2_ARM_TOOLCHAIN`, if set; any version, and the build output says so when it is not 15.2;
+  2. a 15.2 already installed:
+     - its own, in `~/VectrexStudio/toolchains/15.2.rel1`;
+     - Arm's macOS `.pkg` (`/Applications/ArmGNUToolchain/15.2.rel1`);
+     - `/opt` or `/usr/local` (`arm-gnu-toolchain-*`);
+     - the `PATH`.
+  3. Otherwise, on the first uvm2 build, it downloads Arm's archive for the machine into `~/VectrexStudio/toolchains`: about 150 MB, the SHA-256 pinned in `sdkManager.ts`, once.
 
-**Installing it:**
+  Other versions, for example a Linux distribution's `gcc-arm-none-eabi`, are listed in Project Settings with the reason, and never used. Arm publishes 15.2 for macOS arm64, Linux x86_64 and aarch64, and Windows; not for Intel Macs. The IDE passes the toolchain to every uvm2 build as `UVM2_ARM_TOOLCHAIN`, and `vpy_cli` also finds the IDE's copy by itself.
+- **Rust 1.91.1**, pinned by the SDK's `rust-toolchain.toml` (SDK v1.4.3 or later). rustup installs it, with the `thumbv8m.main-none-eabi` target, the first time cargo runs in the SDK. The SDK also remaps the paths Rust embeds (`~`, `uvmc2-sdk`), so where things are installed does not change the size.
 
-- **macOS:** the Arm `.pkg` (arm-none-eabi, AArch32 bare-metal target), which installs into `/Applications/ArmGNUToolchain`.
-- **Linux:** the distribution's packages. A uvm2 build also needs:
-  - a host C/C++ compiler and libusb, because the pico-sdk builds `picotool` from source when it is not installed;
-  - Rust with the Cortex-M33 target, because the SDK's drawing layer is Rust.
+**Rust needs rustup, set up by the IDE.** Before a uvm2 build, the IDE checks for rustup:
+- with rustup installed, it adds what an older SDK needs (`rustup default stable`, `rustup target add`);
+- with neither rustup nor cargo, it runs the official installer (`curl https://sh.rustup.rs`, into `~/.cargo`, no sudo; macOS and Linux).
 
-  Tested on Ubuntu 24.04 arm64: `gcc-arm-none-eabi` 13.2 builds a `.um2`.
+Every step shows in the build output.
 
-  ```sh
-  # Debian/Ubuntu (the Vectrex Studio .deb depends on all of these but rustup, which it
-  # recommends: Debian 12 and Ubuntu 22.04 have no rustup package)
-  sudo apt install gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib \
-                   cmake build-essential pkg-config libusb-1.0-0-dev git rustup
-  # Fedora
-  sudo dnf install arm-none-eabi-gcc-cs arm-none-eabi-gcc-cs-c++ arm-none-eabi-newlib \
-                   cmake gcc-c++ pkgconf libusb1-devel git
-  # Arch/Manjaro
-  sudo pacman -S arm-none-eabi-gcc arm-none-eabi-newlib cmake base-devel libusb git
-  # Rust, where the distribution has no rustup package
-  curl -sSf https://sh.rustup.rs | sh
-  ```
+**Linux, the rest of a uvm2 build.** The pico-sdk builds `picotool` from source when it is not installed, so it needs `cmake`, a host C/C++ compiler and libusb. The Vectrex Studio `.deb` depends on all of them, and on `curl`, `git` and `xz-utils` (for the toolchain archive). It recommends `rustup`, which Debian 12 and Ubuntu 22.04 do not package. Elsewhere:
 
-  **Rust is set up by the IDE, once.** The Rust toolchain lives in each user's `~/.rustup`, so no package can install it.
-  - Before a uvm2 build, the IDE checks for the `thumbv8m.main-none-eabi` target.
-  - If it is missing and rustup is installed, it runs `rustup default stable` when there is no toolchain yet, then `rustup target add`.
-  - With neither rustup nor cargo, it runs the official installer (`curl https://sh.rustup.rs`, into `~/.cargo`, no sudo; macOS and Linux).
-  - Every step shows in the build output.
-
-When no toolchain is found, the build error and the Project Settings panel show these
-instructions for the machine they run on.
+```sh
+sudo dnf install cmake gcc-c++ pkgconf libusb1-devel git xz rustup     # Fedora
+sudo pacman -S cmake base-devel libusb git xz rustup                   # Arch/Manjaro
+```
 
 **Upload / Debug on Cartridge (UVMC2) on Linux:**
 - **udev rule.** The .deb installs `/etc/udev/rules.d/60-vectrex-studio-uvmc2.rules` (`uaccess` for VID 2E8A), so the logged-in user reaches the cartridge's USB and serial port without sudo or the `dialout` group.
