@@ -2677,12 +2677,10 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
     if let Some((key, value)) = reproducible::uvm2_cargo_remap_env(std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).as_deref(), user_rustflags) {
         bld_cmd.env(key, value);
     }
-    let bld = bld_cmd
-        .output()
+    let (ok, out) = run_with_progress(&mut bld_cmd)
         .map_err(|e| anyhow::anyhow!("cmake --build failed: {}", e))?;
-    if !bld.status.success() {
-        return Err(anyhow::anyhow!("build failed:\n{}\n{}",
-            String::from_utf8_lossy(&bld.stdout), String::from_utf8_lossy(&bld.stderr)));
+    if !ok {
+        return Err(anyhow::anyhow!("build failed:\n{}", out));
     }
     println!("  {} linked", "✓".green());
 
@@ -2710,6 +2708,63 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         um2_len, um2_path.display()).bright_green().bold());
 
     Ok(())
+}
+
+/// Runs a build and says how it goes while it runs: Ninja's `[n/N]` steps as they finish, and
+/// a line every 20 s while one takes long (the SDK's Rust drawing layer, compiled by cargo in a
+/// single step, takes minutes the first time). Returns success and everything it printed.
+fn run_with_progress(cmd: &mut std::process::Command) -> std::io::Result<(bool, String)> {
+    use std::io::{BufRead, BufReader};
+    use std::process::Stdio;
+    use std::sync::mpsc;
+    use std::time::{Duration, Instant};
+
+    let mut child = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+    let (tx, rx) = mpsc::channel::<String>();
+    let readers: Vec<_> = [
+        child.stdout.take().map(|o| Box::new(o) as Box<dyn std::io::Read + Send>),
+        child.stderr.take().map(|e| Box::new(e) as Box<dyn std::io::Read + Send>),
+    ].into_iter().flatten().map(|r| {
+        let tx = tx.clone();
+        std::thread::spawn(move || {
+            for line in BufReader::new(r).lines().map_while(Result::ok) {
+                if tx.send(line).is_err() { break; }
+            }
+        })
+    }).collect();
+    drop(tx);
+
+    let start = Instant::now();
+    let mut last = Instant::now();
+    let mut out = String::new();
+    loop {
+        match rx.recv_timeout(Duration::from_secs(20)) {
+            Ok(line) => {
+                out.push_str(&line);
+                out.push('\n');
+                // Ninja's "[12/40] Building C object ...", make's "[ 30%] ...", and cargo's
+                // "Compiling <crate>" when the generator lets it through as it goes
+                let step = line.starts_with('[') && line.chars().take(14).any(|c| c == ']');
+                if step || line.trim_start().starts_with("Compiling ") {
+                    let short: String = line.trim_start().chars().take(110).collect();
+                    println!("  {}", short);
+                    last = Instant::now();
+                }
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                if last.elapsed() >= Duration::from_secs(20) {
+                    let s = start.elapsed().as_secs();
+                    println!("  ... still building ({}m{:02}s; the first build compiles the SDK's Rust, which takes minutes)",
+                             s / 60, s % 60);
+                    last = Instant::now();
+                }
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        }
+    }
+    for r in readers { let _ = r.join(); }
+    let status = child.wait()?;
+    Ok((status.success(), out))
 }
 
 /// A path as CMake should get it: with `/` on Windows too. A `\` in a -D value can turn into
