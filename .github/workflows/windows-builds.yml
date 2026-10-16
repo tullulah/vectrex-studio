@@ -65,7 +65,7 @@ jobs:
           npm ci --ignore-scripts
           npm run build
 
-      - name: C (make uvm2, make rp2350) and VPy (uvm2) builds
+      - name: C (make uvm2, rp2350, sim) and VPy (uvm2) builds
         working-directory: ide/electron
         shell: bash
         run: |

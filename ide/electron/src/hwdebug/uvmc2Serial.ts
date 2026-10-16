@@ -21,27 +21,33 @@
  * THE PORT IS OPENED HERE, as a plain file (macOS /dev/cu.*, Linux /dev/ttyACM*) set to raw
  * with stty. Chromium's Web Serial was tried first and refused to open the very port Python
  * opened at once ("Failed to open serial port", no detail), and a native serial module would
- * need rebuilding for Electron. Windows is not done yet.
+ * need rebuilding for Electron. On Windows a COM port cannot be read without blocking, so a
+ * Windows PowerShell child holds it (.NET's System.IO.Ports, part of Windows) and copies bytes
+ * both ways between the port and its stdin/stdout: the main process never waits on the port.
  */
 import { app, ipcMain } from 'electron';
-import { spawn, spawnSync } from 'child_process';
-import { closeSync, constants, existsSync, openSync, readFileSync, readSync, readdirSync, writeSync } from 'fs';
+import { spawn } from 'child_process';
+import { existsSync, readFileSync } from 'fs';
 import { ensureLinuxPicotool } from './picotoolLinux';
+import { windowsPicotool } from '../winBuildTools.js';
+import { Link, monitorPorts, sleep } from './serialLink.js';
 import { basename, dirname, join } from 'path';
 
-const VID = 0x2e8a;
-const PID = 0x10db;
 
 function resourceDir(): string {
   return join(app.isPackaged ? process.resourcesPath : join(__dirname, '..', '..', 'resources'), 'uvmc2');
 }
 
-/** Linux: the picotool ensureLinuxPicotool settled on for this upload (null: the PATH's). */
+/** Linux: the picotool ensureLinuxPicotool settled on for this upload; Windows: Raspberry Pi's
+ *  prebuilt one the IDE downloads (null: the PATH's). */
 let linuxPicotool: string | null = null;
 
-/** picotool: Homebrew's on macOS; on Linux the one ensureLinuxPicotool found or built; the PATH's. */
+/** picotool: Homebrew's on macOS; on Linux the one ensureLinuxPicotool found or built; on
+ *  Windows the IDE's; the PATH's. */
 function picotoolPath(): string {
-  for (const p of ['/opt/homebrew/bin/picotool', '/usr/local/bin/picotool']) if (existsSync(p)) return p;
+  if (process.platform !== 'win32') {
+    for (const p of ['/opt/homebrew/bin/picotool', '/usr/local/bin/picotool']) if (existsSync(p)) return p;
+  }
   return linuxPicotool ?? 'picotool';
 }
 
@@ -51,7 +57,9 @@ function picotoolMissing(): string {
     ? 'picotool not found, and the IDE could not build one (see the lines above): it needs a uvm2 ' +
       'build of the game first, and cmake, build-essential and libusb-1.0-0-dev; or install picotool 2.x ' +
       'from https://github.com/raspberrypi/picotool'
-    : 'picotool not found: install it (brew install picotool)';
+    : process.platform === 'win32'
+      ? 'picotool could not be downloaded (see the lines above): check the connection and try again'
+      : 'picotool not found: install it (brew install picotool)';
 }
 
 /**
@@ -84,7 +92,6 @@ function picotool(args: string[]): Promise<{ code: number; out: string }> {
   });
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** The multicart's menu (its firmware shows up as the pico-sdk's "Pico", PID 0x0009) to
  *  BOOTSEL, then the SD bridge into SRAM and running. Only that device is asked: another
@@ -107,92 +114,6 @@ async function startBridge(): Promise<string | null> {
     return `the cartridge did not answer on USB: put it in the multicart's menu with its USB plugged in (${reboot.out.trim().split('\n').pop()})`;
   }
   return `could not load the SD bridge in BOOTSEL: ${last}`;
-}
-
-/** The serial devices of the monitor / bridge (VID 0x2E8A PID 0x10DB), its own port first. */
-function monitorPorts(): string[] {
-  const out: string[] = [];
-  if (process.platform === 'darwin') {
-    // The USB tree, depth first: a device's ids come before its serial node.
-    const r = spawnSync('ioreg', ['-l', '-w0', '-r', '-c', 'IOUSBHostDevice'], { encoding: 'utf8', maxBuffer: 64 << 20 });
-    let vid = 0, pid = 0;
-    for (const line of String(r.stdout || '').split('\n')) {
-      let m: RegExpExecArray | null;
-      if ((m = /"idVendor" = (\d+)/.exec(line))) vid = +m[1];
-      else if ((m = /"idProduct" = (\d+)/.exec(line))) pid = +m[1];
-      else if ((m = /"IOCalloutDevice" = "([^"]+)"/.exec(line)) && vid === VID && pid === PID) out.push(m[1]);
-    }
-  } else if (process.platform === 'linux') {
-    let ttys: string[] = [];
-    try { ttys = readdirSync('/sys/class/tty').filter((n) => n.startsWith('ttyACM')); } catch { /* none */ }
-    for (const n of ttys) {
-      try {
-        const dev = `/sys/class/tty/${n}/device/..`;
-        const v = parseInt(readFileSync(`${dev}/idVendor`, 'utf8'), 16);
-        const p = parseInt(readFileSync(`${dev}/idProduct`, 'utf8'), 16);
-        if (v === VID && p === PID) out.push(`/dev/${n}`);
-      } catch { /* not a USB one */ }
-    }
-  }
-  // The monitor has two ports: its own (interface 0) and gdb's (interface 2). Interface order
-  // is name order on both systems (macOS ...1 / ...3, Linux ttyACM<n>): its own first, so the
-  // `v` that finds it does not wait out gdb's port first.
-  return out.sort();
-}
-
-class Link {
-  private buf = '';
-  private constructor(readonly fd: number) {}
-
-  /** Opened non-blocking, then raw: no echo, no line editing, no CR/LF rewriting both ways
-   *  (an upload is binary). The settings hold while the port stays open. */
-  static open(path: string): Link {
-    const fd = openSync(path, constants.O_RDWR | constants.O_NOCTTY | constants.O_NONBLOCK);
-    const r = spawnSync('stty', [process.platform === 'darwin' ? '-f' : '-F', path, 'raw', '-echo', '115200']);
-    if (r.status !== 0) { closeSync(fd); throw new Error(`stty failed on ${path}: ${String(r.stderr || '').trim()}`); }
-    return new Link(fd);
-  }
-
-  close(): void { try { closeSync(this.fd); } catch { /* gone (a reset drops the port) */ } }
-
-  async write(data: Buffer | string): Promise<void> {
-    const b = typeof data === 'string' ? Buffer.from(data) : data;
-    let off = 0, idle = Date.now();
-    while (off < b.length) {
-      try {
-        const n = writeSync(this.fd, b, off, Math.min(4096, b.length - off));
-        off += n;
-        if (n) idle = Date.now();
-      } catch (e: any) {
-        if (e?.code !== 'EAGAIN') throw e;
-        if (Date.now() - idle > 30000) throw new Error('the cartridge stopped taking data');
-        await sleep(1);
-      }
-    }
-  }
-
-  /** The next non-empty line, or null after `ms`. */
-  async line(ms: number): Promise<string | null> {
-    const end = Date.now() + ms;
-    const tmp = Buffer.alloc(4096);
-    for (;;) {
-      const nl = this.buf.indexOf('\n');
-      if (nl >= 0) {
-        const l = this.buf.slice(0, nl).trim();
-        this.buf = this.buf.slice(nl + 1);
-        if (l && !l.startsWith('!')) return l;   // '!' lines are the monitor's events (debugger, text)
-        continue;
-      }
-      if (Date.now() > end) return null;
-      try {
-        const n = readSync(this.fd, tmp, 0, tmp.length, null);
-        if (n > 0) { this.buf += tmp.subarray(0, n).toString('latin1'); continue; }
-      } catch (e: any) {
-        if (e?.code !== 'EAGAIN') throw e;
-      }
-      await sleep(5);
-    }
-  }
 }
 
 /** The ELF the .um2 was made from: beside it (a VPy build: build/<name>_uvm2.elf), or in
@@ -220,10 +141,10 @@ function crc32(data: Buffer): number {
 async function connect(tries: number): Promise<{ link: Link; ver: string } | { error: string }> {
   let last = 'no port';
   for (let i = 0; i < tries; i++) {
-    for (const path of monitorPorts()) {
+    for (const path of await monitorPorts()) {
       let link: Link | null = null;
       try {
-        link = Link.open(path);
+        link = await Link.open(path);
         await link.write('v\n');
         // what was in the port before (a game's text: a line cut in two) is not the answer
         const end = Date.now() + 2000;
@@ -269,11 +190,11 @@ async function sendFile(link: Link, name: string, data: Buffer, say: (t: string)
  * menu.
  */
 async function upload(um2Path: string, say: (t: string) => void): Promise<{ ok: boolean; message: string }> {
-  if (process.platform === 'win32') return { ok: false, message: 'Upload to Cartridge (UVMC2) is not available on Windows yet' };
   let data: Buffer;
   try { data = readFileSync(um2Path); } catch (e: any) { return { ok: false, message: `cannot read ${um2Path}: ${e?.message ?? e}` }; }
   const name = basename(um2Path);
   if (process.platform === 'linux') linuxPicotool = await ensureLinuxPicotool(dirname(um2Path), say);
+  if (process.platform === 'win32') linuxPicotool = await windowsPicotool((l) => say(l.trimEnd()));
 
   let c = await connect(1);
   if ('error' in c) {
@@ -336,19 +257,11 @@ class DebugConn {
   closed = false;
 
   constructor(private readonly link: Link, private readonly emit: (ch: string, payload: unknown) => void) {
-    const tmp = Buffer.alloc(4096);
     this.timer = setInterval(() => {
       if (this.closed) return;
-      for (;;) {
-        let n = 0;
-        try { n = readSync(this.link.fd, tmp, 0, tmp.length, null); } catch (e: any) {
-          if (e?.code === 'EAGAIN') break;
-          this.end('the cartridge went off USB');
-          return;
-        }
-        if (n <= 0) break;
-        this.buf += tmp.subarray(0, n).toString('latin1');
-      }
+      const got = this.link.port.take();
+      if (got === null) { this.end('the cartridge went off USB'); return; }
+      this.buf += got;
       let nl: number;
       while ((nl = this.buf.indexOf('\n')) >= 0) {
         const l = this.buf.slice(0, nl).trim();
@@ -390,7 +303,7 @@ class DebugConn {
   end(why: string): void {
     if (this.closed) return;
     this.closed = true;
-    try { writeSync(this.link.fd, 'D\n'); } catch { /* the port is gone: so is the game */ }
+    this.link.port.writeNow('D\n');   // the port may be gone: so is the game
     clearInterval(this.timer);
     this.waiter?.(null);
     this.link.close();
@@ -407,7 +320,6 @@ export function registerUvmc2Serial(): void {
   // an upload: its port can take a few seconds to appear).
   ipcMain.handle('uvmc2dbg:start', async (e) => {
     debugConn?.end('ended');
-    if (process.platform === 'win32') return { error: 'not available on Windows yet' };
     const c = await connect(60);
     if ('error' in c) return { error: `no game with the monitor answered on USB (${c.error})` };
     if (!/^UVMC2-MON ([5-9]|\d\d)/.test(c.ver)) { c.link.close(); return { error: `the game's monitor is too old to debug (${c.ver}): upload it again` }; }

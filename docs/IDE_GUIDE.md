@@ -194,7 +194,7 @@ It works with the cartridge in either of two states, plugged into the computer b
 | Running a game built with the monitor (`UVM2_USB_MONITOR=1`, which this command sets) | The monitor (`MONITOR.BIN`, loaded off the card into the PSRAM) answers on USB while the game runs. |
 | In the multicart's menu | The menu's firmware is sent to the chip's BOOTSEL mode with `picotool`, and the SD bridge (a RAM-only program; the flash is not touched) is loaded and run. The console shows the upload's progress. |
 
-It needs `picotool` (macOS: `brew install picotool`) and runs on macOS and Linux, not yet on Windows. Both programs come with the IDE (`ide/electron/resources/uvmc2/`); their sources are in uvmc2-sdk (`uvm2-sdk/monitor`, `uvm2-sdk/sdbridge`). A game built with the monitor costs about 2 KB of SRAM.
+It needs `picotool`: on macOS `brew install picotool`; on Linux the IDE builds one from the pico-sdk; on Windows it downloads Raspberry Pi's prebuilt one (the bootrom and the menu's reset interface are WinUSB devices, so no driver install). The port is the monitor's serial device: `/dev/cu.*` on macOS, `/dev/ttyACM*` on Linux, a COM port on Windows, held there by a Windows PowerShell child (`System.IO.Ports`) so the IDE never blocks on it (`hwdebug/serialLink.ts`). The Windows side is checked without a cartridge (picotool, the COM port search, opening a port); with one, it has not been run yet. Both programs come with the IDE (`ide/electron/resources/uvmc2/`); their sources are in uvmc2-sdk (`uvm2-sdk/monitor`, `uvm2-sdk/sdbridge`). A game built with the monitor costs about 2 KB of SRAM.
 
 ### Compiler
 

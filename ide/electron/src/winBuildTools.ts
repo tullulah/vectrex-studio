@@ -131,6 +131,19 @@ function run(cmd: string, args: string[], env: NodeJS.ProcessEnv, onLine: (l: st
   });
 }
 
+/** Raspberry Pi's picotool for Upload to Cartridge (downloaded once), or null. The RP2350's
+ *  bootrom and the pico-sdk's reset interface describe themselves to Windows as WinUSB devices,
+ *  so it needs no driver install. */
+export async function windowsPicotool(log: (line: string) => void): Promise<string | null> {
+  const t = WIN_TOOLS.find((x) => x.name === 'picotool')!;
+  try {
+    return join(await ensureTool(t, log), t.mustContain);
+  } catch (e: any) {
+    log(`[tools] Could not install ${t.name} ${t.version}: ${e?.message || e}\n`);
+    return null;
+  }
+}
+
 /** The Rust channel an SDK pins (its rust-toolchain.toml), or null. */
 async function sdkRustChannel(sdkDir: string): Promise<string | null> {
   try {
@@ -227,5 +240,95 @@ export async function windowsBuildEnv(o: {
     if (dirs.picotool && !env.PICOTOOL_FETCH_FROM_GIT_PATH) env.PICOTOOL_FETCH_FROM_GIT_PATH = toolPath(dirs.picotool);
     Object.assign(env, await windowsRust(o.sdkDir, env, o.log));
   }
+  return env;
+}
+
+// ─── The WASM simulator: emscripten ────────────────────────────────────────
+//
+// `make sim` compiles the game with emcc. On Windows the IDE installs emsdk itself, at the
+// version the simulator builds are made with on the other machines: emsdk's own repository at
+// that tag, the Python emsdk ships for Windows to run it (Windows has none), then `emsdk install` and
+// `activate`, which download Clang, Node and emscripten (about 400 MB, once). The build gets
+// EMCC as "<emsdk's python> <emscripten>/emcc.py": make's busybox sh does not run .bat files.
+
+export const EMSDK_VERSION = '6.0.3';
+const EMSDK_PYTHON = {
+  dir: '3.13.3_64bit',
+  url: 'https://storage.googleapis.com/webassembly/emscripten-releases-builds/deps/python-3.13.3-0-win-amd64.zip',
+  sha256: '6fe7a540c6b8b185780467cf7495e884ee62316ec4abb19e1c735b8a77c62465',
+};
+const EMSDK_READY = '.vectrex-studio-emsdk-ready';
+
+let emsdkInFlight: Promise<string> | null = null;
+
+/** emsdk at EMSDK_VERSION, installed and activated in ~/VectrexStudio/toolchains/windows. */
+function ensureEmsdk(log: (line: string) => void): Promise<string> {
+  if (emsdkInFlight) return emsdkInFlight;
+  emsdkInFlight = (async () => {
+    const dir = join(winToolsRootDir(), `emsdk-${EMSDK_VERSION}`);
+    try { await fs.access(join(dir, EMSDK_READY)); return dir; } catch { /* not yet */ }
+    log(`[emsdk] Installing emscripten ${EMSDK_VERSION} for the simulator build into ${dir} (about 400 MB, once; a few minutes)...\n`);
+    await installTarball({
+      what: `emsdk ${EMSDK_VERSION}`,
+      url: `https://codeload.github.com/emscripten-core/emsdk/tar.gz/refs/tags/${EMSDK_VERSION}`,
+      root: winToolsRootDir(), name: `emsdk-${EMSDK_VERSION}`, mustContain: 'emsdk.py',
+      marker: { version: EMSDK_VERSION }, progressTag: `emsdk-${EMSDK_VERSION}`,
+    });
+    // A Python to run emsdk.py with. Not in emsdk's own python/ folder: `emsdk install` unpacks
+    // the same Python there, and Windows will not overwrite a running python.exe's DLLs.
+    const boot = await installTarball({
+      what: 'Python for emsdk', url: EMSDK_PYTHON.url, root: winToolsRootDir(), name: `emsdk-python-${EMSDK_PYTHON.dir}`,
+      mustContain: 'python.exe', marker: { url: EMSDK_PYTHON.url }, progressTag: 'emsdk-python',
+      ext: 'zip', sha256: EMSDK_PYTHON.sha256, strip: 0,
+    });
+    const python = join(boot, 'python.exe');
+    const env: NodeJS.ProcessEnv = { ...process.env };
+    delete env.PYTHONHOME;
+    delete env.PYTHONPATH;
+    for (const step of ['install', 'activate']) {
+      const r = await new Promise<number | null>((resolve) => {
+        const child = spawn(python, [join(dir, 'emsdk.py'), step, EMSDK_VERSION], { cwd: dir, env, stdio: ['ignore', 'pipe', 'pipe'] });
+        const take = (c: Buffer) => { for (const l of c.toString().split(/\r?\n|\r/)) if (l.trim()) log(`[emsdk] ${l.trim()}\n`); };
+        child.stdout?.on('data', take);
+        child.stderr?.on('data', take);
+        child.on('error', (e) => { log(`[emsdk] ${e.message}\n`); resolve(-1); });
+        child.on('close', resolve);
+      });
+      if (r !== 0) throw new Error(`emsdk ${step} ${EMSDK_VERSION} failed (above)`);
+    }
+    await fs.writeFile(join(dir, EMSDK_READY), `${EMSDK_VERSION}\n`);
+    log(`[emsdk] emscripten ${EMSDK_VERSION} installed: ${dir}\n`);
+    return dir;
+  })().finally(() => { emsdkInFlight = null; });
+  return emsdkInFlight;
+}
+
+/**
+ * The environment `make sim` needs on Windows: make (windowsBuildEnv) and emscripten, both
+ * downloaded once. An emsdk the user set up (EMSDK) is used as it is.
+ */
+export async function windowsSimEnv(o: { base: NodeJS.ProcessEnv; log: (line: string) => void }): Promise<NodeJS.ProcessEnv> {
+  const env = await windowsBuildEnv({ base: o.base, sdkDir: null, uvm2: false, log: o.log });
+  if (env.EMCC) return env;
+  let dir = env.EMSDK && await fs.access(join(env.EMSDK, 'upstream', 'emscripten', 'emcc.py')).then(() => env.EMSDK as string, () => null);
+  if (!dir) {
+    try {
+      dir = await ensureEmsdk(o.log);
+    } catch (e: any) {
+      o.log(`[emsdk] Could not install emscripten: ${e?.message || e}\n`);
+      return env;
+    }
+  }
+  const emscripten = join(dir, 'upstream', 'emscripten');
+  // emsdk's python, or the one its config names when it is the user's own emsdk
+  let python = join(dir, 'python', EMSDK_PYTHON.dir, 'python.exe');
+  try { await fs.access(python); } catch { python = env.EMSDK_PYTHON || 'python'; }
+  env.EMSDK = toolPath(dir);
+  env.EM_CONFIG = toolPath(join(dir, '.emscripten'));
+  env.EMSDK_PYTHON = toolPath(python);
+  env.EMCC = `${toolPath(python)} ${toolPath(join(emscripten, 'emcc.py'))}`;
+  delete env.PYTHONHOME;
+  delete env.PYTHONPATH;
+  prependPath(env, [emscripten]);
   return env;
 }

@@ -5,7 +5,7 @@
 //   node scripts/win-build-smoke.js <sdk-tag | sdk-folder> <vpy_cli.exe> <work-dir>
 //
 // An SDK folder (a checkout of a branch) is used as it is, instead of downloading a tag.
-// Builds a C project (make uvm2 and make rp2350, with a .vec asset compiled by vpy_cli) and a
+// Builds a C project (make uvm2, make rp2350 and make sim, with a .vec asset compiled by vpy_cli) and a
 // VPy project for uvm2. PATH is cut down to Windows' own folders first, and Rust goes into
 // <work-dir>, so nothing the CI machine has installed is used. Exits non-zero on a failure.
 
@@ -15,7 +15,8 @@ const path = require('path');
 
 const dist = path.join(__dirname, '..', 'dist');
 const sdk = require(path.join(dist, 'sdkManager.js'));
-const { windowsBuildEnv } = require(path.join(dist, 'winBuildTools.js'));
+const { windowsBuildEnv, windowsPicotool, windowsSimEnv } = require(path.join(dist, 'winBuildTools.js'));
+const serial = require(path.join(dist, 'hwdebug', 'serialLink.js'));
 const { createProjectFromTemplate } = require(path.join(dist, 'projectTemplates.js'));
 
 const [tag, vpyCliArg, workArg] = process.argv.slice(2);
@@ -76,6 +77,9 @@ async function main() {
   check('make uvm2', (await run('make', ['uvm2'], cDir, env)) === 0 && existsSync(path.join(cDir, 'build_uvm2', 'smoke_c.um2')));
   check('asset header from vpy_cli', existsSync(path.join(cDir, 'gen', 'enemy1.h')));
   check('make rp2350', (await run('make', ['rp2350'], cDir, env)) === 0 && existsSync(path.join(cDir, 'build_rp2350', 'smoke_c_sd.bin')));
+  // The WASM simulator: make sim with emscripten, which the IDE installs (once)
+  const simEnv = await windowsSimEnv({ base: { ...env0 }, log });
+  check('make sim', (await run('make', ['sim'], cDir, simEnv)) === 0 && existsSync(path.join(cDir, 'build_wasm', 'smoke_c.js')));
 
   log('== VPy project (uvm2)');
   const v = await createProjectFromTemplate({ kind: 'vpy', name: 'smoke_vpy', parentDir: work, sdkVersion: pin });
@@ -84,6 +88,19 @@ async function main() {
   check('vpy_cli build --target uvm2',
     (await run(vpyCli, ['build', v.projectFile, '--output', out, '--target', 'uvm2'], vDir, env)) === 0
       && existsSync(path.join(vDir, 'build', 'smoke_vpy.um2')));
+
+  // Upload to Cartridge, what can run without a cartridge: picotool, the COM port search and
+  // the PowerShell that holds a port (asked for one that does not exist).
+  log('== Upload to Cartridge (no cartridge)');
+  const pt = await windowsPicotool(log);
+  check('picotool', !!pt && (await run(pt, ['version'], work, env)) === 0);
+  let ports = null;
+  try { ports = await serial.monitorPorts(); } catch (e) { log(String(e)); }
+  check(`COM port search (${JSON.stringify(ports)})`, Array.isArray(ports));
+  let openErr = '';
+  try { (await serial.Link.open('COM99')).close(); } catch (e) { openErr = String(e?.message ?? e); }
+  log(`Link.open(COM99): ${openErr}`);
+  check('a missing COM port is an error that names it', openErr.includes('COM99'));
 
   if (failures.length) {
     log(`\n${failures.length} failed: ${failures.join(', ')}`);

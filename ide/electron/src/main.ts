@@ -29,7 +29,7 @@ import {
   ARM_TOOLCHAIN_DOWNLOAD_URL, armToolchainEnv, detectArmToolchain, ensureUvm2Rust, ensureSdk, isSdkInstalled, isValidSdkTag, latestSdkTag, listInstalledSdks, listRemoteSdkTags,
   projectSdkVersion, resolveProjectSdk, dropStaleSdkBuilds, sdkEnv, sdkRootDir, toolPath, writeProjectSdkVersion, type SdkProgress,
 } from './sdkManager.js';
-import { prependPath, windowsBuildEnv } from './winBuildTools.js';
+import { prependPath, windowsBuildEnv, windowsPicotool, windowsSimEnv } from './winBuildTools.js';
 import { storageGet, storageSet, storageDelete, storageKeys, storageClear, getStoragePath, StorageKeys } from './storage.js';
 import { 
   initPyPilotDb, 
@@ -1232,23 +1232,48 @@ function parseCompilerDiagnostics(output: string, sourceFile: string): Array<{ f
 }
 
 
+/**
+ * Mounted removable volumes (an SD card, the RP2350's BOOTSEL drive), first found first:
+ * macOS /Volumes (not the system's), Linux /media/<user> and /run/media/<user>, Windows the
+ * removable drives (X:\). With `label`, only the volume of that name.
+ */
+async function removableVolumes(label?: string): Promise<string[]> {
+  const out: string[] = [];
+  if (process.platform === 'win32') {
+    const r = await new Promise<string>((resolve) => {
+      let txt = '';
+      const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+        "Get-Volume | Where-Object { $_.DriveType -eq 'Removable' -and $_.DriveLetter } | ForEach-Object { [string]$_.DriveLetter + '|' + $_.FileSystemLabel }"],
+        { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
+      child.stdout?.on('data', (c: Buffer) => { txt += c.toString(); });
+      child.on('error', () => resolve(''));
+      child.on('close', () => resolve(txt));
+    });
+    for (const line of r.split(/\r?\n/)) {
+      const [letter, name = ''] = line.trim().split('|');
+      if (letter && (!label || name === label)) out.push(`${letter}:\\`);
+    }
+    return out;
+  }
+  const roots = process.platform === 'darwin'
+    ? ['/Volumes']
+    : [join('/media', os.userInfo().username), join('/run/media', os.userInfo().username)];
+  const skip = new Set(['Macintosh HD', 'Macintosh HD - Data', 'Recovery']);
+  for (const root of roots) {
+    let names: string[] = [];
+    try { names = await fs.readdir(root); } catch { continue; }
+    for (const n of names) if (!skip.has(n) && (!label || n === label)) out.push(join(root, n));
+  }
+  return out;
+}
+
 async function copyPitrexToSDCard(imgPath: string, sdPath: string, win: BrowserWindow | null, extraFiles: string[] = []): Promise<void> {
   const resourcesDir = app.isPackaged ? process.resourcesPath : join(__dirname, '..', 'resources');
   const sdBundlePath = join(resourcesDir, 'pitrex-sd');
 
   // Resolve SD mount: use explicit path if set, otherwise find first non-system volume
   let sdMount: string = sdPath.trim();
-  if (!sdMount) {
-    try {
-      const volumes = await fs.readdir('/Volumes');
-      const skip = new Set(['Macintosh HD', 'Macintosh HD - Data', 'Recovery']);
-      for (const vol of volumes) {
-        if (skip.has(vol)) continue;
-        sdMount = join('/Volumes', vol);
-        break;
-      }
-    } catch {}
-  }
+  if (!sdMount) sdMount = (await removableVolumes())[0] ?? '';
 
   if (!sdMount) {
     win?.webContents.send('run://stderr', '[SD] No SD card found. Set the SD path in Settings > Build Target > PiTrex.\n');
@@ -1305,17 +1330,7 @@ async function copyPitrexToSDCard(imgPath: string, sdPath: string, win: BrowserW
 async function copyUvm2ToSDCard(um2Path: string, sdPath: string, win: BrowserWindow | null): Promise<void> {
   // Resolve SD mount: use explicit path if set, otherwise find first non-system volume
   let sdMount: string = sdPath.trim();
-  if (!sdMount) {
-    try {
-      const volumes = await fs.readdir('/Volumes');
-      const skip = new Set(['Macintosh HD', 'Macintosh HD - Data', 'Recovery']);
-      for (const vol of volumes) {
-        if (skip.has(vol)) continue;
-        sdMount = join('/Volumes', vol);
-        break;
-      }
-    } catch {}
-  }
+  if (!sdMount) sdMount = (await removableVolumes())[0] ?? '';
 
   if (!sdMount) {
     win?.webContents.send('run://stderr', '[SD] No SD card found. Set the SD path in Settings > Build Target > UVM2.\n');
@@ -1509,31 +1524,34 @@ async function flashRp2350(
       return;
     }
     win?.webContents.send('run://status', 'RP2350: converting ELF -> UF2...');
-    const convCode = await runFlashCommand('picotool', ['uf2', 'convert', tmpElf, uf2Out], undefined, win);
+    const picotoolExe = process.platform === 'win32'
+      ? (await windowsPicotool((l) => win?.webContents.send('run://stdout', l))) ?? 'picotool'
+      : 'picotool';
+    const convCode = await runFlashCommand(picotoolExe, ['uf2', 'convert', tmpElf, uf2Out], undefined, win);
     if (convCode !== 0) {
       win?.webContents.send('run://stderr', `[RP2350] picotool uf2 convert failed (exit ${convCode}).\n`);
       win?.webContents.send('run://status', 'RP2350 flash failed: UF2 conversion error');
       return;
     }
     // Clear extended attributes so the copy to the FAT volume is clean.
-    await runFlashCommand('xattr', ['-c', uf2Out], undefined, win);
+    if (process.platform === 'darwin') await runFlashCommand('xattr', ['-c', uf2Out], undefined, win);
 
-    const bootselVol = '/Volumes/RP2350';
-    let mounted = false;
-    try {
-      await fs.access(bootselVol);
-      mounted = true;
-    } catch { /* not mounted */ }
-
-    if (!mounted) {
-      win?.webContents.send('run://stderr', `[RP2350] ${bootselVol} is not mounted. Hold BOOTSEL while plugging in the cartridge, then Build & Run again.\n`);
+    // The bootrom's drive, named RP2350 (/Volumes/RP2350, /media/<user>/RP2350, a drive letter)
+    const bootselVol = (await removableVolumes('RP2350'))[0] ?? '';
+    if (!bootselVol) {
+      win?.webContents.send('run://stderr', `[RP2350] The RP2350 drive is not mounted. Hold BOOTSEL while plugging in the cartridge, then Build & Run again.\n`);
       win?.webContents.send('run://stdout', `[RP2350] UF2 ready at: ${uf2Out}\n`);
       win?.webContents.send('run://status', 'RP2350 USB: hold BOOTSEL and retry');
       return;
     }
 
-    // -X avoids a cosmetic xattr error on the FAT volume.
-    const cpCode = await runFlashCommand('cp', ['-X', uf2Out, bootselVol + '/'], undefined, win);
+    // macOS: cp -X avoids a cosmetic xattr error on the FAT volume.
+    const cpCode = process.platform === 'darwin'
+      ? await runFlashCommand('cp', ['-X', uf2Out, bootselVol + '/'], undefined, win)
+      : await fs.copyFile(uf2Out, join(bootselVol, basename(uf2Out))).then(() => 0, (e) => {
+          win?.webContents.send('run://stderr', `[RP2350] ${e?.message || e}\n`);
+          return 1;
+        });
     if (cpCode !== 0) {
       win?.webContents.send('run://stderr', `[RP2350] Failed to copy UF2 to ${bootselVol} (exit ${cpCode}).\n`);
       win?.webContents.send('run://status', 'RP2350 flash failed: UF2 copy error');
@@ -1964,10 +1982,13 @@ export async function executeSimBuild(args: {
 
   // The project's [env] still wins, as in the hardware build: a port can point at its own checkout.
   const simCli = resolveCompilerPath(); // VPY_CLI: compiles assets/ for the Makefile (docs/ASSETS.md)
-  const env: NodeJS.ProcessEnv = { ...process.env, ...(simCli ? { VPY_CLI: await makeSafePath(simCli) } : {}), PITREX_SIM_SDK, VPY_C_SDK, ...(manifest.env || {}) };
-  const emDir = resolveEmscriptenDir();
-  if (emDir) {
-    env.PATH = `${emDir}${require('path').delimiter}${env.PATH || ''}`;
+  let env: NodeJS.ProcessEnv = { ...process.env, ...(simCli ? { VPY_CLI: await makeSafePath(simCli) } : {}), PITREX_SIM_SDK, VPY_C_SDK, ...(manifest.env || {}) };
+  const emDir = process.platform === 'win32' ? null : resolveEmscriptenDir();
+  if (process.platform === 'win32') {
+    // make, its shell and emscripten (installed once by the IDE unless EMSDK points at one)
+    env = await windowsSimEnv({ base: env, log: (l) => win?.webContents.send('run://stdout', `[SIM] ${l}`) });
+  } else if (emDir) {
+    prependPath(env, [emDir]);
   } else {
     win?.webContents.send('run://stdout', `[SIM] emscripten not found in $EMSDK or ~/emsdk — relying on emcc being on PATH.\n`);
   }
