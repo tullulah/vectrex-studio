@@ -327,21 +327,53 @@ N = the name upper-cased with "-" -> "_".
  "loopStart":0,"loopEnd":96}
 - note: MIDI (60=C4). velocity 0-15. channel 0-2 (PSG A/B/C; SFX play on C). noise period 0-31, channels bitmask 1=A 2=B 4=C
 
-### .vmesh (JSON, C only): faces and/or scenery
+### .vmesh (JSON; C, and VPy on uvm2): faces and/or scenery
 {"name":"room","hard":45,"vertices":[{"x","y","z"}],"faces":[[0,3,2,1]],
  "lines":[{"points":[{"x":0,"y":0,"z":0},{"x":40000,"y":0,"z":0}],"br":70,"closed":false,"fog":true}],
  "occluders":[{"points":[3 to 8 corners of a convex solid]}]}
 - needs faces (with vertices), "sections" (lofting), lines or occluders. Vertices are i16; line/occluder points +-1000000.
 - lines: 2+ points, br 1..100 (% of the mesh brightness), fog false = ignores the scenery fog. Occluders are never drawn: they hide what is drawn after the mesh.
 
-### .vscene (JSON, C only, SDK v1.3.5+): a set of .vmesh pieces placed from the game's pos[3]
+### .vscene (JSON; C, and VPy on uvm2; SDK v1.3.5+): a set of .vmesh pieces placed from the game's pos[3]
 {"name":"tunnel","fog":{"full":3000,"gone":17500},"groups":["alarm"],
  "items":[{"name":"ribs","mesh":"rib","at":{"z":600},"follow":{"z":-1},"repeat":{"axis":"z","step":2000,"count":9}},
           {"mesh":["low","high"],"at":{"z":600},"follow":{"z":-1},"repeat":{"step":2000,"count":9},"window":{"max":10999},"br":75},
           {"mesh":"lights","group":"!alarm","fog":"whole"}]}
 - mesh = assets/meshes/<name>.vmesh (a list only with repeat: copies take turns); <= 16 meshes. at: whole numbers; follow: factor of pos per axis.
 - Items draw in order (near first). fog true|false|"whole". group bit n = n-th name in groups; "!name" inverts.
-- C: vpy3d_load_scene(&s, N_vscene, N_vscene_meshes); vpy3d_draw_scene(&s, 0, pos, groups_mask, br). SRCS += $(VPY_C_SDK)/vpy3d.c`,
+- C: vpy3d_load_scene(&s, N_vscene, N_vscene_meshes); vpy3d_draw_scene(&s, 0, pos, groups_mask, br). SRCS += $(VPY_C_SDK)/vpy3d.c
+- VPy (uvm2): LOAD_SCENE("n") in main(); DRAW_SCENE("n", x, y, z, br[, groups]) or DRAW_SCENE_AT("n", xf, x, y, z, br[, groups]) in loop(). See topic "3d".`,
+
+    language: `## VPy language (v0.4) — full reference: docs/MANUAL.md
+- Types: i8 u8 i16 u16 (all targets), i32 u32 (ARM targets). Arithmetic is 16-bit on m6809, 32-bit on ARM.
+- No \`global\` keyword: a function assigns a top-level variable by name (score += 1).
+- Typed arrays: world_z: i32 = [40000, -90000] (a literal that does not fit is a compile error). Repetition and N-D: xf: i32 = [0] * 12, grid = [[0] * 8] * 4, grid[r][c] = 1.
+- len(name): compile-time length of a global or const array. Trailing commas allowed; a line inside an open ( or [ continues on the next.
+- Named constants inside array literals: [SX_LASER, MAX_X * 2, -3].
+- Shifts and XOR: << >> (arithmetic) ^ and &= |= ^= <<= >>=, Python precedence.
+- enum State:  ST_TITLE / ST_PLAY, ST_PAUSE / ST_OVER = 10  (0, 1, 2, 10; the next one is 11)
+- struct Ship:  x: i16 / y: i16 / speed: i16 = 2   then  fleet = Ship[4]  (fleet[i].x)  or  boss = Ship(0, 50, 3)
+  Each field is its own global array. A whole struct is not a value: no passing, assigning or methods; pass the index.
+- Function references (ARM): draw_all(draw_enemy, 8), and inside it draw(i). A compile error on m6809.
+- String tables: const NAMES = ["NORTH", "SOUTH"] (const on ARM). LABEL_NUM("LEVEL ", n) builds "LEVEL 3" for the text builtins.
+- Errors come with file:line: a missing .vec in DRAW_VECTOR, a function named like an imported module, a parameter spelled like a global in another case, a const and a variable of one name, a loop variable that is an array, an unresolved module or member.`,
+
+    '3d': `## 3D in VPy (uvm2; rp2350 only when built through C; a compile error on m6809 and pitrex) — docs/MANUAL.md "3D (uvm2)"
+- Drawn in perspective with hidden-line removal, occluders and fog. Transforms: global i32 arrays of 12 (Q14 rotation, then translation). Angles: 4096 per turn.
+- main(): LOAD_MESH("ship"), LOAD_SCENE("tunnel"), CAMERA_LOOK_AT(ex, ey, ez, tx, ty, tz), MESH_OCCLUSION(1) (meshes cut by solids drawn before them).
+- loop(): XF_ROT_X/Y/Z(xf, a), XF_TRANSLATE(xf, x, y, z), XF_MUL(dst, a, b) (b then a), DRAW_MESH("ship", xf, br), DRAW_SCENE("tunnel", x, y, z, br[, groups]).
+- Occluders: OCCL_RESET() once per frame, then near to far: OCCL_MESH("n", xf), OCCL_ADD(corners, n), OCCL_LINE(...). An occluder hides only what is drawn after it.
+- Also: RAY_MESH, MARKS_CLEAR/ADD/DRAW (damage marks), TEXT_BILLBOARD(text, x, y, z, height, br[, flags]), TEXT_3D(text, xf, height, br), VEC_3D("vec", xf, scale, br), FOG(br, x, y, z, full, gone), SCENERY_FOG, PROJECT, LINE_3D.
+- Pools (VPY3D_POOL_*) go in the project's [uvm2] defs when LOAD_MESH returns 0.
+- Skeletons and clips: import <vskel or vclip name> gives constant tables (n.T_POSES[n.POSE_X][n.JOINT_Y]...). Not from VPy yet: terrain and bone animation clips.`,
+
+    debugging: `## Debugging (v0.4)
+- 6809 (JSVecX): breakpoints by file in every module, Step Over/Into/Out, call stack from the return addresses on S, hover values (globals, arrays, struct fields arr[i].f, locals of the functions on the stack), Change Value.
+- ARM in the emulator (rp2350, uvm2): the editor's breakpoints from the ELF's line table, ARM call stack, hover; gdb: arm-none-eabi-gdb build/<name>_uvm2.elf -ex "target remote :3333" (one gdb, core 0, no watchpoints).
+- On the UVMC2 over USB (Debug > Debug on Cartridge, MCP cartridge_debug): no probe; breakpoints, steps, call stack, hover, Change Value with registers; DEBUG_PRINT / vpy_log arrive as [rtt] lines. Limits: from the game's first frame on; core 0 only. The console shows a pause sign while held. VPy games need uvmc2-sdk v1.4.5+ (before it, a VPy game linked the monitor but never started it).
+- On the RP2350 debug cartridge over SWD: a CMSIS-DAP probe and probe-rs; same editor features, no register writes.
+- C projects: breakpoints in your C files on rp2350/uvm2; Step Into goes into the SDK and libvpy. PiTrex and the WASM simulator have no debugger.
+- A debugging session on the cartridge belongs to the project and target that started it: opening another project or changing the target closes it.`,
 
     joystick: `## Joystick Input
 - J1_X(), J1_Y(): signed analog axis, about -128..127 (0 = centre, +Y up). Use a dead zone: if J1_X() > 20: ...
@@ -374,7 +406,8 @@ N = the name upper-cased with "-" -> "_".
 - Import: import input  then call input.get_input() or access input.var_name[i]
 - Unifier transforms dot notation: input.get_input() → INPUT_GET_INPUT()
 - Helpers auto-deduplicated (unifier merges all imports into one module before codegen)
-- Build: cargo run --bin vpy_cli -- build project.vpyproj -o game.bin (auto-resolves imports)
+- Build the PROJECT (ide_run builds the .vpyproj; on the command line vpy_cli build <name>.vpyproj): a single-file build only sees that one file, and an import of another module is then "module not found"
+- Modules may import each other (circular imports are fine). Each module's globals are its own: ships.fleet in another module
 - Example: examples/multi-module/
 - Source: buildtools/vpy_unifier/src/lib.rs (dot notation rewriting), buildtools/vpy_unifier/src/resolver.rs (symbol resolution)`,
 
@@ -427,7 +460,7 @@ N = the name upper-cased with "-" -> "_".
 // Tools
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DOC_TOPICS = ['assets', 'joystick', 'buttons', 'const_arrays', 'modules', 'banking', 'draw_line', 'music', 'compiler', 'bios', 'tests', 'meta', 'all'];
+const DOC_TOPICS = ['language', '3d', 'debugging', 'assets', 'joystick', 'buttons', 'const_arrays', 'modules', 'banking', 'draw_line', 'music', 'compiler', 'bios', 'tests', 'meta', 'all'];
 
 const LOCAL_TOOLS = [
   {
