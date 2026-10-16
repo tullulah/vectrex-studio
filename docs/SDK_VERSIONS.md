@@ -203,6 +203,14 @@ The **Arm GNU Toolchain** is not downloaded: it is large and platform-specific.
 When no toolchain is found, the build error and the Project Settings panel show these
 instructions for the machine they run on.
 
+**Upload / Debug on Cartridge (UVMC2) on Linux:**
+- **udev rule.** The .deb installs `/etc/udev/rules.d/60-vectrex-studio-uvmc2.rules` (`uaccess` for VID 2E8A), so the logged-in user reaches the cartridge's USB and serial port without sudo or the `dialout` group.
+- **picotool.** Ubuntu has no `picotool` package, and the pico-sdk builds its own without USB (`PICOTOOL_NO_LIBUSB`). On the first upload, the IDE therefore builds one with USB:
+  - from the source the uvm2 build fetched (`_deps/picotool-src`);
+  - into `~/VectrexStudio/tools/picotool`, which every later upload uses.
+
+  A `picotool` 2.x on the `PATH` is used first.
+
 ## Related
 
 - [UVM2_TARGET.md](UVM2_TARGET.md) — the UVM2 target and the `uvm2-sdk/` contents

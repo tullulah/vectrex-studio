@@ -16,3 +16,8 @@ if [ -f "/etc/apparmor.d/$EXE" ]; then
     fi
     rm -f "/etc/apparmor.d/$EXE"
 fi
+
+if [ -f /etc/udev/rules.d/60-vectrex-studio-uvmc2.rules ]; then
+    rm -f /etc/udev/rules.d/60-vectrex-studio-uvmc2.rules
+    if hash udevadm 2>/dev/null; then udevadm control --reload-rules 2>/dev/null || true; fi
+fi

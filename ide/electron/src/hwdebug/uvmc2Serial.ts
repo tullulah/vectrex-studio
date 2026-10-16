@@ -26,6 +26,7 @@
 import { app, ipcMain } from 'electron';
 import { spawn, spawnSync } from 'child_process';
 import { closeSync, constants, existsSync, openSync, readFileSync, readSync, readdirSync, writeSync } from 'fs';
+import { ensureLinuxPicotool } from './picotoolLinux';
 import { basename, dirname, join } from 'path';
 
 const VID = 0x2e8a;
@@ -35,9 +36,22 @@ function resourceDir(): string {
   return join(app.isPackaged ? process.resourcesPath : join(__dirname, '..', '..', 'resources'), 'uvmc2');
 }
 
+/** Linux: the picotool ensureLinuxPicotool settled on for this upload (null: the PATH's). */
+let linuxPicotool: string | null = null;
+
+/** picotool: Homebrew's on macOS; on Linux the one ensureLinuxPicotool found or built; the PATH's. */
 function picotoolPath(): string {
   for (const p of ['/opt/homebrew/bin/picotool', '/usr/local/bin/picotool']) if (existsSync(p)) return p;
-  return 'picotool';
+  return linuxPicotool ?? 'picotool';
+}
+
+/** What to do when there is no picotool, for this machine. */
+function picotoolMissing(): string {
+  return process.platform === 'linux'
+    ? 'picotool not found, and the IDE could not build one (see the lines above): it needs a uvm2 ' +
+      'build of the game first, and cmake, build-essential and libusb-1.0-0-dev; or install picotool 2.x ' +
+      'from https://github.com/raspberrypi/picotool'
+    : 'picotool not found: install it (brew install picotool)';
 }
 
 /**
@@ -79,7 +93,7 @@ async function startBridge(): Promise<string | null> {
   const elf = join(resourceDir(), 'sdbridge.elf');
   if (!existsSync(elf)) return `the SD bridge is missing: ${elf}`;
   const reboot = await picotool(['reboot', '-u', '-f', '--vid', '0x2e8a', '--pid', '0x0009']);
-  if (reboot.code === -1) return 'picotool not found: install it (brew install picotool)';
+  if (reboot.code === -1) return picotoolMissing();
   // A failed reboot is not the end: the chip may be in BOOTSEL already (an attempt cut short).
   // The bootrom enumerates a moment after the reset.
   let last = '';
@@ -259,6 +273,7 @@ async function upload(um2Path: string, say: (t: string) => void): Promise<{ ok: 
   let data: Buffer;
   try { data = readFileSync(um2Path); } catch (e: any) { return { ok: false, message: `cannot read ${um2Path}: ${e?.message ?? e}` }; }
   const name = basename(um2Path);
+  if (process.platform === 'linux') linuxPicotool = await ensureLinuxPicotool(dirname(um2Path), say);
 
   let c = await connect(1);
   if ('error' in c) {
