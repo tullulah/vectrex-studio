@@ -1093,6 +1093,30 @@ function sendMenuCommand(id: string, ...payload: any[]) {
   wc.send('command', id, ...payload);
 }
 
+/**
+ * A path a Makefile can use unquoted. Project Makefiles say `$(VPY_CLI) compile-asset ...`
+ * and an installed IDE's compiler sits under a path with a space ("/opt/Vectrex Studio/...",
+ * "/Applications/Vectrex Studio.app/..."): the shell cut it at the space. Such a path gets a
+ * symlink without spaces, ~/VectrexStudio/tools/bin/<name>, and that is what make sees.
+ */
+async function makeSafePath(p: string): Promise<string> {
+  if (!/\s/.test(p) || process.platform === 'win32') return p;
+  const link = join(os.homedir(), 'VectrexStudio', 'tools', 'bin', basename(p));
+  if (/\s/.test(link)) return p;
+  try {
+    let current: string | null = null;
+    try { current = await fs.readlink(link); } catch { /* none yet */ }
+    if (current !== p) {
+      await fs.mkdir(dirname(link), { recursive: true });
+      await fs.rm(link, { force: true });
+      await fs.symlink(p, link);
+    }
+    return link;
+  } catch {
+    return p;
+  }
+}
+
 function resolveCompilerPath(): string | null {
   const override = process.env.VPY_COMPILER_BIN;
   if (override) {
@@ -1598,7 +1622,7 @@ export async function executeExternalBuild(args: {
   // VPY_CLI: the IDE's compiler, for Makefiles that compile assets/ into headers
   // (`$(VPY_CLI) compile-asset`, docs/ASSETS.md). The project's [env] still wins.
   const vpyCli = resolveCompilerPath();
-  const env: NodeJS.ProcessEnv = { ...process.env, ...(vpyCli ? { VPY_CLI: vpyCli } : {}), ...('error' in sdk ? {} : sdkEnv(sdk.dir, sdk.picoSdkDir)), ...(await armToolchainEnv()), ...(manifest.env || {}) };
+  const env: NodeJS.ProcessEnv = { ...process.env, ...(vpyCli ? { VPY_CLI: await makeSafePath(vpyCli) } : {}), ...('error' in sdk ? {} : sdkEnv(sdk.dir, sdk.picoSdkDir)), ...(await armToolchainEnv()), ...(manifest.env || {}) };
   if (isUvm2) await ensureUvm2Rust((l) => win?.webContents.send('run://stdout', l + '\n'));
   if (manifest.toolchain?.path) {
     env.PATH = `${manifest.toolchain.path}${require('path').delimiter}${env.PATH || ''}`;
@@ -1910,7 +1934,7 @@ export async function executeSimBuild(args: {
 
   // The project's [env] still wins, as in the hardware build: a port can point at its own checkout.
   const simCli = resolveCompilerPath(); // VPY_CLI: compiles assets/ for the Makefile (docs/ASSETS.md)
-  const env: NodeJS.ProcessEnv = { ...process.env, ...(simCli ? { VPY_CLI: simCli } : {}), PITREX_SIM_SDK, VPY_C_SDK, ...(manifest.env || {}) };
+  const env: NodeJS.ProcessEnv = { ...process.env, ...(simCli ? { VPY_CLI: await makeSafePath(simCli) } : {}), PITREX_SIM_SDK, VPY_C_SDK, ...(manifest.env || {}) };
   const emDir = resolveEmscriptenDir();
   if (emDir) {
     env.PATH = `${emDir}${require('path').delimiter}${env.PATH || ''}`;
@@ -3751,11 +3775,13 @@ ipcMain.handle('project:importC', async (_e, args?: { dir?: string }) => {
     const name = basename(projectDir);
     const manifestPath = join(projectDir, `${name}.cvproj`);
 
-    // Don't clobber an existing manifest — just open it.
+    // Don't clobber an existing manifest — just open it. Any .cvproj counts: a project
+    // copied into a folder of another name keeps its own (return_of_the_jedi.cvproj in rotj/).
     try {
-      await fs.access(manifestPath);
-      return { ok: true, manifestPath, existed: true };
-    } catch { /* no manifest yet, scaffold one */ }
+      const existing = (await fs.readdir(projectDir)).filter((f) => /\.cvproj$/i.test(f)).sort();
+      const own = existing.find((f) => f.toLowerCase() === `${name}.cvproj`.toLowerCase()) ?? existing[0];
+      if (own) return { ok: true, manifestPath: join(projectDir, own), existed: true };
+    } catch { /* unreadable folder: scaffold below reports it */ }
 
     // Sniff the Makefile for per-target build rules (pitrex + rp2350).
     let buildArg = '';
