@@ -585,6 +585,8 @@ const ARM_TOOLCHAIN_ARCHIVES: Record<string, { file: string; sha256: string }> =
   'linux-arm64':  { file: `arm-gnu-toolchain-${ARM_TOOLCHAIN_VERSION}-aarch64-arm-none-eabi.tar.xz`, sha256: 'd061559d814b205ed30c5b7c577c03317ec447ca51cd5a159d26b12a5bbeb20c' },
   'win32-x64':    { file: `arm-gnu-toolchain-${ARM_TOOLCHAIN_VERSION}-mingw-w64-x86_64-arm-none-eabi.zip`, sha256: '7936cac895611023ffb22a64b8e426098c7104cb689778c1894572ca840b9ece' },
 };
+// No Windows on Arm build: Windows runs the x64 one under emulation.
+ARM_TOOLCHAIN_ARCHIVES['win32-arm64'] = ARM_TOOLCHAIN_ARCHIVES['win32-x64'];
 
 export function armToolchainRootDir(): string {
   return process.env.VECTREX_STUDIO_TOOLCHAIN_DIR || join(os.homedir(), 'VectrexStudio', 'toolchains');
