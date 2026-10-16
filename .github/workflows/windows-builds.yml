@@ -28,7 +28,12 @@ env:
 
 jobs:
   smoke:
-    runs-on: windows-latest
+    # windows-11-arm: an ARM64 PC runs the IDE and its x64 tools under emulation
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-11-arm]
+    runs-on: ${{ matrix.os }}
     steps:
       # The SDK as its release tarball has it: LF line endings.
       - run: git config --global core.autocrlf false

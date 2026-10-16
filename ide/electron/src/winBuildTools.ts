@@ -17,6 +17,8 @@
 //                    proc-macro dependencies, which are compiled and linked FOR THE PC; the
 //                    msvc host links with Visual Studio's link.exe, the gnu host brings its
 //                    own linker. The channel is the SDK's rust-toolchain.toml.
+//   Python           the one emsdk ships for Windows. The pico-sdk's CMake needs a Python 3
+//                    (boot_stage2's checksum script), and Windows has none.
 //
 // Each archive is pinned by version and SHA-256 and lives in
 // ~/VectrexStudio/toolchains/windows/<name>-<version>.
@@ -88,6 +90,36 @@ export function prependPath(env: NodeJS.ProcessEnv, dirs: string[]): void {
 }
 
 const inFlight = new Map<string, Promise<string>>();
+
+/** The Python emsdk ships for Windows: CMake's for the pico-sdk, and the one that runs emsdk.py. */
+const WIN_PYTHON = {
+  version: '3.13.3',
+  /** The folder name emsdk gives it, which the simulator's install has used already. */
+  dir: '3.13.3_64bit',
+  url: 'https://storage.googleapis.com/webassembly/emscripten-releases-builds/deps/python-3.13.3-0-win-amd64.zip',
+  sha256: '6fe7a540c6b8b185780467cf7495e884ee62316ec4abb19e1c735b8a77c62465',
+};
+
+/** The folder holding python.exe (downloaded once). */
+function ensureWindowsPython(log: (line: string) => void): Promise<string> {
+  const id = `emsdk-python-${WIN_PYTHON.dir}`;
+  const running = inFlight.get(id);
+  if (running) return running;
+  const p = (async () => {
+    const dir = join(winToolsRootDir(), id);
+    try { await fs.access(join(dir, 'python.exe')); return dir; } catch { /* not yet */ }
+    log(`[tools] Python ${WIN_PYTHON.version}: downloading (once)...\n`);
+    const out = await installTarball({
+      what: `Python ${WIN_PYTHON.version}`, url: WIN_PYTHON.url, root: winToolsRootDir(), name: id,
+      mustContain: 'python.exe', marker: { url: WIN_PYTHON.url }, progressTag: 'emsdk-python',
+      ext: 'zip', sha256: WIN_PYTHON.sha256, strip: 0,
+    });
+    log(`[tools] Python ${WIN_PYTHON.version} installed: ${out}\n`);
+    return out;
+  })().finally(() => inFlight.delete(id));
+  inFlight.set(id, p);
+  return p;
+}
 
 function ensureTool(t: WinTool, log: (line: string) => void): Promise<string> {
   const id = `${t.name}-${t.version}`;
@@ -190,7 +222,9 @@ async function windowsRust(sdkDir: string | null, base: NodeJS.ProcessEnv, log: 
   const list = await run('rustup', ['target', 'list', '--installed', '--toolchain', toolchain], env, () => {});
   if (list.code !== 0 || !list.out.split(/\s+/).includes(UVM2_RUST_TARGET)) {
     log(`[Rust] Installing Rust ${toolchain} with the ${UVM2_RUST_TARGET} target (one time)...\n`);
-    const t = await run('rustup', ['toolchain', 'install', toolchain, '--profile', 'minimal', '--target', UVM2_RUST_TARGET],
+    // --force-non-host: on an ARM64 Windows rustup sees an aarch64 host and refuses the
+    // x86_64 toolchain, which runs there under Windows' x64 emulation like the rest of the tools.
+    const t = await run('rustup', ['toolchain', 'install', toolchain, '--profile', 'minimal', '--target', UVM2_RUST_TARGET, '--force-non-host'],
       env, (l) => log(`[Rust] ${l}\n`));
     if (t.code !== 0) log(`[Rust] rustup toolchain install ${toolchain} failed (above).\n`);
   }
@@ -237,6 +271,12 @@ export async function windowsBuildEnv(o: {
       o.log(`[tools] SDK ${tag}: uvm2 builds on Windows need SDK ${MIN_WINDOWS_SDK} or later (the Rust build fails on "dlltool"). Pick a newer SDK in Project Settings.\n`);
     }
     if (!env.CMAKE_GENERATOR) env.CMAKE_GENERATOR = 'Ninja';
+    // In front: CMake would otherwise take the Microsoft Store's python.exe stub, or none.
+    try {
+      prependPath(env, [await ensureWindowsPython(o.log)]);
+    } catch (e: any) {
+      o.log(`[tools] Could not install Python ${WIN_PYTHON.version}: ${e?.message || e}\n`);
+    }
     if (dirs.picotool && !env.PICOTOOL_FETCH_FROM_GIT_PATH) env.PICOTOOL_FETCH_FROM_GIT_PATH = toolPath(dirs.picotool);
     Object.assign(env, await windowsRust(o.sdkDir, env, o.log));
   }
@@ -252,11 +292,6 @@ export async function windowsBuildEnv(o: {
 // EMCC as "<emsdk's python> <emscripten>/emcc.py": make's busybox sh does not run .bat files.
 
 export const EMSDK_VERSION = '6.0.3';
-const EMSDK_PYTHON = {
-  dir: '3.13.3_64bit',
-  url: 'https://storage.googleapis.com/webassembly/emscripten-releases-builds/deps/python-3.13.3-0-win-amd64.zip',
-  sha256: '6fe7a540c6b8b185780467cf7495e884ee62316ec4abb19e1c735b8a77c62465',
-};
 const EMSDK_READY = '.vectrex-studio-emsdk-ready';
 
 let emsdkInFlight: Promise<string> | null = null;
@@ -274,14 +309,9 @@ function ensureEmsdk(log: (line: string) => void): Promise<string> {
       root: winToolsRootDir(), name: `emsdk-${EMSDK_VERSION}`, mustContain: 'emsdk.py',
       marker: { version: EMSDK_VERSION }, progressTag: `emsdk-${EMSDK_VERSION}`,
     });
-    // A Python to run emsdk.py with. Not in emsdk's own python/ folder: `emsdk install` unpacks
+    // A Python to run emsdk.py with. Not emsdk's own python/ folder: `emsdk install` unpacks
     // the same Python there, and Windows will not overwrite a running python.exe's DLLs.
-    const boot = await installTarball({
-      what: 'Python for emsdk', url: EMSDK_PYTHON.url, root: winToolsRootDir(), name: `emsdk-python-${EMSDK_PYTHON.dir}`,
-      mustContain: 'python.exe', marker: { url: EMSDK_PYTHON.url }, progressTag: 'emsdk-python',
-      ext: 'zip', sha256: EMSDK_PYTHON.sha256, strip: 0,
-    });
-    const python = join(boot, 'python.exe');
+    const python = join(await ensureWindowsPython(log), 'python.exe');
     const env: NodeJS.ProcessEnv = { ...process.env };
     delete env.PYTHONHOME;
     delete env.PYTHONPATH;
@@ -321,7 +351,7 @@ export async function windowsSimEnv(o: { base: NodeJS.ProcessEnv; log: (line: st
   }
   const emscripten = join(dir, 'upstream', 'emscripten');
   // emsdk's python, or the one its config names when it is the user's own emsdk
-  let python = join(dir, 'python', EMSDK_PYTHON.dir, 'python.exe');
+  let python = join(dir, 'python', WIN_PYTHON.dir, 'python.exe');
   try { await fs.access(python); } catch { python = env.EMSDK_PYTHON || 'python'; }
   env.EMSDK = toolPath(dir);
   env.EM_CONFIG = toolPath(join(dir, '.emscripten'));
