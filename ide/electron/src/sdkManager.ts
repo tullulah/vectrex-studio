@@ -358,6 +358,23 @@ export async function projectSdkVersion(projectFile: string): Promise<ProjectSdk
  * Version + installed folder for a project, downloading the SDK if needed. With
  * `pico: true` (uvm2 builds) also the pico-sdk that SDK asks for, downloaded if needed.
  */
+/**
+ * An installed SDK changed by hand says so in its marker ("local": what was patched in).
+ * Building against it works here and nowhere else: another machine downloads the published
+ * tag, without those changes (return of the jedi used vpy3d scenes that lived only in such a
+ * copy of v1.3.5). Every build against one says so, until the work is in a published SDK.
+ */
+async function warnIfLocalSdk(dir: string, version: string, log: (line: string) => void): Promise<void> {
+  try {
+    const marker = JSON.parse(await fs.readFile(join(dir, COMPLETE_MARKER), 'utf8'));
+    if (marker && typeof marker.local === 'string' && marker.local.trim()) {
+      log(`[SDK] WARNING: SDK ${version} here is a local copy changed by hand (${marker.local.trim()}). ` +
+        `Another machine gets the published ${version} without those changes: publish them in the SDK ` +
+        `and pin the project to that release.\n`);
+    }
+  } catch { /* no marker or unreadable: an ordinary install */ }
+}
+
 export async function resolveProjectSdk(
   projectFile: string,
   log: (line: string) => void,
@@ -370,6 +387,7 @@ export async function resolveProjectSdk(
   if (!(await isSdkInstalled(v.version))) log(`[SDK] Downloading SDK ${v.version} into ${sdkDirFor(v.version)}...\n`);
   try {
     const dir = await ensureSdk(v.version, onProgress);
+    await warnIfLocalSdk(dir, v.version, log);
     if (!opts.pico) return { version: v.version, dir };
     const picoVersion = await picoSdkVersionFor(dir);
     const picoDir = join(picoSdkRootDir(), picoVersion);

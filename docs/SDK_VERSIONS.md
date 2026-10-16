@@ -33,6 +33,14 @@ version = "v1.3.2"
   not have (the upload still works from the multicart's menu, through the SD bridge, but the
   game then has no monitor to debug). The console's reset button (one press: the game
   again, two: the menu) is also `v1.4.0`. See [IDE_GUIDE.md](IDE_GUIDE.md).
+- **vpy3d scenes and scenery (`.vscene`, version-2 `.vmesh`), float on the FPU, SD folders
+  and seek need `v1.4.1` or later.** That work lived only in SDK copies installed on one
+  machine (a "v1.3.5" / "v1.3.6" that was never a published tag) until v1.4.1.
+- **Never change an installed SDK by hand.** A project built against it works on that machine
+  and nowhere else: every other one downloads the published tag. Change the SDK repository,
+  publish a release, pin the project to it. An installed SDK whose marker
+  (`.vectrex-studio-sdk.json`) has a `"local"` note is such a copy, and every build against
+  it says so in the build output (`[SDK] WARNING: SDK vX here is a local copy changed by hand`).
 - New projects (`project:create`, VPy or C — templates in `ide/electron/src/projectTemplates.ts`) and C imports are created pinned to the latest tag.
 - A project with no `[sdk] version` is pinned to the latest tag the first time the IDE
   resolves its SDK (offline: the newest installed release). The IDE writes the pin into
@@ -44,10 +52,10 @@ version = "v1.3.2"
 ## Where releases come from
 
 Releases are the tags of the GitHub repository
-[`tullulah/uvmc2-sdk`](https://github.com/tullulah/uvmc2-sdk) (`v1.1` … `v1.4.0`); what each
+[`tullulah/uvmc2-sdk`](https://github.com/tullulah/uvmc2-sdk) (`v1.1` … `v1.4.1`); what each
 one changes is in the SDK's `CHANGELOG.md` and the tag messages. The uvmc2-starter-kit pins
 the SDK as its `sdk` submodule, and a kit release carries the tag of the SDK it pins
-(`v1.4.0`; the kit has no `v1.3.2` … `v1.3.4`).
+(`v1.4.0`, `v1.4.1`; the kit has no `v1.3.3` or `v1.3.4`).
 
 The IDE downloads the tag tarball
 (`https://codeload.github.com/tullulah/uvmc2-sdk/tar.gz/refs/tags/<tag>`) and extracts
