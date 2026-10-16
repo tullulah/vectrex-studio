@@ -181,7 +181,8 @@ The **Arm GNU Toolchain** is not downloaded: it is large and platform-specific.
   Tested on Ubuntu 24.04 arm64: `gcc-arm-none-eabi` 13.2 builds a `.um2`.
 
   ```sh
-  # Debian/Ubuntu (the Vectrex Studio .deb recommends all of these, so apt installs them with it)
+  # Debian/Ubuntu (the Vectrex Studio .deb depends on all of these but rustup, which it
+  # recommends: Debian 12 and Ubuntu 22.04 have no rustup package)
   sudo apt install gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib \
                    cmake build-essential pkg-config libusb-1.0-0-dev git rustup
   # Fedora
@@ -195,7 +196,9 @@ The **Arm GNU Toolchain** is not downloaded: it is large and platform-specific.
 
   **Rust is set up by the IDE, once.** The Rust toolchain lives in each user's `~/.rustup`, so no package can install it.
   - Before a uvm2 build, the IDE checks for the `thumbv8m.main-none-eabi` target.
-  - If it is missing and rustup is installed, it runs `rustup default stable` when there is no toolchain yet, then `rustup target add`. Every step shows in the build output.
+  - If it is missing and rustup is installed, it runs `rustup default stable` when there is no toolchain yet, then `rustup target add`.
+  - With neither rustup nor cargo, it runs the official installer (`curl https://sh.rustup.rs`, into `~/.cargo`, no sudo; macOS and Linux).
+  - Every step shows in the build output.
 
 When no toolchain is found, the build error and the Project Settings panel show these
 instructions for the machine they run on.

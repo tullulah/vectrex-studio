@@ -644,8 +644,10 @@ export async function armToolchainEnv(): Promise<Record<string, string>> {
 // the thumbv8m.main-none-eabi target. The toolchain is per user (~/.rustup), so no package
 // can set it up; with rustup installed (Linux: the .deb recommends the distribution's
 // rustup), the first uvm2 build does it, said in the build output: `rustup default stable`
-// when there is no toolchain yet, then `rustup target add`. Without rustup it only says
-// what to install; the SDK's own CMake check reports the missing cargo.
+// when there is no toolchain yet, then `rustup target add`. With neither rustup nor cargo
+// (a distribution without a rustup package), it runs the official installer from
+// sh.rustup.rs into ~/.cargo, no sudo (curl is a dependency of the .deb); ~/.cargo/bin is
+// on the IDE's PATH from the start (augmentPathForGuiLaunch).
 
 export const UVM2_RUST_TARGET = 'thumbv8m.main-none-eabi';
 
@@ -680,10 +682,21 @@ export async function ensureUvm2Rust(log: (line: string) => void): Promise<void>
     const cargo = await runTool('cargo', ['--version']);
     if (!cargo.missing) {
       log(`[Rust] cargo found but no rustup: make sure the ${UVM2_RUST_TARGET} target is installed for it.`);
-    } else {
+      return;
+    }
+    if (process.platform === 'win32') {
+      log('[Rust] uvm2 builds need Rust: install it from https://rustup.rs, then build again.');
+      return;
+    }
+    // Neither: the official installer, for this user only. It adds the target too.
+    log('[Rust] No Rust found: installing it from https://sh.rustup.rs into ~/.cargo (a one-time download, a few minutes)…');
+    const inst = await runTool('sh', ['-c',
+      `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --target ${UVM2_RUST_TARGET}`],
+      l => log(`[Rust] ${l}`));
+    if (inst.code !== 0) {
       log(process.platform === 'linux'
-        ? `[Rust] uvm2 builds need Rust: sudo apt install rustup (or https://rustup.rs). The IDE then sets it up on the next build.`
-        : `[Rust] uvm2 builds need Rust: install rustup (https://rustup.rs, or brew install rustup). The IDE then sets it up on the next build.`);
+        ? '[Rust] The installer failed (is curl installed?). Install Rust with: sudo apt install rustup (or see https://rustup.rs)'
+        : '[Rust] The installer failed. Install Rust from https://rustup.rs (or brew install rustup)');
     }
     return;
   }

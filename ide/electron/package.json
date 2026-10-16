@@ -140,19 +140,20 @@
         "libuuid1",
         "libsecret-1-0",
         "libasound2t64 | libasound2",
-        "libgbm1"
-      ],
-      "recommends": [
-        "libappindicator3-1",
+        "libgbm1",
         "fonts-noto-color-emoji",
+        "curl",
+        "git",
         "gcc-arm-none-eabi",
         "libnewlib-arm-none-eabi",
         "libstdc++-arm-none-eabi-newlib",
         "cmake",
         "build-essential",
         "pkg-config",
-        "libusb-1.0-0-dev",
-        "git",
+        "libusb-1.0-0-dev"
+      ],
+      "recommends": [
+        "libappindicator3-1",
         "rustup"
       ],
       "afterInstall": "build/linux/after-install.sh",
