@@ -168,26 +168,26 @@ def main():
 
 def loop():
     if game_state == STATE_TITLE:
-        state_title()
+        run_state_title()
     elif game_state == STATE_GAME_START:
-        state_game_start()
+        run_state_game_start()
     elif game_state == STATE_PLAYING:
-        state_playing()
+        run_state_playing()
     elif game_state == STATE_PLAYER_DEAD:
-        state_player_dead()
+        run_state_player_dead()
     elif game_state == STATE_LEVEL_CLEAR:
-        state_level_clear()
+        run_state_level_clear()
     elif game_state == STATE_BOSS_INTRO:
-        state_boss_intro()
+        run_state_boss_intro()
     elif game_state == STATE_BOSS:
-        state_boss()
+        run_state_boss()
     elif game_state == STATE_GAME_OVER:
-        state_game_over()
+        run_state_game_over()
     elif game_state == STATE_ALL_CLEAR:
-        state_all_clear()
+        run_state_all_clear()
 
 # ── Estado: título ───────────────────────────────────────────────────────────
-def state_title():
+def run_state_title():
     SET_INTENSITY(85)
     DRAW_VECTOR("init_screen", 0, 40)
     PRINT_TEXT(-70, -40, "PRESS A BUTTON")
@@ -201,10 +201,10 @@ def state_title():
         enter_game_start()
 
 # ── Estado: pantalla "ROUND N" ───────────────────────────────────────────────
-def state_game_start():
-    # NOTA: aquí NO se llama a state_playing(). En este estado los enemigos
+def run_state_game_start():
+    # NOTA: aquí NO se llama a run_state_playing(). En este estado los enemigos
     # aún no están spawneados (LOAD_LEVEL+SPAWN_ENEMIES corre cuando frame_timer
-    # llega a 0). Si se llamara state_playing() ahora, count_active_enemies()
+    # llega a 0). Si se llamara run_state_playing() ahora, count_active_enemies()
     # devolvería 0 → enter_level_clear() → salto inmediato al siguiente nivel.
     SHOW_LEVEL()
     PRINT_TEXT(-30, 20, "ROUND")
@@ -215,7 +215,7 @@ def state_game_start():
         game_state = STATE_PLAYING
 
 # ── Estado: gameplay ─────────────────────────────────────────────────────────
-def state_playing():
+def run_state_playing():
     # time_left = time_left - 1
     if time_left <= 0:
         if INVINCIBLE == 0:
@@ -254,7 +254,7 @@ def state_playing():
 
 
 # ── Estado: muerte del jugador ───────────────────────────────────────────────
-def state_player_dead():
+def run_state_player_dead():
     SHOW_LEVEL()
     draw_hud()
     draw_player_death()
@@ -283,7 +283,7 @@ def draw_player_death():
                 DRAW_VECTOR("player_die4", player_x, player_y - camera_y, player_facing)
 
 # ── Estado: nivel completado ─────────────────────────────────────────────────
-def state_level_clear():
+def run_state_level_clear():
     if camera_y < scroll_target:
         camera_y = camera_y + 3
         if camera_y > scroll_target:
@@ -307,7 +307,7 @@ def state_level_clear():
                 enter_game_start()
 
 # ── Estado: aviso de boss ────────────────────────────────────────────────────
-def state_boss_intro():
+def run_state_boss_intro():
     PRINT_TEXT(-30, 20, "WARNING!")
     PRINT_TEXT(-50, 0, "BOSS INCOMING")
     frame_timer = frame_timer - 1
@@ -317,7 +317,7 @@ def state_boss_intro():
         game_state = STATE_BOSS
 
 # ── Estado: boss (placeholder) ───────────────────────────────────────────────
-def state_boss():
+def run_state_boss():
     # TODO: lógica IA boss
     # TODO: patrones de ataque por nivel boss
     # TODO: detección de derrota del boss → enter_level_clear()
@@ -333,7 +333,7 @@ def state_boss():
     draw_hud()
 
 # ── Estado: game over ────────────────────────────────────────────────────────
-def state_game_over():
+def run_state_game_over():
     PRINT_TEXT(-30, 20, "GAME OVER")
     PRINT_TEXT(-30, 0, "SCORE")
     PRINT_NUMBER(30, 0, score)
@@ -343,7 +343,7 @@ def state_game_over():
         game_state = STATE_TITLE
 
 # ── Estado: all clear ────────────────────────────────────────────────────────
-def state_all_clear():
+def run_state_all_clear():
     PRINT_TEXT(-55, 30, "CONGRATULATIONS!")
     PRINT_TEXT(-30, 5, "ALL CLEAR!")
     PRINT_TEXT(-25, -20, "SCORE")
