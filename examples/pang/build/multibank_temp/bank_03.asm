@@ -340,9 +340,9 @@ ASSET_ADDR_TABLE:
     FDB _MAP_VECTORS    ; map
     FDB _ATHENS_BG_VECTORS    ; athens_bg
     FDB _MAP_THEME_MUSIC    ; map_theme
+    FDB _PANG_THEME_MUSIC    ; pang_theme
     FDB _AYERS_BG_VECTORS    ; ayers_bg
     FDB _ANTARCTICA_BG_VECTORS    ; antarctica_bg
-    FDB _PANG_THEME_MUSIC    ; pang_theme
     FDB _PLAYER_WALK_1_VECTORS    ; player_walk_1
     FDB _PLAYER_WALK_2_VECTORS    ; player_walk_2
     FDB _PLAYER_WALK_3_VECTORS    ; player_walk_3
@@ -352,22 +352,22 @@ ASSET_ADDR_TABLE:
     FDB _FUJI_BG_VECTORS    ; fuji_bg
     FDB _FUJI_LEVEL1_V2_LEVEL    ; fuji_level1_v2
     FDB _NEWYORK_BG_VECTORS    ; newyork_bg
-    FDB _BUBBLE_LARGE_VECTORS    ; bubble_large
-    FDB _BUBBLE_MEDIUM_VECTORS    ; bubble_medium
-    FDB _BUBBLE_SMALL_VECTORS    ; bubble_small
     FDB _MAYAN_BG_VECTORS    ; mayan_bg
     FDB _LENINGRAD_BG_VECTORS    ; leningrad_bg
     FDB _EASTER_BG_VECTORS    ; easter_bg
     FDB _LONDON_BG_VECTORS    ; london_bg
     FDB _PARIS_BG_VECTORS    ; paris_bg
+    FDB _BUBBLE_LARGE_VECTORS    ; bubble_large
     FDB _KILIMANJARO_BG_VECTORS    ; kilimanjaro_bg
     FDB _TAJ_BG_VECTORS    ; taj_bg
+    FDB _BUBBLE_MEDIUM_VECTORS    ; bubble_medium
     FDB _BUDDHA_BG_VECTORS    ; buddha_bg
     FDB _KEIRIN_BG_VECTORS    ; keirin_bg
     FDB _PYRAMIDS_BG_VECTORS    ; pyramids_bg
+    FDB _BUBBLE_SMALL_VECTORS    ; bubble_small
     FDB _LOCATION_MARKER_VECTORS    ; location_marker
-    FDB _HOOK_VECTORS    ; hook
     FDB _BUBBLE_HUGE_VECTORS    ; bubble_huge
+    FDB _HOOK_VECTORS    ; hook
 
 ;***************************************************************************
 ; DRAW_VECTOR_BANKED - Draw vector asset with automatic bank switching

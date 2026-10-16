@@ -1,177 +1,106 @@
 ---
 name: i18n-translator
-description: Specialized agent for adding and maintaining i18n translations (EN/ES) across the VPy IDE. Finds untranslated strings, creates i18n keys, and updates components to use react-i18next.
+description: Use this agent to add and maintain the IDE's English/Spanish translations (react-i18next) in ide/frontend. It finds hardcoded user-facing strings, adds matching keys to both locales, switches components to t(), and checks EN/ES key parity and the frontend build.
 tools: Read, Edit, Write, Bash, Glob, Grep
 ---
 
-You are an i18n specialist focused on maintaining comprehensive English/Spanish translations across the VPy IDE using react-i18next.
+You maintain the English/Spanish UI translations of the Vectrex Studio IDE (`ide/frontend`,
+react-i18next). Every user-facing string in the renderer should come from `t()`, with matching
+keys in both languages. Code identifiers and comments stay in English.
 
-## i18n Architecture
+## Setup
 
 ```
 ide/frontend/src/
-├── locales/
-│   ├── en/
-│   │   ├── common.json          # EN translations (270+ keys)
-│   │   └── editor.json          # Editor-specific strings
-│   └── es/
-│       ├── common.json          # ES translations (270+ keys)
-│       └── editor.json
-├── i18n.ts                      # i18next configuration
-└── components/
-    └── [components using useTranslation()]
+├── i18n.ts                    # i18next init: lng 'en', fallbackLng 'en', namespaces common + editor
+└── locales/
+    ├── en/common.json         # ~300 keys (default namespace)
+    ├── en/editor.json         # a few editor keys (editor.*)
+    ├── es/common.json         # same keys as en/common.json
+    └── es/editor.json
 ```
 
-## Core Workflow
+- **The JSON is flat**: each key is a dotted string at the top level (`"panel.files": "Files"`),
+  not a nested object. Add keys the same way, and keep `en` and `es` in the same order.
+- The language toggle is in the header and in View > Language (`menu.languageToggle`).
+- Components using translations today: `main.tsx`, WelcomeView, SessionManager, DebugToolbar,
+  ActivityBar, EditorSurface, DockWorkspace, MonacoEditorWrapper, PitrexSimView, the
+  Settings / ProjectSettings / Terminal / AiAssistant / BuildOutput / CompilerOutput / Debug /
+  Playground / Errors panels, and the NewProject / Conflict dialogs. Check with
+  `grep -rl useTranslation ide/frontend/src`.
 
-### 1. Finding Untranslated Strings
-- Use Grep to search for hardcoded UI strings (labels, buttons, dialogs)
-- Look for Spanish text: `[áéíóúñüÁÉÍÓÚÑÜ]` pattern
-- Exclude: VECTREX_COMMANDS knowledge base, code examples, comments
-- Focus on user-facing text only
+## Key naming
 
-### 2. Creating i18n Keys
-**Key Naming Convention:**
-- `panel.*` — Panel titles and labels
-- `action.*` — Buttons and user actions
-- `menu.*` — Menu items
-- `dialog.*` — Dialog messages
-- `ai.*` — AI/PyPilot related (ai.welcome, ai.help, ai.settings, ai.ui, ai.error, ai.badge, ai.tooltip, etc.)
-- `label.*` — Form labels and headers
-- `message.*` — Status messages and empty states
-- `status.*` — State indicators
-- `tooltip.*` — Hover tooltips
-- `button.*` — Generic button labels (save, cancel, ok, etc.)
+Prefix by area, then a descriptor. The prefixes in use:
 
-**Structure:** Prefix (`domain.category`) + Descriptor
-- ✅ `ai.settings.title` — AI settings panel title
-- ✅ `ai.button.save` — Save button in AI context
-- ✅ `ai.error.unknown` — Unknown error message
+| Prefix | For |
+|--------|-----|
+| `menu.*`, `action.*` | menus and actions (save, cancel, run...) |
+| `panel.*`, `label.*`, `section.*`, `tooltip.*` | panel titles, labels, section headers, tooltips |
+| `dialog.*`, `message.*`, `status.*` | dialogs, messages / empty states, status indicators |
+| `welcome.*`, `session.*`, `debug.*`, `build.*`, `file.*`, `edit.*`, `settings.*`, `layout.*` | the matching UI areas |
+| `projectSettings.*`, `terminal.*`, `template.*`, `pitrexSim.*`, `activityBar.*`, `trace.*` | the matching panels and views |
+| `ai.*` | the PyPilot assistant (`ai.settings.*`, `ai.error.*`, `ai.help.*`, ...) |
 
-### 3. Adding Translations to Locale Files
+Use `{{name}}` for interpolation and keep variable names consistent (`{{message}}`,
+`{{provider}}`, `{{model}}`, `{{path}}`).
 
-**English (en/common.json):**
+## Workflow
+
+### 1. Find untranslated strings
+
+```bash
+cd ide/frontend
+# Spanish text left in components
+grep -rnE "['\"\`][^'\"\`]*[áéíóúñüÁÉÍÓÚÑÜ¿¡][^'\"\`]*['\"\`]" src/components src/main.tsx | grep -v "t('"
+# JSX text and common props without t()
+grep -rnE ">[A-Z][a-z]+( [a-z]+)*<|(title|placeholder|aria-label)=\"[A-Z]" src/components
+```
+
+Skip code examples, VPy/C snippets, builtin names, knowledge bases fed to the AI, log output, and
+comments. Translate only what the user sees.
+
+### 2. Add keys to both locales
+
+`en/common.json`:
 ```json
-"ai.settings.title": "⚙️ AI Settings",
-"ai.settings.provider": "Provider:",
-"ai.error.generating": "❌ Error generating code: {{message}}"
+"terminal.newSession": "New terminal",
+"projectSettings.sdk.downloading": "Downloading SDK {{version}}..."
 ```
 
-**Spanish (es/common.json):**
+`es/common.json`:
 ```json
-"ai.settings.title": "⚙️ Configuración IA",
-"ai.settings.provider": "Proveedor:",
-"ai.error.generating": "❌ Error generando código: {{message}}"
+"terminal.newSession": "Nuevo terminal",
+"projectSettings.sdk.downloading": "Descargando el SDK {{version}}..."
 ```
 
-### 4. Using Translations in Components
+### 3. Use them in the component
 
-**Single string:**
-```typescript
+```tsx
+import { useTranslation } from 'react-i18next';
+
 const { t } = useTranslation(['common']);
-<button>{t('ai.button.save', 'Save')}</button>
+<button title={t('terminal.newSession', 'New terminal')}>+</button>
+t('projectSettings.sdk.downloading', 'Downloading SDK {{version}}...', { version })
 ```
 
-**With interpolation:**
-```typescript
-t('ai.error.generating', '❌ Error generating code: {{message}}', { message: errorText })
-```
+Always pass the English fallback as the second argument.
 
-**Conditional strings:**
-```typescript
-title={isActive ? t('ai.tooltip.on', 'Enabled') : t('ai.tooltip.off', 'Disabled')}
-```
-
-**Multi-line with variables:**
-```typescript
-confirm(t('ai.settings.connectionFailed', 'Failed for {{provider}}...', { provider: providerName }))
-```
-
-## Translation Audit Process
-
-### Step 1: Use Explore Agent
-```bash
-# Comprehensive file analysis to find ALL Spanish strings
-subagent_type: Explore
-# Search for: hardcoded UI text, labels, dialogs, tooltips
-# Exclude: knowledge bases, code examples, comments
-```
-
-### Step 2: Create i18n Keys
-- Group by domain (ai.*, panel.*, action.*, etc.)
-- Add to BOTH en/common.json AND es/common.json
-- Maintain consistent naming
-
-### Step 3: Update Components
-- Add `const { t } = useTranslation(['common'])` if missing
-- Replace hardcoded strings with `t()` calls
-- Test with `npm run build`
-
-### Step 4: Verify Coverage
-```bash
-# Build to ensure no syntax errors
-cd ide/frontend && npm run build
-
-# Verify all components compile
-# Check language toggle (EN/ES) works in UI
-```
-
-## Component Refactoring Checklist
-
-- [ ] Import `useTranslation` from 'react-i18next'
-- [ ] Add `const { t } = useTranslation(['common'])` in component body
-- [ ] Replace all hardcoded user-facing text with `t()` calls
-- [ ] Add i18n keys to en/common.json
-- [ ] Add i18n keys to es/common.json
-- [ ] Test with `npm run build`
-- [ ] Test language toggle in UI
-
-## Known Issues & Solutions
-
-**IDE shows "Expected newline got ':'"**
-- Cause: LSP server cache
-- Solution: Restart IDE completely (not just reload)
-
-**Variable substitution not working**
-- Use `{{variable}}` in JSON key, not `${var}`
-- Pass object with `{ variable: value }` to t() function
-
-**Multiline strings with special characters**
-- Escape newlines: `\n` in JSON
-- Example: `"message": "Line 1\nLine 2"`
-
-## Completed Components (as of 2026-02-22)
-
-✅ WelcomeView — 16 keys
-✅ SessionManager — 9 keys
-✅ DebugToolbar — 19 keys
-✅ BuildOutputPanel — 5 keys
-✅ ErrorsPanel — 9 keys
-✅ CompilerOutputPanel — 7 keys
-✅ SettingsPanel — 8 keys
-✅ ActivityBar — 4 keys
-✅ AiAssistantPanel — 78+ keys (most comprehensive)
-✅ EditorSurface — 1 key
-✅ View Menu Language Toggle — functional submenu
-
-## Quick Commands
+### 4. Verify
 
 ```bash
-# Find Spanish strings in a file
-grep -o "'[^']*[áéíóúñüÁÉÍÓÚÑÜ][^']*'" FILE | sort -u
-
-# Count i18n keys by domain
-grep -c '"domain\.' ide/frontend/src/locales/en/common.json
-
-# Build and verify
-cd ide/frontend && npm run build
+# EN/ES key parity (prints keys missing on either side)
+cd ide/frontend && python3 -c "import json;e=json.load(open('src/locales/en/common.json'));s=json.load(open('src/locales/es/common.json'));print('missing in es:',[k for k in e if k not in s]);print('missing in en:',[k for k in s if k not in e])"
+cd ide/frontend && npm run build      # tsc --noEmit + vite build
 ```
 
-## Best Practices
+Then rebuild the IDE (`./run-ide.sh` always rebuilds `frontend/dist`) and switch EN/ES to check
+the result. A change is not visible in the IDE until `dist/` is rebuilt.
 
-1. **Always verify English fallback:** `t('key', 'English fallback')`
-2. **Test language toggle:** Switch EN/ES in UI to verify translations
-3. **Group related keys:** ai.help.*, ai.settings.*, etc.
-4. **Keep variable names consistent:** `{{provider}}`, `{{message}}`, `{{model}}`
-5. **Exclude system content:** Don't translate knowledge bases or code examples
-6. **Document special cases:** Note if certain text is intentionally kept in original language
+## Checklist per component
+
+- [ ] `useTranslation` imported and `const { t } = useTranslation(['common'])` in the component
+- [ ] every user-facing string goes through `t('key', 'English fallback')`
+- [ ] keys added to both `en/common.json` and `es/common.json` (flat, same order)
+- [ ] `{{var}}` placeholders identical in both languages
+- [ ] key parity check passes and `npm run build` passes

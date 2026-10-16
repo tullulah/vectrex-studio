@@ -28,6 +28,7 @@ pub mod relocation;
 pub mod resolver;    // Symbol resolution (4-step algorithm)
 pub mod bank_layout; // Multibank ROM integration
 pub mod multi_bank_linker; // Phase 6.7: Multi-bank ROM generation
+pub mod sizing;      // Measured function sizes for the bank allocator (generate → assemble → measure)
 
 pub use error::{LinkerError, LinkerResult};
 pub use object::{

@@ -71,6 +71,39 @@ export class Thumb2 implements ICpu {
   /** Accumulated cycle counter since reset(). */
   private _cycles: number = 0;
 
+  /** Instruction-fetch fast path: a linear code region (the RAM/flash image) the
+   * CPU can read directly, skipping the per-byte bus range-dispatch. Set by the
+   * system after load. When PC is in [base, base+mem.length) the fetch reads the
+   * array; otherwise it falls back to bus.read8. Data accesses always use the bus. */
+  private _fetchMem: Uint8Array | null = null;
+  private _fetchBase: number = 0;
+  setFetchRegion(mem: Uint8Array | null, base: number): void {
+    this._fetchMem = mem;
+    this._fetchBase = base >>> 0;
+  }
+
+  /** Data fast path, opt-in: a RAM region whose reads and writes have no side effects,
+   * accessed directly by the 16- and 32-bit loads and stores instead of four bus.read8
+   * range-dispatches each. Only for memory the system would serve from the same array. */
+  private _dataMem: Uint8Array | null = null;
+  private _dataBase: number = 0;
+  /** Stores that went through the data fast path (the rest reach bus.write8): a system
+   *  watching a polling loop counts both to know the loop wrote nothing. */
+  public escrituras = 0;
+  setDataRegion(mem: Uint8Array | null, base: number): void {
+    this._dataMem = mem;
+    this._dataBase = base >>> 0;
+  }
+
+  /** Pages of the data region holding translated code (Thumb2Jit), one byte per 256: a
+   *  store through the fast path into one tells `onWrite` (offset, length). */
+  private _codeWatch: Uint8Array | null = null;
+  private _onCodeWrite: ((o: number, len: number) => void) | null = null;
+  setCodeWatch(watch: Uint8Array | null, onWrite: ((o: number, len: number) => void) | null): void {
+    this._codeWatch = watch;
+    this._onCodeWrite = onWrite;
+  }
+
   /**
    * Set by exec of a WFI instruction; cleared by the outer run-loop at the
    * start of each frame.  The Rp2350System uses this as the frame-sync gate.
@@ -97,6 +130,12 @@ export class Thumb2 implements ICpu {
     this.itState = 0;
     this._cycles = 0;
     this.hitWfi = false;
+    // Registros de sistema: se arranca en modo hilo y sin nada enmascarado.
+    this.ipsr = 0;
+    this.primask = 0;
+    this.basepri = 0;
+    this.faultmask = 0;
+    this.control = 0;
   }
 
   get pc(): number { return this.regs[15]; }
@@ -110,6 +149,108 @@ export class Thumb2 implements ICpu {
   /** Write general-purpose register n (0–15). */
   setReg(n: number, v: number): void { this.regs[n] = v >>> 0; }
 
+  /** xPSR as a debugger shows it: the NZCVQ flags, the Thumb bit (always set on
+   * M-profile) and the exception number. */
+  getXpsr(): number { return ((this.cpsr & 0xf8000000) | (1 << 24) | this.ipsr) >>> 0; }
+
+  /** A debugger's write to xPSR: only the flags are kept (the rest is the core's). */
+  setXpsr(v: number): void { this.cpsr = (this.cpsr & ~0xf8000000) | (v & 0xf8000000); }
+
+  // ─── Registros de sistema del perfil M (MRS / MSR) ─────────────────────
+  //
+  // Este nucleo es FUNCIONAL: no tiene modelo de excepciones, ni pila dual, ni
+  // niveles de privilegio. Los enmascaramientos se guardan para que un
+  // `mrs r0, primask` devuelva lo que el propio programa escribio antes —
+  // patron habitual para guardar y restaurar el estado en una seccion critica—
+  // pero NO deshabilitan nada, porque aqui no hay nada que interrumpa.
+  private primask = 0;
+  private basepri = 0;
+  private faultmask = 0;
+  private control = 0;
+
+  /**
+   * Numero de excepcion activa, el que devuelve `MRS Rd, IPSR`. 0 = modo hilo.
+   *
+   * Este nucleo no VECTORIZA excepciones por su cuenta, pero los sistemas de
+   * arriba las fingen: Uvm2System atiende un `svc` apilando la trama de
+   * Cortex-M a mano y saltando al vector de SVCall. Si el IPSR no acompaña a ese
+   * salto, el manejador pregunta "en que excepcion estoy" y se le contesta 0 —
+   * o sea "en ninguna" — y se va por la rama de error.
+   *
+   * Eso costo un arranque de UVM2: el manejador de SnowBros hacia
+   *
+   *     0x20000110  mrs r0, ipsr
+   *     0x20000114  <comprobacion>
+   *     0x20000116  bkpt #0        <- caia aqui
+   *
+   * Asi que quien finge la excepcion TIENE que anunciarla con setException(), y
+   * devolverla a 0 al retornar. La alternativa —cablear 11 aqui dentro— seria
+   * mentir en el nucleo para tapar una omision del sistema.
+   */
+  private ipsr = 0;
+  /** PCs que ya avisaron de un exclusivo sobre XIP (ver vigilaExclusivo). */
+  private exclusivosXip = new Set<number>();
+  private vigilaExclusivo(addr: number): void {
+    if (addr < 0x10000000 || addr >= 0x18000000) return;
+    const pc = this.regs[15] >>> 0;
+    if (this.exclusivosXip.has(pc)) return;
+    this.exclusivosXip.add(pc);
+    console.warn(`[Thumb2] ACCESO EXCLUSIVO a 0x${addr.toString(16)} (ventana XIP) en pc=0x${pc.toString(16)}: ` +
+                 `en el RP2350 este STREX no termina nunca. La variable tiene que vivir en SRAM.`);
+  }
+  private msplim = 0;
+  private psplim = 0;
+  setException(n: number): void { this.ipsr = n & 0x1ff; }
+  getException(): number { return this.ipsr; }
+
+  /** Numeros SYSm segun ARMv7-M B5.1.1. */
+  private readSysReg(sysm: number, pc: number): number {
+    switch (sysm) {
+      // Solo mantenemos NZCV. EPSR se lee siempre como 0 en un MRS; el numero de
+      // excepcion se suma en las variantes que incluyen el IPSR.
+      case 0:  return this.cpsr & 0xf8000000;                  // APSR
+      case 1:  return (this.cpsr & 0xf8000000) | this.ipsr;    // IAPSR
+      case 2:  return this.cpsr & 0xf8000000;                  // EAPSR
+      case 3:  return (this.cpsr & 0xf8000000) | this.ipsr;    // XPSR
+      case 5:  return this.ipsr;     // IPSR
+      case 6:  return 0;             // EPSR: se lee como 0
+      case 7:  return this.ipsr;     // IEPSR
+      case 8:  case 9:  return this.SP >>> 0;   // MSP / PSP — pila unica aqui
+      case 10: return this.msplim;   // MSPLIM (ARMv8-M)
+      case 11: return this.psplim;   // PSPLIM
+      case 16: return this.primask;
+      case 17: case 18: return this.basepri;    // BASEPRI / BASEPRI_MAX
+      case 19: return this.faultmask;
+      case 20: return this.control;
+      default:
+        throw new Error(`MRS de un registro de sistema no soportado: SYSm=${sysm} at PC=0x${pc.toString(16)}`);
+    }
+  }
+
+  private writeSysReg(sysm: number, mask: number, value: number, pc: number): void {
+    switch (sysm) {
+      case 0: case 1: case 2: case 3:
+        // mask bit1 = escribe las banderas (APSR_nzcvq). bit0 seria GE, que no
+        // existe en este perfil.
+        if (mask & 2) this.cpsr = (this.cpsr & ~0xf8000000) | (value & 0xf8000000);
+        return;
+      case 5: case 6: case 7: return;           // IPSR/EPSR/IEPSR: solo lectura
+      case 8: case 9: this.SP = value >>> 0; return;
+      /* MSPLIM / PSPLIM (ARMv8-M, the M33): the stack limits. Kept and returned, never
+       * checked — a stack overflow is not modelled here. The pico-sdk's crt0 sets MSPLIM at
+       * its second instruction, so any image started at _entry_point (a PSRAM program after
+       * its loader) stopped right there. */
+      case 10: this.msplim = value & ~7; return;
+      case 11: this.psplim = value & ~7; return;
+      case 16: this.primask   = value & 1; return;
+      case 17: case 18: this.basepri = value & 0xff; return;
+      case 19: this.faultmask = value & 1; return;
+      case 20: this.control   = value & 3; return;
+      default:
+        throw new Error(`MSR a un registro de sistema no soportado: SYSm=${sysm} at PC=0x${pc.toString(16)}`);
+    }
+  }
+
   irq(_line: number): void {
     // Interrupts not required for VPy emulation — treat as no-op.
   }
@@ -118,20 +259,52 @@ export class Thumb2 implements ICpu {
   private _stepCount: number = 0;
 
   step(bus: IBus): number {
-    const pc = this.regs[15];
-    const hw0 = bus.read8(pc) | (bus.read8(pc + 1) << 8);
+    // The fetch address is ALWAYS even in Thumb — bit 0 is the interworking/Thumb
+    // state, not part of the address. Some branch/return paths leave a stray bit 0
+    // in regs[15]; if it isn't stripped before fetch the core reads a byte-misaligned
+    // instruction and derails (Musashi's m68k_init: an odd PC turned `ldr.w` into a
+    // 16-bit decode, +2 instead of +4). Normalise once here.
+    const pc = this.regs[15] & ~1;
+    this.regs[15] = pc;
+    // Fetch fast path: read the 16/32-bit instruction directly from the code
+    // array when PC is inside it (RAM-linked games run from SRAM), avoiding 2–4
+    // bus.read8 range-dispatch calls per instruction — the dominant cost for the
+    // heavy Z80/6502 arcade cores.
+    const fm = this._fetchMem;
+    const foff = pc - this._fetchBase;
+    const fast = fm !== null && foff >= 0 && (foff + 3) < fm.length;
+    const hw0 = fast ? (fm![foff] | (fm![foff + 1] << 8))
+                     : (bus.read8(pc) | (bus.read8(pc + 1) << 8));
+    const is32 = (hw0 >>> 11) >= 0x1d;   // 32-bit when bits[15:11] >= 0b11101
+
+    // IT-block conditioning applies to BOTH 16- and 32-bit instructions. It used
+    // to live only in exec16(), so a 32-bit instruction inside an IT block (e.g.
+    // gcc's `itete mi; addmi; addpl.w; strmi; addpl` for the 6502 branch macros)
+    // ran unconditionally AND failed to advance the IT state — desynchronising
+    // the remaining slots so a following conditional store was wrongly skipped
+    // (BEQ/BNE etc. computed the branch target but never wrote it back).
+    // Decide skip BEFORE executing, but advance the IT state AFTER, so that
+    // inItBlock() stays true *during* the instruction — 16-bit ALU ops that
+    // would set flags outside an IT block must NOT set them inside one, and they
+    // check inItBlock() to decide (see setFlagsInIt()).
+    const wasInIt = this.inItBlock();
+    const itSkip = wasInIt && !this.itCondTrue();
 
     let cycles: number;
-
-    // 32-bit instruction when bits[15:11] >= 0b11101 (i.e. 0x1D..0x1F)
-    if ((hw0 >>> 11) >= 0x1d) {
-      const hw1 = bus.read8(pc + 2) | (bus.read8(pc + 3) << 8);
+    if (itSkip) {
+      this.regs[15] = pc + (is32 ? 4 : 2);
+      cycles = 1;
+    } else if (is32) {
+      const hw1 = fast ? (fm![foff + 2] | (fm![foff + 3] << 8))
+                       : (bus.read8(pc + 2) | (bus.read8(pc + 3) << 8));
       this.regs[15] = pc + 4;
       cycles = this.exec32(hw0, hw1, bus, pc);
     } else {
       this.regs[15] = pc + 2;
       cycles = this.exec16(hw0, bus, pc);
     }
+
+    if (wasInIt) this.advanceIt();
 
     this._stepCount++;
     this._cycles += cycles;
@@ -189,6 +362,16 @@ export class Thumb2 implements ICpu {
   private setC(val: boolean): void { this.setFlag(29, val); }
   private setV(val: boolean): void { this.setFlag(28, val); }
 
+  // Flag updates for a *destination-writing* 16-bit ALU op (MOV/ADD/SUB/shift/
+  // logical). In Thumb-1 these set flags OUTSIDE an IT block but NOT inside one
+  // (the S is implicit only outside IT). Compares (CMP/CMN/TST) have no
+  // destination and always set flags, so they keep calling setNZ/setNZCV_*.
+  // step() advances the IT state AFTER the instruction, so inItBlock() is true
+  // here for an in-block instruction.
+  private nzIt(result: number): void { if (!this.inItBlock()) this.setNZ(result); }
+  private addIt(a: number, b: number): void { if (!this.inItBlock()) this.setNZCV_add(a, b); }
+  private subIt(a: number, b: number): void { if (!this.inItBlock()) this.setNZCV_sub(a, b); }
+
   private setNZ(result: number): void {
     const r = u32(result);
     this.setN((r >>> 31) === 1);
@@ -205,6 +388,27 @@ export class Thumb2 implements ICpu {
     this.setZ(r32 === 0);
     this.setC(r64 > 0xffff_ffff);
     // Overflow: sign change when both inputs same sign but result differs
+    const signA = (a32 >>> 31) & 1;
+    const signB = (b32 >>> 31) & 1;
+    const signR = (r32 >>> 31) & 1;
+    this.setV(signA === signB && signR !== signA);
+  }
+
+  /** AddWithCarry(a, b, c) del ARM ARM, con los cuatro flags EXACTOS. Es la unica forma
+   * correcta de calcular los flags de ADC y de SBC (SBC = AddWithCarry(Rn, NOT(op2), C)):
+   * los "aproximados" de antes —sumar el acarreo al segundo operando y usar la resta
+   * normal— daban N/V mal, y con ellos `subs.w; sbcs.w #0; itt lt` (el clamp de un i64
+   * a ±127 que emite rustc) elegia 127 para cualquier cociente: la busqueda de T1 de
+   * uvm2_draw salia distinta de la placa en 105.465 llamadas de una partida de dkong y
+   * nadie lo vio porque la .um2 y la BIOS lo hacian igual de mal. [[thumb2-bugs]] */
+  private setNZCV_addc(a: number, b: number, c: number): void {
+    const a32 = u32(a);
+    const b32 = u32(b);
+    const r64 = a32 + b32 + c;
+    const r32 = u32(r64);
+    this.setN((r32 >>> 31) === 1);
+    this.setZ(r32 === 0);
+    this.setC(r64 > 0xffff_ffff);
     const signA = (a32 >>> 31) & 1;
     const signB = (b32 >>> 31) & 1;
     const signR = (r32 >>> 31) & 1;
@@ -285,11 +489,50 @@ export class Thumb2 implements ICpu {
     return u32(v >> shift);
   }
 
+  /** RRX: rota una posicion a la derecha METIENDO el acarreo por arriba. Es la mitad baja
+   *  de todo desplazamiento de 64 bits en UNA posicion, que es como LLVM compila `/2` y
+   *  `>>1` sobre un i64/u64 (`asrs rhi,#1` deja el bit expulsado en C y `rrx rlo` lo
+   *  recoge). Con dos o mas posiciones LLVM ya no la usa, y por eso `/4` salia bien.
+   *
+   *  ESTUVO SIN IMPLEMENTAR, devolviendo el valor intacto, con un comentario que decia
+   *  que el codegen de VPy no la generaba — cierto para VPy, falso para el Rust del SDK.
+   *  El efecto: `den / 2` devolvia `den`, asi que el termino de redondeo de `round_div`
+   *  en ramp.rs valia el doble y CADA tasa de rampa salia mal en el emulador. Se
+   *  diagnostico persiguiendo un `vx = 1` en un vector vertical puro (dx = 0). */
+  private rrx(val: number): number {
+    return u32((u32(val) >>> 1) | (this.flagC << 31));
+  }
+
+  /** DecodeImmShift (ARM ARM A6.3.3): con el inmediato a 0, LSR y ASR significan 32 y ROR
+   *  significa RRX. Solo LSL a 0 es "no desplazar". */
+  private shiftImm(val: number, type: number, amt: number): number {
+    switch (type) {
+      case 0:  return amt === 0 ? u32(val) : this.lsl(val, amt, false);
+      case 1:  return this.lsr(val, amt === 0 ? 32 : amt, false);
+      case 2:  return this.asr(val, amt === 0 ? 32 : amt, false);
+      default: return amt === 0 ? this.rrx(val) : this.ror(val, amt, false);
+    }
+  }
+
+  /** The carry-out of an immediate shift (DecodeImmShift + Shift_C): 0/1, or -1 when the
+   *  carry is left as it is (LSL #0). What a flag-setting LOGICAL instruction with a
+   *  shifted register (ANDS, ORRS, EORS, BICS, MOVS, MVNS, TST, TEQ) puts in C. */
+  private shiftImmCarry(val: number, type: number, amt: number): number {
+    const v = val >>> 0;
+    switch (type) {
+      case 0:  return amt === 0 ? -1 : (v >>> (32 - amt)) & 1;
+      case 1:  return amt === 0 ? v >>> 31 : (v >>> (amt - 1)) & 1;
+      case 2:  return amt === 0 ? v >>> 31 : (v >>> (amt - 1)) & 1;
+      default: return amt === 0 ? v & 1 : (v >>> (amt - 1)) & 1;   // RRX / ROR
+    }
+  }
+
   private ror(val: number, amount: number, updateC: boolean): number {
     const v = u32(val);
     amount &= 31;
     if (amount === 0) {
-      // RRX — not generated by VPy codegen, but handle gracefully
+      /* Por REGISTRO, un desplazamiento de 0 no desplaza. RRX es el caso del inmediato a
+       * 0 y lo resuelve `shiftImm`, no este helper. */
       return v;
     }
     const result = ror32(v, amount);
@@ -299,11 +542,25 @@ export class Thumb2 implements ICpu {
 
   // ─── Memory helpers ───────────────────────────────────────────────────
 
+  /** Los 32 registros dobles del VFP, como 64 palabras. Solo se guardan y se restauran:
+   *  ver la nota de VLDM/VSTM. */
+  private vfp = new Uint32Array(64);
+
   private read16(bus: IBus, addr: number): number {
+    const m = this._dataMem;
+    if (m !== null) {
+      const o = (addr - this._dataBase) >>> 0;
+      if (o < m.length - 1) return m[o] | (m[o + 1] << 8);
+    }
     return bus.read8(addr) | (bus.read8(addr + 1) << 8);
   }
 
   private read32(bus: IBus, addr: number): number {
+    const m = this._dataMem;
+    if (m !== null) {
+      const o = (addr - this._dataBase) >>> 0;
+      if (o < m.length - 3) return (m[o] | (m[o + 1] << 8) | (m[o + 2] << 16) | (m[o + 3] << 24)) >>> 0;
+    }
     return u32(bus.read8(addr)
       | (bus.read8(addr + 1) << 8)
       | (bus.read8(addr + 2) << 16)
@@ -311,11 +568,31 @@ export class Thumb2 implements ICpu {
   }
 
   private write16(bus: IBus, addr: number, val: number): void {
+    const m = this._dataMem;
+    if (m !== null) {
+      const o = (addr - this._dataBase) >>> 0;
+      if (o < m.length - 1) {
+        m[o] = val; m[o + 1] = val >>> 8; this.escrituras++;
+        const w = this._codeWatch;
+        if (w !== null && (w[o >>> 8] | w[(o + 1) >>> 8])) this._onCodeWrite!(o, 2);
+        return;
+      }
+    }
     bus.write8(addr,     val & 0xff);
     bus.write8(addr + 1, (val >>> 8) & 0xff);
   }
 
   private write32(bus: IBus, addr: number, val: number): void {
+    const m = this._dataMem;
+    if (m !== null) {
+      const o = (addr - this._dataBase) >>> 0;
+      if (o < m.length - 3) {
+        m[o] = val; m[o + 1] = val >>> 8; m[o + 2] = val >>> 16; m[o + 3] = val >>> 24; this.escrituras++;
+        const w = this._codeWatch;
+        if (w !== null && (w[o >>> 8] | w[(o + 3) >>> 8])) this._onCodeWrite!(o, 4);
+        return;
+      }
+    }
     const v = u32(val);
     bus.write8(addr,     v & 0xff);
     bus.write8(addr + 1, (v >>> 8)  & 0xff);
@@ -341,14 +618,8 @@ export class Thumb2 implements ICpu {
   // =========================================================================
 
   private exec16(hw: number, bus: IBus, pc: number): number {
-    // Handle IT-block conditioning: if we're inside an IT block and the
-    // condition is false, skip this instruction (but still advance IT state).
-    if (this.inItBlock()) {
-      const execute = this.itCondTrue();
-      this.advanceIt();
-      if (!execute) return 1;
-    }
-
+    // IT-block conditioning (skip + advance) is handled in step() for BOTH
+    // 16- and 32-bit instructions, so exec16 no longer does it here.
     const op = (hw >>> 10) & 0x3f;   // bits[15:10]
 
     // ── Shift / Add / Sub / Move / Compare (bits[15:14] = 00 or 001) ──────
@@ -455,7 +726,13 @@ export class Thumb2 implements ICpu {
           cycles++;
         }
       }
-      this.regs[rn] = addr;  // writeback
+      /* LDM CON LA BASE EN LA LISTA NO ESCRIBE LA BASE (ARM ARM, LDM T1: "if wback &&
+       * registers<n> == '0'"). `ldmia r3, {r1, r2, r3}` —lo que rustc emite para cargar
+       * tres campos seguidos de un struct— dejaba r3 = base+12 en vez del campo, y la BIOS
+       * del cartucho propio calculaba el sector del directorio raiz como 0x2007edb4*2+1.
+       * STM siempre escribe la base (la base en la lista es UNPREDICTABLE salvo si es la
+       * mas baja, y ahi el valor guardado es el de antes, que es lo que hace este bucle). */
+      if (!(l && (rlist & (1 << rn)))) this.regs[rn] = addr;  // writeback
       return cycles;
     }
 
@@ -467,7 +744,9 @@ export class Thumb2 implements ICpu {
         throw new Error(`UDF at PC=0x${pc.toString(16)}`);
       }
       if (cond === 0xf) {
-        // SVC — treat as NOP in emulator
+        // SVC #imm8 — supervisor call. Dispatch to the system's BIOS syscall
+        // handler if it provides one (RP2350); otherwise a NOP (no supervisor).
+        bus.onSvc?.(hw & 0xff, this);
         return 1;
       }
       if (this.condPasses(cond)) {
@@ -501,23 +780,23 @@ export class Thumb2 implements ICpu {
         case 0: {  // MOV Rd, #imm8
           const r = u32(imm8);
           this.regs[rdn] = r;
-          this.setNZ(r);
+          this.nzIt(r);
           // C,V unchanged
           break;
         }
-        case 1: {  // CMP Rn, #imm8
+        case 1: {  // CMP Rn, #imm8 (compare — always sets flags)
           this.setNZCV_sub(this.regs[rdn], imm8);
           break;
         }
         case 2: {  // ADD Rd, #imm8
           const a = this.regs[rdn];
-          this.setNZCV_add(a, imm8);
+          this.addIt(a, imm8);
           this.regs[rdn] = u32(a + imm8);
           break;
         }
         case 3: {  // SUB Rd, #imm8
           const a = this.regs[rdn];
-          this.setNZCV_sub(a, imm8);
+          this.subIt(a, imm8);
           this.regs[rdn] = u32(a - imm8);
           break;
         }
@@ -535,15 +814,20 @@ export class Thumb2 implements ICpu {
       const rm   = (hw >>> 3) & 0x7;
       const rd   = hw & 0x7;
       let result: number;
+      // Inside an IT block a 16-bit shift sets NO flags, the carry included (it is LSLS/LSRS/
+      // ASRS outside one, LSL<c>/LSR<c>/ASR<c> inside): nzIt guarded N and Z but C was set
+      // anyway, and a following conditional instruction tested the wrong carry (found
+      // against Unicorn in vectrex_draw's ramp_params_chain_qn: `it hi; lsrhi r3, r0, #3`).
+      const c = !this.inItBlock();
       if (shiftType === 0) {
-        result = this.lsl(this.regs[rm], imm5 === 0 ? 0 : imm5, imm5 !== 0);
+        result = this.lsl(this.regs[rm], imm5 === 0 ? 0 : imm5, c && imm5 !== 0);
       } else if (shiftType === 1) {
-        result = this.lsr(this.regs[rm], imm5 === 0 ? 32 : imm5, true);
+        result = this.lsr(this.regs[rm], imm5 === 0 ? 32 : imm5, c);
       } else {
-        result = this.asr(this.regs[rm], imm5 === 0 ? 32 : imm5, true);
+        result = this.asr(this.regs[rm], imm5 === 0 ? 32 : imm5, c);
       }
       this.regs[rd] = result;
-      this.setNZ(result);
+      this.nzIt(result);
       return 1;
     }
 
@@ -561,26 +845,26 @@ export class Thumb2 implements ICpu {
       const rm = (hw >>> 6) & 0x7;
       const a  = this.regs[rn];
       const b  = this.regs[rm];
-      this.setNZCV_add(a, b);
+      this.addIt(a, b);
       this.regs[rd] = u32(a + b);
     } else if (b12_9 === 0xd) {
       // SUB Rd, Rn, Rm
       const rm = (hw >>> 6) & 0x7;
       const a  = this.regs[rn];
       const b  = this.regs[rm];
-      this.setNZCV_sub(a, b);
+      this.subIt(a, b);
       this.regs[rd] = u32(a - b);
     } else if (b12_9 === 0xe) {
       // ADD Rd, Rn, #imm3
       const imm3 = (hw >>> 6) & 0x7;
       const a    = this.regs[rn];
-      this.setNZCV_add(a, imm3);
+      this.addIt(a, imm3);
       this.regs[rd] = u32(a + imm3);
     } else if (b12_9 === 0xf) {
       // SUB Rd, Rn, #imm3
       const imm3 = (hw >>> 6) & 0x7;
       const a    = this.regs[rn];
-      this.setNZCV_sub(a, imm3);
+      this.subIt(a, imm3);
       this.regs[rd] = u32(a - imm3);
     } else {
       throw new Error(`Unimplemented shift_add group: 0x${hw.toString(16).padStart(4,'0')}`);
@@ -601,34 +885,34 @@ export class Thumb2 implements ICpu {
       case 0x0: {  // AND
         const r = u32(a & b);
         this.regs[rdn] = r;
-        this.setNZ(r);
+        this.nzIt(r);
         break;
       }
       case 0x1: {  // EOR
         const r = u32(a ^ b);
         this.regs[rdn] = r;
-        this.setNZ(r);
+        this.nzIt(r);
         break;
       }
       case 0x2: {  // LSL reg
         const shift = b & 0xff;
-        const r = this.lsl(a, shift, true);
+        const r = this.lsl(a, shift, !this.inItBlock());   // no flags inside IT (see the shifts above)
         this.regs[rdn] = r;
-        this.setNZ(r);
+        this.nzIt(r);
         break;
       }
       case 0x3: {  // LSR reg
         const shift = b & 0xff;
-        const r = this.lsr(a, shift === 0 ? 0 : shift, shift !== 0);
+        const r = this.lsr(a, shift === 0 ? 0 : shift, shift !== 0 && !this.inItBlock());
         this.regs[rdn] = r;
-        this.setNZ(r);
+        this.nzIt(r);
         break;
       }
       case 0x4: {  // ASR reg
         const shift = b & 0xff;
-        const r = this.asr(a, shift, shift !== 0);
+        const r = this.asr(a, shift, shift !== 0 && !this.inItBlock());
         this.regs[rdn] = r;
-        this.setNZ(r);
+        this.nzIt(r);
         break;
       }
       case 0x5: {  // ADC
@@ -636,29 +920,30 @@ export class Thumb2 implements ICpu {
         const r64 = u32(a) + u32(b) + carry;
         const r32 = u32(r64);
         this.regs[rdn] = r32;
-        this.setN((r32 >>> 31) === 1);
-        this.setZ(r32 === 0);
-        this.setC(r64 > 0xffff_ffff);
-        const sA = (a >>> 31) & 1;
-        const sB = (b >>> 31) & 1;
-        const sR = (r32 >>> 31) & 1;
-        this.setV(sA === sB && sR !== sA);
+        if (!this.inItBlock()) {
+          this.setN((r32 >>> 31) === 1);
+          this.setZ(r32 === 0);
+          this.setC(r64 > 0xffff_ffff);
+          const sA = (a >>> 31) & 1;
+          const sB = (b >>> 31) & 1;
+          const sR = (r32 >>> 31) & 1;
+          this.setV(sA === sB && sR !== sA);
+        }
         break;
       }
       case 0x6: {  // SBC
         const borrow = 1 - this.flagC;
         const r64 = u32(a) - u32(b) - borrow;
         const r32 = u32(r64);
+        if (!this.inItBlock()) this.setNZCV_addc(a, ~b, this.flagC);   // exactos
         this.regs[rdn] = r32;
-        this.setNZCV_sub(a, b + borrow);  // approximate for flags
-        this.regs[rdn] = r32;  // restore after setNZCV_sub overwrites via sub
         break;
       }
       case 0x7: {  // ROR
         const shift = b & 0xff;
-        const r = this.ror(a, shift, shift !== 0);
+        const r = this.ror(a, shift, shift !== 0 && !this.inItBlock());
         this.regs[rdn] = r;
-        this.setNZ(r);
+        this.nzIt(r);
         break;
       }
       case 0x8: {  // TST
@@ -669,7 +954,7 @@ export class Thumb2 implements ICpu {
       case 0x9: {  // RSB / NEG (Rd = 0 - Rn)
         const r = u32(0 - b);
         this.regs[rdn] = r;
-        this.setNZCV_sub(0, b);
+        this.subIt(0, b);
         break;
       }
       case 0xa: {  // CMP
@@ -683,7 +968,7 @@ export class Thumb2 implements ICpu {
       case 0xc: {  // ORR
         const r = u32(a | b);
         this.regs[rdn] = r;
-        this.setNZ(r);
+        this.nzIt(r);
         break;
       }
       case 0xd: {  // MUL
@@ -692,19 +977,19 @@ export class Thumb2 implements ICpu {
         // at the extremes, but for VPy the values are bounded to ±127 typically.
         const r = u32(Math.imul(a, b));
         this.regs[rdn] = r;
-        this.setNZ(r);
+        this.nzIt(r);
         break;
       }
       case 0xe: {  // BIC
         const r = u32(a & ~b);
         this.regs[rdn] = r;
-        this.setNZ(r);
+        this.nzIt(r);
         break;
       }
       case 0xf: {  // MVN
         const r = u32(~b);
         this.regs[rdn] = r;
-        this.setNZ(r);
+        this.nzIt(r);
         break;
       }
     }
@@ -965,12 +1250,190 @@ export class Thumb2 implements ICpu {
       return 1;
     }
 
+    // ── CPS — `1011 0110 011 im 0 a i f`  (CPSIE/CPSID)
+    //
+    // Enmascarar interrupciones. Aqui no hay ninguna que enmascarar, pero el valor
+    // SI se guarda: el patron de una seccion critica es
+    //
+    //     mrs r0, primask ; cpsid i ; ...trabajo... ; msr primask, r0
+    //
+    // y si el `mrs` no devuelve lo que el `cpsid` puso, el restaurar deja el estado
+    // equivocado. Lanzar una excepcion aqui paraba el arranque del pico-sdk en
+    // 0xb672 = `cpsid i`.
+    if ((hw & 0xffe8) === 0xb660) {
+      const deshabilita = (hw >>> 4) & 1;
+      if (hw & 2) this.primask   = deshabilita;   // i
+      if (hw & 1) this.faultmask = deshabilita;   // f
+      return 1;
+    }
+
     throw new Error(`Unimplemented 16-bit misc: 0x${hw.toString(16).padStart(4,'0')}`);
   }
 
   // =========================================================================
   // 32-bit instruction execution
   // =========================================================================
+
+  /* Banderas de la comparacion VFP (FPSCR[31:28]); `vmrs APSR_nzcv, fpscr` las copia al CPSR. */
+  private fpscrNZCV = 0;
+  private readonly fpBits = new Uint32Array(1);
+  private readonly fpF32 = new Float32Array(this.fpBits.buffer);
+  private fS(i: number): number { this.fpBits[0] = this.vfp[i & 31]; return this.fpF32[0]; }
+  private fSet(i: number, v: number): void { this.fpF32[0] = v; this.vfp[i & 31] = this.fpBits[0]; }
+
+  /* VFPv4 SIMPLE PRECISION, el subconjunto que emiten gcc y newlib para `float` en un
+   * Cortex-M33 (medido en el .um2 de Major Havoc: vmov, vldr/vstr, vcvt, vsub, vdiv, vfma,
+   * vcmpe, vmrs; anadidos vadd/vmul/vmla/vabs/vneg/vsqrt por ser la misma tabla). Nada de
+   * doble precision ni de modos de redondeo: si aparece algo fuera de esto, devuelve -1 y
+   * el que llama sigue avisando con "Unimplemented", que es lo que hay que ver. Devuelve
+   * ciclos (>= 0) si la ejecuto. */
+  private exec32_vfp(hw0: number, hw1: number, bus: IBus, _pc: number): number {
+    const sz = (hw1 >>> 8) & 1;                      // 1 = doble: fuera de este subconjunto
+    const D = (hw0 >>> 6) & 1, N = (hw1 >>> 7) & 1, M = (hw1 >>> 5) & 1;
+    const Vd = (hw1 >>> 12) & 0xF, Vn = hw0 & 0xF, Vm = hw1 & 0xF;
+    const Sd = (Vd << 1) | D, Sn = (Vn << 1) | N, Sm = (Vm << 1) | M;
+
+    /* LAS DE ARMv8 (FPv5), que el M33 tiene y gcc emite con -march=armv8-m.main+fp: roundf,
+     * floorf y ceilf salen como VRINTA/M/P, y un `a > b ? a : b` en float como VSEL. Las
+     * encontro ScummVM (BdfFont::scaleFont, la primera); sin ellas el emulador se paraba en
+     * "Unimplemented" y en el chip corrian bien. Solo simple precision, como el resto. */
+    if ((hw0 & 0xFF80) === 0xFE00 && (hw1 & 0x0F50) === 0x0A00) {        // VSEL<cc>.F32
+      const cc = (hw0 >>> 4) & 3;                    // EQ, VS, GE, GT, sobre las banderas del APSR
+      const pass = this.evalCond([0x0, 0x6, 0xA, 0xC][cc]);
+      this.vfp[Sd & 31] = this.vfp[(pass ? Sn : Sm) & 31];
+      return 1;
+    }
+    if ((hw0 & 0xFFBC) === 0xFEB8 && (hw1 & 0x0FD0) === 0x0A40) {        // VRINT{A,N,P,M}.F32
+      const x = this.fS(Sm);
+      let r: number;
+      switch (hw0 & 3) {
+        case 0: r = x < 0 ? -Math.round(-x) : Math.round(x); break;                  // A: empates lejos del 0
+        case 1: { const f = Math.floor(x), d = x - f;                                // N: empates al par
+                  r = d > 0.5 ? f + 1 : d < 0.5 ? f : (f % 2 === 0 ? f : f + 1); break; }
+        case 2: r = Math.ceil(x); break;                                              // P: hacia +inf
+        default: r = Math.floor(x); break;                                            // M: hacia -inf
+      }
+      this.fSet(Sd, r);
+      return 1;
+    }
+
+    if ((hw0 & 0xFF00) === 0xEE00 && (hw1 & 0x10) !== 0) {
+      // Transferencias con registros del nucleo (forma MCR/MRC).
+      const rt = (hw1 >>> 12) & 0xF;
+      const aCore = (hw0 >>> 4) & 1;
+      if ((hw0 & 0xFFF0) === 0xEEF0 && (hw1 & 0x0FFF) === 0x0A10) {      // VMRS
+        if (rt === 15) this.cpsr = ((this.cpsr & 0x0FFFFFFF) | (this.fpscrNZCV << 28)) >>> 0;
+        else this.regs[rt] = (this.fpscrNZCV << 28) >>> 0;
+        return 1;
+      }
+      if ((hw0 & 0xFFF0) === 0xEEE0 && (hw1 & 0x0FFF) === 0x0A10) {      // VMSR
+        this.fpscrNZCV = (this.regs[rt] >>> 28) & 0xF;
+        return 1;
+      }
+      if ((hw0 & 0xFFE0) === 0xEE00 && (hw1 & 0x007F) === 0x0010 && sz === 0) {   // VMOV Sn <-> Rt
+        if (aCore) this.regs[rt] = this.vfp[Sn & 31] >>> 0;
+        else       this.vfp[Sn & 31] = this.regs[rt] >>> 0;
+        return 1;
+      }
+      return -1;
+    }
+    if ((hw0 & 0xFFE0) === 0xEC40) {
+      // VMOV dos registros del nucleo <-> dos simples (1010) o un doble (1011).
+      const L = (hw0 >>> 4) & 1, rt2 = hw0 & 0xF, rt = (hw1 >>> 12) & 0xF;
+      const lo = sz ? ((Vm << 1) | (M << 5)) & 63 : Sm;   // doble: d(Vm|M<<4) -> palabras 2d, 2d+1
+      const idx0 = sz ? (((M << 4) | Vm) << 1) : lo, idx1 = idx0 + 1;
+      if (L) { this.regs[rt] = this.vfp[idx0 & 63] >>> 0; this.regs[rt2] = this.vfp[idx1 & 63] >>> 0; }
+      else   { this.vfp[idx0 & 63] = this.regs[rt] >>> 0;  this.vfp[idx1 & 63] = this.regs[rt2] >>> 0; }
+      return 1;
+    }
+    if ((hw0 & 0xFE00) === 0xEC00 && ((hw0 >>> 8) & 1) === 1 && ((hw0 >>> 5) & 1) === 0) {
+      // VLDR / VSTR: 1110 1101 U D 0 L Rn | Vd 101 sz imm8
+      const U = (hw0 >>> 7) & 1, L = (hw0 >>> 4) & 1, rn = hw0 & 0xF;
+      const imm = (hw1 & 0xFF) << 2;
+      /* Align(PC, 4), with regs[15] already = this instruction + 4 (step() sets it before
+       * exec32). It said (regs[15] + 2) & ~3, which is right only when the instruction sits
+       * on a multiple of 4: from an address 2 mod 4 it read the literal pool one word too
+       * far, and a float constant came back as its neighbour — silently. Found 2026-10-02
+       * with n64/sm64/bench (vldr s14,[pc,#200] at 0x200005f6 loaded 0, not 1000.0). The
+       * integer LDR literal below (T2) already had this fix and says why. */
+      const base = rn === 15 ? (this.regs[15] & ~3) >>> 0 : this.regs[rn] >>> 0;
+      const dir = (U ? base + imm : base - imm) >>> 0;
+      const n = sz ? 2 : 1, idx = sz ? (((D << 4) | Vd) << 1) : Sd;
+      for (let i = 0; i < n; i++) {
+        if (L) this.vfp[(idx + i) & 63] = this.read32(bus, (dir + 4 * i) >>> 0) >>> 0;
+        else   this.write32(bus, (dir + 4 * i) >>> 0, this.vfp[(idx + i) & 63] >>> 0);
+      }
+      return 2;
+    }
+    if ((hw0 & 0xFF00) !== 0xEE00 || sz !== 0 || (hw1 & 0x10) !== 0) return -1;
+
+    // Proceso de datos, simple precision: 1110 1110 opc1(D) opc2 | Vd 101 0 opc3 M 0 Vm
+    const opc1 = ((hw0 >>> 4) & 0xB);            // bits 23,21,20 (D esta en el 22)
+    const opc3 = (hw1 >>> 6) & 3;
+    const a = this.fS(Sn), b = this.fS(Sm), d = this.fS(Sd);
+    const f = Math.fround;
+    switch (opc1) {
+      case 0x0: this.fSet(Sd, f(opc3 & 1 ? d - a * b : d + a * b)); return 1;      // VMLA / VMLS
+      case 0x1: this.fSet(Sd, f(opc3 & 1 ? -(a * b) : a * b)); return 1;           // VNMLS/VNMLA (aprox.)
+      case 0x2: this.fSet(Sd, f(opc3 & 1 ? -(a * b) : a * b)); return 1;           // VMUL / VNMUL
+      case 0x3: this.fSet(Sd, f(opc3 & 1 ? a - b : a + b)); return 1;              // VADD / VSUB
+      case 0x8: this.fSet(Sd, f(a / b)); return 1;                                 // VDIV
+      case 0x9: this.fSet(Sd, f(opc3 & 1 ? -d + a * b : -d - a * b)); return 1;    // VFNMS/VFNMA
+      case 0xA: this.fSet(Sd, f(opc3 & 1 ? d - a * b : d + a * b)); return 1;      // VFMA / VFMS
+      case 0xB: {
+        // opc2 = Vn distingue: 0000 vmov/vabs/vneg/vsqrt, 0100/0101 vcmp, 1000 vcvt de entero,
+        // 1100/1101 vcvt a entero. Solo con opc3 impar (bit 6); el par es VMOV inmediato.
+        if ((opc3 & 1) === 0) {                                                    // VMOV.F32 #imm
+          const imm4H = hw0 & 0xF, imm4L = hw1 & 0xF, imm8 = (imm4H << 4) | imm4L;
+          const sign = imm8 >>> 7, e = (imm8 >>> 4) & 7, frac = imm8 & 0xF;
+          const exp = (sign ? 0 : 0) + (((imm8 >>> 6) & 1) ? 0x7C : 0x80) + (e & 3) * 0 ;   // se recompone abajo
+          void exp;
+          // VFPExpandImm(imm8, 32): sign | NOT(imm8<6>) | Replicate(imm8<6>,5) | imm8<5:0> | Zeros(19)
+          const b6 = (imm8 >>> 6) & 1;
+          const bits = ((sign << 31) | ((b6 ^ 1) << 30) | ((b6 ? 0x1F : 0) << 25) | ((imm8 & 0x3F) << 19)) >>> 0;
+          this.vfp[Sd & 31] = bits; void e; void frac;
+          return 1;
+        }
+        switch (Vn) {
+          case 0x0:
+            if (opc3 === 1) this.fSet(Sd, b);                                      // VMOV
+            else this.fSet(Sd, Math.abs(b));                                       // VABS
+            return 1;
+          case 0x1:
+            if (opc3 === 1) this.fSet(Sd, -b);                                     // VNEG
+            else this.fSet(Sd, f(Math.sqrt(b)));                                   // VSQRT
+            return 1;
+          case 0x4: case 0x5: {                                                    // VCMP / VCMPE
+            const y = Vn === 0x5 ? 0 : b;
+            let nzcv: number;
+            if (Number.isNaN(d) || Number.isNaN(y)) nzcv = 0x3;                   // sin orden: C V
+            else if (d === y) nzcv = 0x6;                                          // igual: Z C
+            else if (d < y) nzcv = 0x8;                                            // menor: N
+            else nzcv = 0x2;                                                       // mayor: C
+            this.fpscrNZCV = nzcv;
+            return 1;
+          }
+          case 0x8: {                                                              // VCVT.F32 desde entero
+            const signed = (opc3 >>> 1) & 1;   // hw1 bit 7 = op: 1 con signo, 0 sin signo
+            const raw = this.vfp[Sm & 31] >>> 0;
+            this.fSet(Sd, f(signed ? (raw | 0) : raw));
+            return 1;
+          }
+          case 0xC: case 0xD: {                                                    // VCVT a entero
+            const signed = Vn === 0xD;
+            const rz = (hw1 >>> 7) & 1;           // 1 = truncar (lo que emite gcc), 0 = FPSCR (redondeo al mas cercano)
+            let v = rz ? Math.trunc(b) : Math.round(b);
+            if (Number.isNaN(v)) v = 0;
+            if (signed) { if (v > 2147483647) v = 2147483647; if (v < -2147483648) v = -2147483648; this.vfp[Sd & 31] = v >>> 0; }
+            else { if (v < 0) v = 0; if (v > 4294967295) v = 4294967295; this.vfp[Sd & 31] = v >>> 0; }
+            return 1;
+          }
+        }
+        return -1;
+      }
+    }
+    return -1;
+  }
 
   private exec32(hw0: number, hw1: number, bus: IBus, pc: number): number {
     // ARM Thumb-2 32-bit dispatch.
@@ -979,15 +1442,11 @@ export class Thumb2 implements ICpu {
     //   11110 (0x1E) → data-processing immediate OR branch (hw1[15] discriminates)
     //   11111 (0x1F) → coprocessor / FP / misc
 
-    // 32-bit instructions inside IT blocks must also be gated by the condition.
-    // (The 16-bit exec16 path already does this; exec32 must mirror it so that
-    //  non-flag-setting 32-bit MOVs, e.g. mov.w r0, #1, work correctly inside ITE.)
-    if (this.inItBlock()) {
-      const execute = this.itCondTrue();
-      this.advanceIt();
-      if (!execute) return 1;
-    }
-
+    // IT-block conditioning (skip + advance) is handled once in step() for BOTH
+    // 16- and 32-bit instructions. It must NOT be repeated here: doing it in both
+    // step() and exec32 advanced the IT state TWICE per 32-bit instruction,
+    // desyncing mixed 16/32-bit IT blocks (e.g. the 6502 BIT flag macro
+    // `ite eq; orreq.w; bicne.w` ran the else branch too, corrupting the Z flag).
     const op5 = (hw0 >>> 11) & 0x1f;
 
     if (op5 === 0x1e) {
@@ -1044,8 +1503,41 @@ export class Thumb2 implements ICpu {
         this.regs[15] = u32(pc + 4 + offset);
         return 3;
       } else {
-        // B.W conditional: hw1[11]=J2 used as J2, cond in hw0[9:6]
+        // hw1[15:14]=0b10, hw1[12]=0 is EITHER a conditional B.W (cond != 0b111x)
+        // OR — when cond (hw0[9:6]) == 0b111x — a "branch and miscellaneous
+        // control" instruction: barriers (DMB/DSB/ISB/CLREX), hints (NOP/SEV/
+        // WFE/WFI/DBG), MSR/MRS. The dual-core game SDK uses `dmb sy` (0xf3bf
+        // 0x8f5f) in v_WaitRecal; without this it decoded as an always-taken
+        // branch and jumped to garbage. VPy single-core games never emit these.
         const cond = (hw0 >>> 6) & 0xf;
+        if (cond >= 0xE) {
+          const op = (hw0 >>> 4) & 0x7f;  // hw0[10:4]
+          // 0x3b = CLREX/DSB/DMB/ISB, 0x3a = hint space (NOP/YIELD/WFE/SEV/WFI/DBG).
+          // All are no-ops in this functional core (no caches, no real 2nd core).
+          if (op === 0x3b || op === 0x3a) return 1;
+
+          // MRS Rd, <sysreg>   —  hw0 = 0xF3EF, hw1 = 1000 Rd(4) SYSm(8)
+          //
+          // Sin esto el arranque del UVM2 se caia en la SEGUNDA instruccion: el SDK
+          // hace `mrs r0, ipsr` en 0x20000110 y el nucleo lanzaba
+          // "Unimplemented 32-bit misc-control: hw0=0xf3ef hw1=0x8005", que no dice
+          // en ningun sitio que se trate de un MRS.
+          if (op === 0x3e) {
+            const Rd = (hw1 >>> 8) & 0xf;
+            this.setReg(Rd, this.readSysReg(hw1 & 0xff, pc));
+            return 2;
+          }
+
+          // MSR <sysreg>, Rn   —  hw0 = 1111 0011 1000 Rn, hw1 = 1000 00 mask(2) 00 SYSm(8)
+          if (op === 0x38) {
+            const Rn = hw0 & 0xf;
+            this.writeSysReg(hw1 & 0xff, (hw1 >>> 10) & 3, this.getReg(Rn), pc);
+            return 2;
+          }
+
+          throw new Error(`Unimplemented 32-bit misc-control: hw0=0x${hw0.toString(16)} hw1=0x${hw1.toString(16)} at PC=0x${pc.toString(16)}`);
+        }
+        // B.W conditional: hw1[11]=J2 used as J2, cond in hw0[9:6]
         const S2   = (hw0 >>> 10) & 1;
         const imm6 = hw0 & 0x3f;
         const imm11 = hw1 & 0x7ff;
@@ -1131,14 +1623,75 @@ export class Thumb2 implements ICpu {
       return 8;
     }
 
-    // MUL (32-bit Thumb2): hw0=1111 1011 0000 Rn, hw1=Rn Rd 0000 Rm
-    // (Thumb2 wide MUL — the standard 16-bit MUL also exists)
-    if ((hw0 & 0xfff0) === 0xfb00 && (hw1 & 0x00f0) === 0x0000) {
+    // MUL / MLA / MLS (32-bit): hw0=1111 1011 0000 Rn, hw1 = Ra Rd 000 op Rm.
+    //   Ra==1111 → MUL (rd = rn*rm)
+    //   op(bit4)=0 → MLA (rd = rn*rm + Ra)   ← was mis-decoded as plain MUL,
+    //   op(bit4)=1 → MLS (rd = Ra - rn*rm)      dropping Ra → the vpy_load_level
+    // copy loop's bound `20*count + base` collapsed to `20*count`, so the pointer
+    // never reached it and the level load spun forever.
+    if ((hw0 & 0xfff0) === 0xfb00 && (hw1 & 0x00e0) === 0x0000) {
       const rn = hw0 & 0xf;
+      const ra = (hw1 >>> 12) & 0xf;
       const rd = (hw1 >>> 8) & 0xf;
+      const op = (hw1 >>> 4) & 0x1;
       const rm = hw1 & 0xf;
-      this.regs[rd] = u32(Math.imul(this.regs[rn], this.regs[rm]));
+      const prod = Math.imul(this.regs[rn], this.regs[rm]);
+      if (ra === 15)      this.regs[rd] = u32(prod);                    // MUL
+      else if (op === 1)  this.regs[rd] = u32(this.regs[ra] - prod);    // MLS
+      else                this.regs[rd] = u32(this.regs[ra] + prod);    // MLA
       return 3;
+    }
+
+    // SMUL{B,T}{B,T} / SMLA{B,T}{B,T} — signed 16×16→32 halfword multiply.
+    // hw0 = 1111 1011 0001 Rn, hw1 = Ra Rd 00 N M Rm. N/M pick the top(1) or
+    // bottom(0) signed halfword of Rn/Rm; Ra==15 → SMUL, else SMLA (add Ra).
+    // C emits these for fixed-point/16-bit math; VPy codegen never did (the
+    // "blocks at 10 s" freeze — an unimplemented-instruction throw mid-frame).
+    if ((hw0 & 0xfff0) === 0xfb10 && (hw1 & 0x00c0) === 0x0000) {
+      const rn = hw0 & 0xf;
+      const ra = (hw1 >>> 12) & 0xf;
+      const rd = (hw1 >>> 8) & 0xf;
+      const n  = (hw1 >>> 5) & 1;
+      const m  = (hw1 >>> 4) & 1;
+      const rm = hw1 & 0xf;
+      const op1 = n ? (this.regs[rn] >> 16) : ((this.regs[rn] << 16) >> 16);
+      const op2 = m ? (this.regs[rm] >> 16) : ((this.regs[rm] << 16) >> 16);
+      let res = op1 * op2;                       // ≤ ±2^30, exact in JS
+      if (ra !== 15) res += this.regs[ra] | 0;   // SMLA: + Ra (signed)
+      this.regs[rd] = u32(res);
+      return 3;
+    }
+
+    // SMULL/UMULL/SMLAL/UMLAL — 32×32→64 long multiply(-accumulate).
+    // hw0 = 1111 1011 1 op1 Rn (op1[6:4]: 000/010/100/110), hw1 = RdLo RdHi 0000 Rm.
+    //   bit5 (0x20): 1 = unsigned (U…), 0 = signed (S…)
+    //   bit6 (0x40): 1 = accumulate into {RdHi:RdLo} (…LAL)
+    // gcc emits these for 64-bit and widening integer math; VPy codegen never
+    // did, so C imports (e.g. AAE's 6502 core) are the first to reach them.
+    // BigInt keeps the 64-bit product exact (JS numbers lose precision > 2^53).
+    if ((hw0 & 0xff90) === 0xfb80 && (hw1 & 0x00f0) === 0x0000) {
+      const rn = hw0 & 0xf, rm = hw1 & 0xf;
+      const rdlo = (hw1 >>> 12) & 0xf, rdhi = (hw1 >>> 8) & 0xf;
+      const unsigned   = (hw0 & 0x0020) !== 0;
+      const accumulate = (hw0 & 0x0040) !== 0;
+      const a = unsigned ? BigInt(this.regs[rn] >>> 0) : BigInt(s32(this.regs[rn]));
+      const b = unsigned ? BigInt(this.regs[rm] >>> 0) : BigInt(s32(this.regs[rm]));
+      let res = a * b;
+      if (accumulate) {
+        res += (BigInt(this.regs[rdhi] >>> 0) << 32n) | BigInt(this.regs[rdlo] >>> 0);
+      }
+      res &= (1n << 64n) - 1n;
+      this.regs[rdlo] = Number(res & 0xffffffffn) >>> 0;
+      this.regs[rdhi] = Number((res >> 32n) & 0xffffffffn) >>> 0;
+      return 5;
+    }
+
+    // CLZ Rd, Rm — count leading zeros. hw0 = 1111 1010 1011 Rm, hw1 = 1111 Rd 1000 Rm.
+    if ((hw0 & 0xfff0) === 0xfab0 && (hw1 & 0xf0f0) === 0xf080) {
+      const rm = hw1 & 0xf;
+      const rd = (hw1 >>> 8) & 0xf;
+      this.regs[rd] = Math.clz32(this.regs[rm] >>> 0);
+      return 1;
     }
 
     // ── 32-bit Data-processing immediate ─────────────────────────────────
@@ -1150,6 +1703,27 @@ export class Thumb2 implements ICpu {
     // ── 32-bit Data-processing register (EA00-EBFF) ───────────────────────
     if ((hw0 & 0xfe00) === 0xea00) {
       return this.exec32_dp_reg(hw0, hw1);
+    }
+
+    // ── LSL/LSR/ASR/ROR (register), 32-bit ────────────────────────────────
+    // hw0 = 1111 1010 0 tt S Rn, hw1 = 1111 Rd 0000 Rm  (tt: 0=LSL,1=LSR,2=ASR,3=ROR).
+    // These share the FA00-FA7F block with the extend ops but are distinguished
+    // by hw1[15:12]=1111 AND hw1[7:4]=0000. Without this they were misrouted to
+    // exec32_extend (UXTB/SXTB…) and mangled — e.g. __aeabi_f2iz's `lsr.w r0,r3,r2`
+    // returned garbage, so every soft-float coordinate (AAE's draws) was wrong.
+    if ((hw0 & 0xff80) === 0xfa00 && (hw1 & 0xf0f0) === 0xf000) {
+      const rn = hw0 & 0xf, rm = hw1 & 0xf, rd = (hw1 >>> 8) & 0xf;
+      const s = ((hw0 >>> 4) & 1) === 1;
+      const type = (hw0 >>> 5) & 0x3;
+      const amount = this.regs[rm] & 0xff;
+      let r: number;
+      if (type === 0) r = this.lsl(this.regs[rn], amount, s);
+      else if (type === 1) r = this.lsr(this.regs[rn], amount === 0 ? 0 : amount, s && amount !== 0);
+      else if (type === 2) r = this.asr(this.regs[rn], amount, s && amount !== 0);
+      else r = this.ror(this.regs[rn], amount, s && amount !== 0);
+      this.regs[rd] = r;
+      if (s) this.setNZ(r);
+      return 1;
     }
 
     // ── Saturate / extend / misc (FA00-FA7F) ──────────────────────────────
@@ -1230,6 +1804,139 @@ export class Thumb2 implements ICpu {
       return count + 1;
     }
 
+    // ── TBB / TBH (table branch — `switch` dispatch) ─────────────────────
+    // hw0 = 1110 1000 1101 Rn (0xE8D0|Rn; Rn=15 → 0xE8DF, table follows PC).
+    // hw1 = 1111 0000 000 H Rm (H: 0=byte, 1=halfword table; Rm = index).
+    // Branch: PC = (insn+4) + 2*table[base + Rm (<<1 if H)]. VPy codegen never
+    // emits this, but C compilers use it for dense switches (the game_state
+    // loop in a C-built game), so it's needed to run the C rp2350 backend.
+    if ((hw0 & 0xFFF0) === 0xE8D0 && (hw1 & 0xFFE0) === 0xF000) {
+      const rnTbl = hw0 & 0xF;
+      const H     = (hw1 >>> 4) & 1;
+      const rmIdx = hw1 & 0xF;
+      // regs[15] is already (insn addr + 4) = the architectural PC.
+      const base  = (rnTbl === 15) ? this.regs[15] : this.regs[rnTbl];
+      const idx   = this.regs[rmIdx];
+      const value = H
+        ? this.read16(bus, u32(base + (idx << 1)))
+        : (bus.read8(u32(base + idx)) & 0xff);
+      this.regs[15] = u32(this.regs[15] + (value << 1));
+      return 2;
+    }
+
+    // ── UN EXCLUSIVO SOBRE LA VENTANA XIP NO TERMINA EN EL CHIP ──────────
+    // En el RP2350 el STREX a memoria XIP (flash o PSRAM, 0x10000000..0x17FFFFFF) falla
+    // siempre, y el bucle que lo reintenta gira para siempre sin fallo ni aviso. Aqui el
+    // almacen siempre tiene exito, asi que una imagen que lo hace corre en el emulador y se
+    // queda en negro en la consola: paso dos veces seguidas con ScummVM desde la PSRAM (los
+    // atomicos de vectrex_bus y los spinlocks del pico-sdk en el .bss). Se avisa, una vez por
+    // PC, en vez de colgar: el aviso dice que variable mover a SRAM.
+    // ── LDREX / STREX de palabra, con desplazamiento inmediato ───────────
+    //   STREX Rd, Rt, [Rn, #imm8*4]   hw0 = 0xE840|Rn, hw1 = Rt Rd imm8
+    //   LDREX Rt,     [Rn, #imm8*4]   hw0 = 0xE850|Rn, hw1 = Rt 1111 imm8
+    // Como arriba: un nucleo, sin excepciones, luego el almacen no puede fallar.
+    if (((hw0 & 0xFFF0) === 0xE840 || (hw0 & 0xFFF0) === 0xE850)
+        && ((hw1 >>> 12) & 0xF) !== 0xF) {
+      const rn   = hw0 & 0xF;
+      const rt   = (hw1 >>> 12) & 0xF;
+      const addr = u32(this.regs[rn] + (hw1 & 0xff) * 4);
+      this.vigilaExclusivo(addr);
+      if ((hw0 >>> 4) & 1) {
+        this.regs[rt] = this.read32(bus, addr);          // LDREX
+      } else {
+        this.write32(bus, addr, this.regs[rt]);          // STREX
+        this.regs[(hw1 >>> 8) & 0xF] = 0;                // exito
+      }
+      return 2;
+    }
+
+    // ── TT (Test Target) — hw0 = 0xE840|Rn, hw1 = 1111 Rd ...  ───────────
+    //
+    // Consulta los atributos de seguridad y de MPU de una direccion. Aqui no hay
+    // ni MPU ni estados de seguridad, asi que se contesta lo unico coherente con
+    // eso: todo accesible y en estado SEGURO — que es donde corre una imagen del
+    // RP2350, porque la bootrom arranca segura.
+    //
+    // El pico-sdk lo usa justo para eso: `tt` y luego mira el bit S para elegir
+    // entre RT_FLAG_FUNC_ARM_SEC y _NONSEC al buscar una funcion de la bootrom.
+    if ((hw0 & 0xFFF0) === 0xE840 && ((hw1 >>> 12) & 0xF) === 0xF) {
+      // R(18) RW(19) NPRIV_R(20) NPRIV_RW(21) S(22)
+      this.regs[(hw1 >>> 8) & 0xF] = 0x007C0000;
+      return 1;
+    }
+
+    // ── Accesos EXCLUSIVOS y con adquisicion/liberacion ──────────────────
+    //
+    //   hw0 = 1110 1000 110 L Rn   (L=0 almacena, L=1 carga)
+    //   hw1 = Rt 1111 op(4) Rd/1111
+    //
+    //   op 4,5     STREXB/H, LDREXB/H
+    //   op 8,9,A   STLB/H/STL, LDAB/H/LDA        (no exclusivos)
+    //   op C,D,E   STLEXB/H/STLEX, LDAEXB/H/LDAEX
+    //
+    // ESTO TIENE QUE IR ANTES DE LDRD/STRD. Sin ello, `ldaexb r2, [lr]`
+    // (0xe8de 0x2fcf) caia en la rama de LDRD, cuyo campo Rt2 vale 0xF — o sea
+    // que CARGABA EL PC DESDE MEMORIA. No lanzaba ninguna excepcion: se llevaba
+    // el PC a cero y el fallo aparecia miles de instrucciones despues, en otro
+    // sitio. Los mutex del pico-sdk se toman asi, con lo cual ningun juego suyo
+    // podia pasar de su primera seccion critica.
+    //
+    // Aqui no hay un monitor exclusivo de verdad y no hace falta: un solo nucleo
+    // y sin excepciones significa que nadie puede robar la reserva entre el LDREX
+    // y el STREX, asi que el almacen SIEMPRE tiene exito (Rd = 0).
+    if ((hw0 & 0xFFE0) === 0xE8C0 && ((hw1 >>> 8) & 0xF) === 0xF) {
+      const rn   = hw0 & 0xF;
+      const carga = (hw0 >>> 4) & 1;
+      const op   = (hw1 >>> 4) & 0xF;
+      const rt   = (hw1 >>> 12) & 0xF;
+      const addr = this.regs[rn];
+      const tam  = (op & 3) === 0 ? 1 : (op & 3) === 1 ? 2 : 4;
+      const exclusivo = op === 0x4 || op === 0x5 || op >= 0xC;
+      if (exclusivo) this.vigilaExclusivo(addr >>> 0);
+      if (carga) {
+        this.regs[rt] = tam === 1 ? bus.read8(addr) >>> 0
+                      : tam === 2 ? this.read16(bus, addr)
+                      :             this.read32(bus, addr);
+      } else {
+        const v = this.regs[rt];
+        if (tam === 1)      bus.write8(addr, v & 0xff);
+        else if (tam === 2) this.write16(bus, addr, v & 0xffff);
+        else                this.write32(bus, addr, v);
+        // Rd solo existe en las variantes exclusivas; en STL* ese campo vale
+        // 0xF y escribirlo seria machacar el PC.
+        if (exclusivo) this.regs[hw1 & 0xF] = 0;   // 0 = el almacen tuvo exito
+      }
+      return 2;
+    }
+
+    // ── STRD / LDRD (store/load register dual, immediate T1) ─────────────
+    // hw0 = 1110 100P U1WL Rn (bit4 L: 0=STRD, 1=LDRD). hw1 = Rt Rt2 imm8.
+    // addr = Rn +/- imm8*4 (pre/post per P, optional writeback W). C compilers
+    // use this to spill/reload register pairs (frame setup); VPy codegen didn't.
+    // P=0 y W=0 NO es LDRD/STRD: ese hueco es el de los accesos exclusivos de
+    // arriba y el de TBB/TBH. Sin esta condicion, ldaexb entraba aqui.
+    if ((hw0 & 0xFE40) === 0xE840 && (((hw0 >>> 8) & 1) || ((hw0 >>> 5) & 1))) {
+      const P    = (hw0 >>> 8) & 1;
+      const U    = (hw0 >>> 7) & 1;
+      const W    = (hw0 >>> 5) & 1;
+      const L    = (hw0 >>> 4) & 1;
+      const rnD  = hw0 & 0xF;
+      const rt1  = (hw1 >>> 12) & 0xF;
+      const rt2  = (hw1 >>> 8) & 0xF;
+      const off  = (U ? (hw1 & 0xff) : -(hw1 & 0xff)) * 4;
+      const base = (rnD === 15) ? u32(this.regs[15] & ~3) : this.regs[rnD];
+      const addr = P ? u32(base + off) : u32(base);
+      if (L) {
+        this.regs[rt1] = this.read32(bus, addr);
+        this.regs[rt2] = this.read32(bus, u32(addr + 4));
+      } else {
+        this.write32(bus, addr, this.regs[rt1]);
+        this.write32(bus, u32(addr + 4), this.regs[rt2]);
+      }
+      if (W && rnD !== 15) this.regs[rnD] = u32(base + off);
+      return 3;
+    }
+
     // ── LDMIA (load multiple, increment after) T2 ───────────────────────
     // hw0 = 0xE890|Rn (W=0) or 0xE8B0|Rn (W=1, writeback). hw1 = reglist.
     // Note: 0xE8BD (LDMIA SP!, …) is already handled as POP T2 above.
@@ -1263,6 +1970,34 @@ export class Thumb2 implements ICpu {
       }
       if (writeback) this.regs[rn2] = addr;
       return 2;
+    }
+
+    // ── LDMDB / STMDB (decrement before) T1, any base ───────────────────
+    // hw0 = 1110 1001 00 W L Rn: 0xE910|Rn LDMDB, 0xE930|Rn LDMDB Rn!, 0xE900|Rn STMDB,
+    // 0xE920|Rn STMDB Rn! (0xE92D, PUSH, is handled above). The lowest register goes at the
+    // lowest address, which is Rn - 4*count. GCC emits LDMDB for copies that walk a struct
+    // from its end (found in ScummVM: `ldmdb r4, {r0-r3}`); missing, the emulator stopped there.
+    if ((hw0 & 0xFFD0) === 0xE910 || (hw0 & 0xFFD0) === 0xE900) {
+      const rn2 = hw0 & 0xF;
+      const load = (hw0 & 0x0010) !== 0;
+      const writeback = (hw0 & 0x0020) !== 0;
+      let count = 0;
+      for (let r = 0; r <= 15; r++) if (hw1 & (1 << r)) count++;
+      const base = u32(this.regs[rn2] - count * 4);
+      let addr = base;
+      for (let r = 0; r <= 15; r++) {
+        if (!(hw1 & (1 << r))) continue;
+        if (load) {
+          const val = this.read32(bus, addr);
+          if (r === 15) this.regs[15] = val & ~1;
+          else if (r !== 13) this.regs[r] = val;
+        } else if (r <= 14) {
+          this.write32(bus, addr, this.regs[r]);
+        }
+        addr = u32(addr + 4);
+      }
+      if (writeback) this.regs[rn2] = base;
+      return count + 1;
     }
 
     const rn  = hw0 & 0xf;
@@ -1303,13 +2038,15 @@ export class Thumb2 implements ICpu {
       let writeback = false;
       let wbValue = 0;
       const base = this.regs[rn];
-      if ((hw0 & 0xfe00) === 0xf800 && hw1_11 === 0 && (hw1 >>> 8) === 0) {
-        // Positive imm12 (no writeback in this encoding)
-        const imm12 = hw1 & 0xfff;
-        addr = u32(base + imm12);
+      // The form is selected by hw0 bit7 (0x0080) and hw1[11] — NOT by whether
+      // the upper hw1 bits happen to be zero. (The old `(hw1>>>8)===0` heuristic
+      // mis-read register-indexed loads with Rt=0, e.g. `ldr r0,[ip,r0,lsl#2]`
+      // for sprites[idx], as an imm12 load [base+32] → wrong pointer tables.)
+      if ((hw0 & 0x0080) !== 0) {
+        // T3: LDR/STR.W Rt, [Rn, #imm12]  — hw0 = 0xF8D0/0xF8C0|Rn (bit7=1)
+        addr = u32(base + (hw1 & 0xfff));
       } else if (hw1_11 === 1) {
-        // T4 PUW form: hw1 = Rt[15:12] | 1 | P[10] | U[9] | W[8] | imm8[7:0]
-        // Honour P (pre/post-index) and W (writeback) bits.
+        // T4 PUW form: hw1 = Rt | 1 | P[10] | U[9] | W[8] | imm8[7:0]
         const P    = (hw1 >>> 10) & 1;
         const U    = (hw1 >>> 9)  & 1;
         const W    = (hw1 >>> 8)  & 1;
@@ -1317,20 +2054,24 @@ export class Thumb2 implements ICpu {
         const offset = U ? imm8 : -imm8;
         addr = P ? u32(base + offset) : u32(base);
         if (W) { writeback = true; wbValue = u32(base + offset); }
-      } else if ((hw0 & 0x0080) !== 0) {
-        // T3: LDR/STR.W Rt, [Rn, #imm12]  — hw0=0xF8D0|Rn or 0xF8C0|Rn (bit7=1)
-        const imm12 = hw1 & 0xfff;
-        addr = u32(base + imm12);
       } else {
-        // T2 register-indexed: LDR/STR.W Rt, [Rn, Rm{, LSL #imm2}]  — hw0=0xF850|Rn (bit7=0)
-        // hw1: Rt[15:12] | 0[11] | 000[10:8] | 00[7:6] | imm2[5:4] | Rm[3:0]
+        // T2 register-indexed: LDR/STR.W Rt, [Rn, Rm{, LSL #imm2}] (bit7=0, hw1[11]=0)
         const rm   = hw1 & 0xf;
         const imm2 = (hw1 >>> 4) & 0x3;
         addr = u32(base + (this.regs[rm] << imm2));
       }
       const actualLoad = ((hw0 >>> 4) & 1) !== 0;
       if (actualLoad) {
-        this.regs[rt] = this.read32(bus, addr);
+        const v = this.read32(bus, addr);
+        // LDR pc,[...] is an interworking branch (BXWritePC): bit0 selects Thumb
+        // state (always Thumb on M-profile), so mask it off for the fetch PC.
+        // gcc compiles a dense switch (e.g. the 6502 opcode dispatch) as
+        // `ldr.w pc,[table, idx, lsl #2]` into a table of Thumb handler
+        // addresses (bit0=1); without this the PC lands odd and the next fetch
+        // decodes garbage. VPy codegen never emits this form, so C imports hit
+        // it first.
+        if (rt === 15) this.regs[15] = v & ~1;
+        else this.regs[rt] = v;
       } else {
         this.write32(bus, addr, this.regs[rt]);
       }
@@ -1438,63 +2179,192 @@ export class Thumb2 implements ICpu {
       return 2;
     }
 
-    // STR Rt,[Rn,{+/-}imm8] with PUW: hw0=1111 1000 0100 Rn
+    // STR word: hw0=1111 1000 0100 Rn — register-indexed (hw1[11]=0) or the T4
+    // PUW immediate (hw1[11]=1). The register form `str Rt,[Rn,Rm,LSL#imm2]` was
+    // missing: it fell into the PUW path (P=0 → addr=base, index dropped), so
+    // `arr[idx] = v` (e.g. thaw_timers[idx]=180) wrote to arr[0] for every idx —
+    // only enemy 0 stayed frozen, the rest thawed instantly.
     if ((hw0 & 0xfff0) === 0xf840) {
-      const P = (hw1 >>> 10) & 1;
-      const U = (hw1 >>> 9)  & 1;
-      const W = (hw1 >>> 8)  & 1;
-      const imm8 = hw1 & 0xff;
-      const base = this.regs[rn];
-      const offset = U ? imm8 : -imm8;
-      const addr = P ? u32(base + offset) : u32(base);
-      this.write32(bus, addr, this.regs[rt]);
-      if (W) this.regs[rn] = u32(base + offset);
+      if ((hw1 >>> 11) & 1) {
+        const P = (hw1 >>> 10) & 1, U = (hw1 >>> 9) & 1, W = (hw1 >>> 8) & 1;
+        const imm8 = hw1 & 0xff;
+        const base = this.regs[rn];
+        const offset = U ? imm8 : -imm8;
+        const addr = P ? u32(base + offset) : u32(base);
+        this.write32(bus, addr, this.regs[rt]);
+        if (W) this.regs[rn] = u32(base + offset);
+      } else {
+        const rm = hw1 & 0xf, imm2 = (hw1 >>> 4) & 0x3;
+        this.write32(bus, u32(this.regs[rn] + (this.regs[rm] << imm2)), this.regs[rt]);
+      }
       return 2;
     }
 
-    // LDRB Rt,[Rn,Rm,LSL#imm2] register: hw0=1111 1000 0001 Rn, hw1=Rt 000000 imm2 Rm
+    // LDRB: hw0=1111 1000 0001 Rn — register (hw1[11]=0) or immediate pre/post
+    // (hw1[11]=1). C uses `ldrb [Rn,#1]!` to walk NUL-terminated strings
+    // (font_draw_string) — the register-only version broke that walk.
     if ((hw0 & 0xfff0) === 0xf810) {
-      const rm   = hw1 & 0xf;
-      const imm2 = (hw1 >>> 4) & 0x3;
-      const addr = u32(this.regs[rn] + (this.regs[rm] << imm2));
-      this.regs[rt] = bus.read8(addr);
+      if ((hw1 >>> 11) & 1) {
+        const P = (hw1 >>> 10) & 1, U = (hw1 >>> 9) & 1, W = (hw1 >>> 8) & 1;
+        const imm8 = hw1 & 0xff;
+        const base = this.regs[rn];
+        const offset = U ? imm8 : -imm8;
+        const addr = P ? u32(base + offset) : u32(base);
+        this.regs[rt] = bus.read8(addr);
+        if (W) this.regs[rn] = u32(base + offset);
+      } else {
+        const rm = hw1 & 0xf, imm2 = (hw1 >>> 4) & 0x3;
+        this.regs[rt] = bus.read8(u32(this.regs[rn] + (this.regs[rm] << imm2)));
+      }
       return 2;
     }
 
-    // STRB Rt,[Rn,Rm,LSL#imm2] register: hw0=1111 1000 0000 Rn, hw1=Rt 000000 imm2 Rm
+    // STRB: hw0=1111 1000 0000 Rn — register (hw1[11]=0) or immediate pre/post.
     if ((hw0 & 0xfff0) === 0xf800) {
-      const rm   = hw1 & 0xf;
-      const imm2 = (hw1 >>> 4) & 0x3;
-      const addr = u32(this.regs[rn] + (this.regs[rm] << imm2));
-      bus.write8(addr, this.regs[rt] & 0xff);
+      if ((hw1 >>> 11) & 1) {
+        const P = (hw1 >>> 10) & 1, U = (hw1 >>> 9) & 1, W = (hw1 >>> 8) & 1;
+        const imm8 = hw1 & 0xff;
+        const base = this.regs[rn];
+        const offset = U ? imm8 : -imm8;
+        const addr = P ? u32(base + offset) : u32(base);
+        bus.write8(addr, this.regs[rt] & 0xff);
+        if (W) this.regs[rn] = u32(base + offset);
+      } else {
+        const rm = hw1 & 0xf, imm2 = (hw1 >>> 4) & 0x3;
+        bus.write8(u32(this.regs[rn] + (this.regs[rm] << imm2)), this.regs[rt] & 0xff);
+      }
       return 2;
     }
 
-    // LDRH Rt,[Rn,Rm,LSL#imm2]: hw0=1111 1000 0011 Rn
+    // LDRH: hw0=1111 1000 0011 Rn — TWO sub-encodings (hw1[11] selects):
+    //   hw1[11]=0: register  Rt,[Rn,Rm,LSL#imm2]
+    //   hw1[11]=1: immediate  Rt,[Rn,#±imm8] with P/U/W (pre/post-index, C uses
+    //     the post-index form `[Rn],#2` to walk .vec path streams — the bug that
+    //     made draw_vec_stream read a garbage count and spin).
     if ((hw0 & 0xfff0) === 0xf830) {
-      const rm   = hw1 & 0xf;
-      const imm2 = (hw1 >>> 4) & 0x3;
-      const addr = u32(this.regs[rn] + (this.regs[rm] << imm2));
-      this.regs[rt] = this.read16(bus, addr);
+      if ((hw1 >>> 11) & 1) {
+        const P = (hw1 >>> 10) & 1, U = (hw1 >>> 9) & 1, W = (hw1 >>> 8) & 1;
+        const imm8 = hw1 & 0xff;
+        const base = this.regs[rn];
+        const offset = U ? imm8 : -imm8;
+        const addr = P ? u32(base + offset) : u32(base);
+        this.regs[rt] = this.read16(bus, addr);
+        if (W) this.regs[rn] = u32(base + offset);
+      } else {
+        const rm = hw1 & 0xf, imm2 = (hw1 >>> 4) & 0x3;
+        this.regs[rt] = this.read16(bus, u32(this.regs[rn] + (this.regs[rm] << imm2)));
+      }
       return 2;
     }
 
-    // STRH Rt,[Rn,Rm,LSL#imm2]: hw0=1111 1000 0010 Rn
+    // STRH: hw0=1111 1000 0010 Rn — register (hw1[11]=0) or immediate pre/post.
     if ((hw0 & 0xfff0) === 0xf820) {
-      const rm   = hw1 & 0xf;
-      const imm2 = (hw1 >>> 4) & 0x3;
-      const addr = u32(this.regs[rn] + (this.regs[rm] << imm2));
-      this.write16(bus, addr, this.regs[rt] & 0xffff);
+      if ((hw1 >>> 11) & 1) {
+        const P = (hw1 >>> 10) & 1, U = (hw1 >>> 9) & 1, W = (hw1 >>> 8) & 1;
+        const imm8 = hw1 & 0xff;
+        const base = this.regs[rn];
+        const offset = U ? imm8 : -imm8;
+        const addr = P ? u32(base + offset) : u32(base);
+        this.write16(bus, addr, this.regs[rt] & 0xffff);
+        if (W) this.regs[rn] = u32(base + offset);
+      } else {
+        const rm = hw1 & 0xf, imm2 = (hw1 >>> 4) & 0x3;
+        this.write16(bus, u32(this.regs[rn] + (this.regs[rm] << imm2)), this.regs[rt] & 0xffff);
+      }
       return 2;
     }
 
-    // LDRSH Rt,[Rn,Rm,LSL#imm2]: hw0=1111 1001 0011 Rn
+    // LDRSH: hw0=1111 1001 0011 Rn — register (hw1[11]=0) or immediate pre/post.
     if ((hw0 & 0xfff0) === 0xf930) {
-      const rm   = hw1 & 0xf;
-      const imm2 = (hw1 >>> 4) & 0x3;
-      const addr = u32(this.regs[rn] + (this.regs[rm] << imm2));
-      this.regs[rt] = u32((this.read16(bus, addr) << 16) >> 16);
+      if ((hw1 >>> 11) & 1) {
+        const P = (hw1 >>> 10) & 1, U = (hw1 >>> 9) & 1, W = (hw1 >>> 8) & 1;
+        const imm8 = hw1 & 0xff;
+        const base = this.regs[rn];
+        const offset = U ? imm8 : -imm8;
+        const addr = P ? u32(base + offset) : u32(base);
+        this.regs[rt] = u32((this.read16(bus, addr) << 16) >> 16);
+        if (W) this.regs[rn] = u32(base + offset);
+      } else {
+        const rm = hw1 & 0xf, imm2 = (hw1 >>> 4) & 0x3;
+        this.regs[rt] = u32((this.read16(bus, u32(this.regs[rn] + (this.regs[rm] << imm2))) << 16) >> 16);
+      }
       return 2;
+    }
+
+    // ── VFP de simple precision (p10): lo que usan los puertos con `float` ──────
+    // Va ANTES de VLDM/VSTM porque VLDR/VSTR comparten el prefijo 0xEC00 (P=1, W=0).
+    if (((hw1 >>> 9) & 0x7) === 0x5 && ((hw0 & 0xEE00) === 0xEC00 || (hw0 & 0xEF00) === 0xEE00)) {
+      const r = this.exec32_vfp(hw0, hw1, bus, pc);
+      if (r >= 0) return r;
+    }
+
+    // ── Coprocesadores (MCR/MRC y MCRR/MRRC) ─────────────────────────────
+    //
+    // El RP2350 lleva coprocesadores propios: GPIO rapido, DCP y el RCP de
+    // redundancia. El runtime del pico-sdk habilita CPACR y acto seguido toca uno
+    // para inicializarlo:
+    //
+    //     str  r3, [r2, #0xd88]     @ CPACR |= 0x00300303
+    //     mrc  p4, ...              @ despertar el coprocesador
+    //     bx   lr                   @ y el resultado NI SE USA
+    //
+    // Aqui no hay coprocesadores que emular, y para lo que el arranque necesita
+    // tampoco hacen falta: se aceptan y se ignoran, devolviendo cero.
+    //
+    // La FPU (p10/p11) queda FUERA a proposito: no-opear una instruccion de coma
+    // flotante no da un fallo, da un resultado equivocado, y eso es peor. Que
+    // siga avisando hasta que alguien la implemente de verdad.
+    {
+      const esMcrMrc  = (hw0 & 0xFF00) === 0xEE00 && (hw1 & 0x10) !== 0;
+      const esMcrrMrrc = (hw0 & 0xFFE0) === 0xEC40;
+      if (esMcrMrc || esMcrrMrrc) {
+        const cp = (hw1 >>> 8) & 0xF;
+        if (cp !== 10 && cp !== 11) {
+          const carga = (hw0 >>> 4) & 1;          // L: 1 = MRC / MRRC
+          if (carga) {
+            const rt = (hw1 >>> 12) & 0xF;
+            // Rt = 15 significa "a las banderas" (APSR_nzcv), no al PC.
+            if (rt === 15) this.cpsr &= ~0xF0000000;
+            else           this.regs[rt] = 0;
+            if (esMcrrMrrc) this.regs[hw0 & 0xF] = 0;   // el segundo destino
+          }
+          return 1;
+        }
+      }
+    }
+
+    /* VLDM / VSTM — los registros del coprocesador de coma flotante.
+     *
+     * HACEN FALTA AUNQUE EL JUEGO NO USE FLOTANTES: `setjmp` de newlib guarda d8-d15 con
+     * `vstmia r0, {d8-d15}` y `longjmp` los restaura, y el descompresor del zip (puff) usa
+     * setjmp/longjmp para sus errores. Sin esto la imagen del UVM2 moria con "Unimplemented
+     * 32-bit LD/ST" nada mas cargar el romset, y el emulador se quedaba detenido en seco.
+     *
+     * No hay unidad de coma flotante que emular: basta con que el banco RECUERDE, porque lo
+     * unico que se hace con el es guardarlo y volverlo a poner. Si algun dia se ejecuta
+     * aritmetica VFP de verdad, fallara en otra instruccion y se vera.
+     *
+     *   hw0: 110 P U D W L  Rn      hw1: Vd  101 x  imm8
+     *   coproc 1010 = simple (una palabra por registro), 1011 = doble (dos)
+     */
+    if ((hw0 & 0xFE00) === 0xEC00 && ((hw1 >>> 8) & 0xE) === 0xA) {
+      const P = (hw0 >>> 8) & 1, U = (hw0 >>> 7) & 1, W = (hw0 >>> 5) & 1;
+      const L = (hw0 >>> 4) & 1, rn = hw0 & 0xF;
+      const doble = ((hw1 >>> 8) & 1) === 1;
+      const vd = doble ? (((hw1 >>> 12) & 0xF) | (((hw0 >>> 6) & 1) << 4))
+                       : ((((hw1 >>> 12) & 0xF) << 1) | ((hw0 >>> 6) & 1));
+      const palabras = hw1 & 0xFF;                    // imm8 = palabras a mover
+      const base = this.regs[rn] >>> 0;
+      let dir = (U ? base : base - palabras * 4) >>> 0;
+      if (P && U) dir = (base + 4) >>> 0;             // el modo "IB", que aqui no se usa
+      for (let i = 0; i < palabras; i++) {
+        const idx = (vd * (doble ? 2 : 1) + i) & 63;
+        if (L) this.vfp[idx] = this.read32(bus, dir) >>> 0;
+        else   this.write32(bus, dir, this.vfp[idx] >>> 0);
+        dir = (dir + 4) >>> 0;
+      }
+      if (W) this.regs[rn] = (U ? base + palabras * 4 : base - palabras * 4) >>> 0;
+      return 1;
     }
 
     throw new Error(`Unimplemented 32-bit LD/ST: hw0=0x${hw0.toString(16).padStart(4,'0')} hw1=0x${hw1.toString(16).padStart(4,'0')} at PC=0x${pc.toString(16)}`);
@@ -1533,8 +2403,17 @@ export class Thumb2 implements ICpu {
         const r = u32(a + imm12);
         this.regs[rd] = r;
         if (s) this.setNZCV_add(a, imm12);
-      } else if ((op & 0xd) === 0x4) {
+      } else if ((op & 0xd) === 0x5) {
         // SUBW Rd, Rn, #imm12  (or ADR T2: Rn=PC, subtract)
+        // op es hw0[8:5], y SUBW es 01010 en hw0[8:4] -> 0101 = 5, NO 4. Con el 4 esta
+        // rama no la cogia NADIE (el 4 solo alcanzaba a MOVT, ya interceptado antes), y
+        // SUBW se caia por el final del if sin ejecutarse ni avisar.
+        //
+        // Solo muerde en funciones con marco de pila grande y no codificable como
+        // inmediato modificado: gcc emite `sub sp,#imm` para lo normal y `subw` para el
+        // resto. puff() reserva 2140 bytes asi, no los reservaba, y devolvia por un
+        // marco que no era suyo: PC = 0. Medido antes/despues del prologo (SP bajaba 36
+        // bytes, justo el push, en vez de 36 + 2140).
         const a = rn === 0xf ? u32(_pc + 4) : this.regs[rn];
         const r = u32(a - imm12);
         this.regs[rd] = r;
@@ -1563,8 +2442,59 @@ export class Thumb2 implements ICpu {
         // Sign-extend: shift left to put sign bit at bit31, then arithmetic right shift
         const shift   = 32 - width;
         this.regs[rd] = u32((raw << shift) >> shift);
+      } else if (op === 0xb) {
+        // BFI Rd,Rn,#lsb,#width (T1) / BFC Rd,#lsb,#width (Rn=1111)
+        // hw1: 0 imm3[14:12] Rd[11:8] imm2[7:6] 0 msb[4:0];  lsb={imm3,imm2}
+        // BFC is the mask gcc emits for `x & 0xf000` etc.; skipping it left the
+        // masked value unchanged (e.g. the ccpu conditional-jump page mask), which
+        // silently corrupted the AAE Cinematronics cores on this emulator.
+        const imm3 = (hw1 >>> 12) & 0x7;
+        const imm2 = (hw1 >>> 6)  & 0x3;
+        const lsb  = (imm3 << 2) | imm2;
+        const msb  = hw1 & 0x1f;
+        if (msb >= lsb) {
+          const width     = msb - lsb + 1;
+          const fieldMask = u32(width >= 32 ? 0xFFFFFFFF : (((1 << width) - 1) << lsb));
+          const cleared   = u32(this.regs[rd] & ~fieldMask);
+          this.regs[rd] = rn === 0xf
+            ? cleared                                              // BFC: clear field
+            : u32(cleared | (u32(this.regs[rn] << lsb) & fieldMask)); // BFI: insert Rn
+        }
+      } else if (op === 0x8 || op === 0x9 || op === 0xc || op === 0xd) {
+        // SSAT/USAT Rd,#n,Rn{,shift} (T1). NO ES UNA INSTRUCCION EXOTICA: es lo PRIMERO
+        // que hace `ramp_params` para meter dx y dy en un byte con signo, y saltarsela
+        // dejaba el registro destino con lo que hubiera dentro. El sintoma no era un
+        // cuelgue sino un dibujo plausible: la rampa devolvia `t1 = DRAW_SCALE` para todo
+        // vector, o sea el modelo FIJO, que en el codigo no existe.
+        //
+        // hw0: 11110 i 1 0 op(4) sh(1) Rn(4)   hw1: 0 imm3 Rd imm2 (0) sat_imm(5)
+        // El desplazamiento es LSL con sh=0 y ASR con sh=1; con ASR e importe 0 son 32.
+        const sh      = (hw0 >>> 4) & 1;
+        const imm3s   = (hw1 >>> 12) & 0x7;
+        const imm2s   = (hw1 >>> 6)  & 0x3;
+        const despl   = (imm3s << 2) | imm2s;
+        const satImm  = hw1 & 0x1f;
+        const usat    = op === 0xc || op === 0xd;
+        const v       = this.regs[rn] | 0;
+        /* Con sh=1 y desplazamiento 0 la codificacion NO es un ASR #0 —que no existe—
+         * sino SSAT16/USAT16, que satura las dos mitades por separado. */
+        const dieciseis = sh === 1 && despl === 0;
+        const satUno = (x: number) => {
+          if (usat) { const t = satImm >= 31 ? 0x7FFFFFFF : ((1 << satImm) - 1);
+                      return x < 0 ? 0 : (x > t ? t : x); }
+          const n = satImm + 1;                                  // SSAT: #n va de 1 a 32
+          const t = n >= 32 ? 0x7FFFFFFF : ((1 << (n - 1)) - 1);
+          const b = n >= 32 ? -0x80000000 : -(1 << (n - 1));
+          return x > t ? t : (x < b ? b : x);
+        };
+        if (dieciseis) {
+          const lo = satUno((v << 16) >> 16), hi = satUno(v >> 16);
+          this.regs[rd] = u32(((hi & 0xFFFF) << 16) | (lo & 0xFFFF));
+        } else {
+          const oper = sh ? (v >> despl) : (despl === 0 ? v : u32(v << despl) | 0);
+          this.regs[rd] = u32(satUno(oper));
+        }
       }
-      // Other plain-binary encodings (SSAT, USAT, BFI…) — skip
       return 2;
     }
 
@@ -1572,36 +2502,39 @@ export class Thumb2 implements ICpu {
     const imm3 = (hw1 >>> 12) & 0x7;
     const imm8 = hw1 & 0xff;
     const imm  = decodeThumb2Imm((i << 11) | (imm3 << 8) | imm8);
+    /* ThumbExpandImm_C: a ROTATED immediate (imm12[11:10] != 0) gives the logical ops with S
+     * their carry, bit 31 of the constant; the plain/replicated forms leave C alone. */
+    const immC = () => { if (((i << 1) | (imm3 >>> 2)) !== 0) this.setC((imm >>> 31) === 1); };
 
     switch (op) {
       case 0x0: {  // AND{S} Rd,Rn,#imm  /  TST Rn,#imm (Rd=1111,S=1)
         const r = u32(this.regs[rn] & imm);
         if (rd !== 0xf) this.regs[rd] = r;
-        if (s) this.setNZ(r);
+        if (s) { this.setNZ(r); immC(); }
         break;
       }
       case 0x1: {  // BIC{S} Rd,Rn,#imm
         const r = u32(this.regs[rn] & ~imm);
         this.regs[rd] = r;
-        if (s) this.setNZ(r);
+        if (s) { this.setNZ(r); immC(); }
         break;
       }
       case 0x2: {  // ORR{S} Rd,Rn,#imm  /  MOV{S} Rd,#imm (Rn=1111)
         const r = rn === 0xf ? imm : u32(this.regs[rn] | imm);
         this.regs[rd] = r;
-        if (s) this.setNZ(r);
+        if (s) { this.setNZ(r); immC(); }
         break;
       }
       case 0x3: {  // ORN{S} Rd,Rn,#imm  /  MVN{S} Rd,#imm (Rn=1111)
         const r = rn === 0xf ? u32(~imm) : u32(this.regs[rn] | ~imm);
         this.regs[rd] = r;
-        if (s) this.setNZ(r);
+        if (s) { this.setNZ(r); immC(); }
         break;
       }
       case 0x4: {  // EOR{S} Rd,Rn,#imm  /  TEQ Rn,#imm (Rd=1111,S=1)
         const r = u32(this.regs[rn] ^ imm);
         if (rd !== 0xf) this.regs[rd] = r;
-        if (s) this.setNZ(r);
+        if (s) { this.setNZ(r); immC(); }
         break;
       }
       case 0x8: {  // ADD{S} Rd,Rn,#imm  /  CMN Rn,#imm (Rd=1111,S=1)
@@ -1630,7 +2563,7 @@ export class Thumb2 implements ICpu {
         const c = this.flagC;
         const r = u32(a - imm - (1 - c));
         this.regs[rd] = r;
-        if (s) this.setNZCV_sub(a, imm);
+        if (s) this.setNZCV_addc(a, ~imm, c);   // SBC = AddWithCarry(Rn, NOT(imm), C)
         break;
       }
       case 0xd: {  // SUB{S} Rd,Rn,#imm  /  CMP Rn,#imm (Rd=1111,S=1)
@@ -1669,35 +2602,36 @@ export class Thumb2 implements ICpu {
     const shiftAmt  = (imm3 << 2) | imm2;
 
     // Shift the Rm value
-    let rmVal = this.regs[rm];
-    if (shiftAmt > 0) {
-      switch (shiftType) {
-        case 0: rmVal = this.lsl(rmVal, shiftAmt, false); break;
-        case 1: rmVal = this.lsr(rmVal, shiftAmt, false); break;
-        case 2: rmVal = this.asr(rmVal, shiftAmt, false); break;
-        case 3: rmVal = this.ror(rmVal, shiftAmt, false); break;
-      }
-    }
+    /* OJO: no vale `if (shiftAmt > 0)`. Un inmediato a 0 no quiere decir "sin
+     * desplazamiento" salvo en LSL — ver `shiftImm`. */
+    const rmVal = this.shiftImm(this.regs[rm], shiftType, shiftAmt);
+    /* A LOGICAL op with S sets C from the shifter (LSRS.W Rd, Rm, #n is MOVS with a shift).
+     * Only N and Z were set: C kept a stale carry (found against Unicorn in vpy3d's text,
+     * `lsrs.w r3, r1, #1` with r1 = 4 left C = 1, and the glyphs came out 2.5x wide). */
+    const shC = s ? this.shiftImmCarry(this.regs[rm], shiftType, shiftAmt) : -1;   // before Rd is written
+    const logicalC = () => { if (shC >= 0) this.setC(shC === 1); };
 
     switch (op) {
-      case 0x0: {  // AND{S}
+      case 0x0: {  // AND{S}  /  TST Rn,Rm{,shift} (Rd=15,S=1 → discard result)
         const r = u32(this.regs[rn] & rmVal);
-        this.regs[rd] = r;
-        if (s) this.setNZ(r);
+        if (rd !== 15) this.regs[rd] = r;
+        if (s) { this.setNZ(r); logicalC(); }
         break;
       }
       case 0x1: {  // BIC{S}
         const r = u32(this.regs[rn] & ~rmVal);
         this.regs[rd] = r;
-        if (s) this.setNZ(r);
+        if (s) { this.setNZ(r); logicalC(); }
         break;
       }
       case 0x2: {  // ORR{S} or MOV (Rn=1111)
         if (rn === 0xf) {
           // MOV{S} Rd, Rm (possibly shifted)
+          if (s) logicalC();   // before the write: Rd may be Rm
           this.regs[rd] = rmVal;
           if (s) this.setNZ(rmVal);
         } else {
+          if (s) logicalC();
           const r = u32(this.regs[rn] | rmVal);
           this.regs[rd] = r;
           if (s) this.setNZ(r);
@@ -1705,6 +2639,7 @@ export class Thumb2 implements ICpu {
         break;
       }
       case 0x3: {  // ORN{S} or MVN (Rn=1111)
+        if (s) logicalC();
         if (rn === 0xf) {
           const r = u32(~rmVal);
           this.regs[rd] = r;
@@ -1716,9 +2651,10 @@ export class Thumb2 implements ICpu {
         }
         break;
       }
-      case 0x4: {  // EOR{S}
+      case 0x4: {  // EOR{S}  /  TEQ Rn,Rm{,shift} (Rd=15,S=1 → discard result)
+        if (s) logicalC();
         const r = u32(this.regs[rn] ^ rmVal);
-        this.regs[rd] = r;
+        if (rd !== 15) this.regs[rd] = r;
         if (s) this.setNZ(r);
         break;
       }
@@ -1729,10 +2665,10 @@ export class Thumb2 implements ICpu {
         if (s) this.setNZ(r);
         break;
       }
-      case 0x8: {  // ADD{S}
+      case 0x8: {  // ADD{S}  /  CMN Rn,Rm{,shift} (Rd=15,S=1 → discard result)
         const a = this.regs[rn];
         const r = u32(a + rmVal);
-        this.regs[rd] = r;
+        if (rd !== 15) this.regs[rd] = r;
         if (s) this.setNZCV_add(a, rmVal);
         break;
       }
@@ -1741,13 +2677,25 @@ export class Thumb2 implements ICpu {
         const c = this.flagC;
         const r = u32(a + rmVal + c);
         this.regs[rd] = r;
-        if (s) this.setNZCV_add(a, rmVal + c);
+        if (s) this.setNZCV_addc(a, rmVal, c);
         break;
       }
-      case 0xd: {  // SUB{S}
+      case 0xb: {  // SBC{S} Rd,Rn,Rm{,shift} — Rn - Rm - borrow (borrow = 1-C).
+        // Was MISSING: fell through to default (no-op). Soft-float __adddf3 uses
+        // `sbc.w rX,rX,rX,lsl#1` to conditionally negate a mantissa by the sign
+        // (carry) bit; without it, different-sign dadd/dsub added instead of
+        // subtracting (5.0-3.0 → 8.0) and __divdf3 was wrong. See [[thumb2-bugs]].
+        const a = this.regs[rn];
+        const c = this.flagC;
+        const r = u32(a - rmVal - (1 - c));
+        this.regs[rd] = r;
+        if (s) this.setNZCV_addc(a, ~rmVal, c);   // exactos, ver setNZCV_addc
+        break;
+      }
+      case 0xd: {  // SUB{S}  /  CMP Rn,Rm{,shift} (Rd=15,S=1 → discard result)
         const a = this.regs[rn];
         const r = u32(a - rmVal);
-        this.regs[rd] = r;
+        if (rd !== 15) this.regs[rd] = r;   // Rd=15 → CMP: flags only, no PC write
         if (s) this.setNZCV_sub(a, rmVal);
         break;
       }

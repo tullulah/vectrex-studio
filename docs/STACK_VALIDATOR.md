@@ -248,7 +248,7 @@ To fix the stack imbalances found in pang:
 - **MC6809 Architecture**: http://6809.wikidot.com/
 - **Stack Operations**: PSHS/PULS instructions (introdu-
 - **Vectrex Reference**: `docs/` directory in this repo
-- **Core Compiler Implementation**: `core/src/backend/m6809/` (legacy reference)
+- **Code generator**: `buildtools/vpy_codegen/src/m6809/`
 
 ## See Also
 

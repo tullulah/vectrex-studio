@@ -1,0 +1,38 @@
+{
+  "version": "1.0",
+  "name": "hit",
+  "category": "hit",
+  "duration_ms": 300,
+  "oscillator": {
+    "frequency": 200,
+    "channel": 0,
+    "duty": 50
+  },
+  "envelope": {
+    "attack": 30,
+    "decay": 80,
+    "sustain": 12,
+    "release": 100,
+    "peak": 15
+  },
+  "pitch": {
+    "enabled": true,
+    "start_mult": 1.2,
+    "end_mult": 0.3,
+    "curve": -3
+  },
+  "noise": {
+    "enabled": true,
+    "period": 8,
+    "volume": 12,
+    "decay_ms": 200
+  },
+  "modulation": {
+    "arpeggio": false,
+    "arpeggio_notes": [],
+    "arpeggio_speed": 0,
+    "vibrato": false,
+    "vibrato_depth": 0,
+    "vibrato_speed": 0
+  }
+}

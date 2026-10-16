@@ -14,12 +14,12 @@ export class AiService {
   private currentConfig: AiProviderConfig = {};
 
   constructor() {
-    // Inicializar con Mock provider por defecto
+    // Initialize with the Mock provider by default
     this.switchProvider('mock');
   }
 
   /**
-   * Cambia el proveedor de IA activo
+   * Switches the active AI provider
    */
   public switchProvider(type: AiProviderType, config?: AiProviderConfig): void {
     try {
@@ -38,28 +38,28 @@ export class AiService {
   }
 
   /**
-   * Obtiene el proveedor actual
+   * Gets the current provider
    */
   public getCurrentProvider(): IAiProvider | null {
     return this.currentProvider;
   }
 
   /**
-   * Obtiene el tipo de proveedor actual
+   * Gets the current provider type
    */
   public getCurrentProviderType(): AiProviderType {
     return this.currentProviderType;
   }
 
   /**
-   * Verifica si el proveedor actual está configurado
+   * Checks whether the current provider is configured
    */
   public isConfigured(): boolean {
     return this.currentProvider?.isConfigured() ?? false;
   }
 
   /**
-   * Envía una solicitud al proveedor de IA actual
+   * Sends a request to the current AI provider
    */
   public async sendRequest(request: AiRequest): Promise<AiResponse> {
     if (!this.currentProvider) {
@@ -85,23 +85,23 @@ export class AiService {
     } catch (error) {
       logger.error('AI', `AI request failed (${this.currentProvider.name}):`, error);
       
-      // Retornar respuesta de error
+      // Return an error response
       return {
-        content: `❌ Error al procesar la solicitud con ${this.currentProvider.name}:\n\n${error instanceof Error ? error.message : String(error)}`,
+        content: `❌ Error processing the request with ${this.currentProvider.name}:\n\n${error instanceof Error ? error.message : String(error)}`,
         error: error instanceof Error ? error.message : String(error)
       };
     }
   }
 
   /**
-   * Obtiene los proveedores disponibles
+   * Gets the available providers
    */
   public getAvailableProviders() {
     return AiProviderFactory.getAvailableProviders();
   }
 
   /**
-   * Prueba la conexión con un proveedor específico
+   * Tests the connection to a specific provider
    */
   public async testProviderConnection(type: AiProviderType, config?: AiProviderConfig): Promise<boolean> {
     try {
@@ -113,7 +113,7 @@ export class AiService {
   }
 
   /**
-   * Obtiene los modelos disponibles para un proveedor
+   * Gets the models available for a provider
    */
   public async getProviderModels(type: AiProviderType, config?: AiProviderConfig): Promise<string[]> {
     try {
@@ -134,7 +134,7 @@ export class AiService {
   }
 
   /**
-   * Configura el proveedor actual
+   * Configures the current provider
    */
   public configureCurrentProvider(config: AiProviderConfig): void {
     if (this.currentProvider) {
@@ -144,21 +144,21 @@ export class AiService {
   }
 
   /**
-   * Obtiene la configuración actual del proveedor
+   * Gets the current provider's configuration
    */
   public getCurrentConfig(): AiProviderConfig {
     return this.currentConfig;
   }
 
   /**
-   * Limpia la caché de proveedores (útil cuando cambian configs)
+   * Clears the provider cache (useful when configs change)
    */
   public clearProvidersCache(): void {
     AiProviderFactory.clearCache();
-    // Recrear provider actual
+    // Recreate the current provider
     this.switchProvider(this.currentProviderType, this.currentConfig);
   }
 }
 
-// Instancia singleton del servicio
+// Singleton service instance
 export const aiService = new AiService();

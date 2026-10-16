@@ -1,0 +1,61 @@
+{
+  "version": "1.0",
+  "name": "rocket_top",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "cone",
+          "intensity": 127,
+          "closed": true,
+          "points": [
+            {
+              "x": -9,
+              "y": -9
+            },
+            {
+              "x": 0,
+              "y": 12
+            },
+            {
+              "x": 12,
+              "y": -9
+            }
+          ]
+        },
+        {
+          "name": "cone_base",
+          "intensity": 127,
+          "closed": true,
+          "points": [
+            {
+              "x": -9,
+              "y": -9
+            },
+            {
+              "x": -9,
+              "y": -9
+            },
+            {
+              "x": 12,
+              "y": -9
+            },
+            {
+              "x": 12,
+              "y": -9
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 2,
+  "center_y": 2
+}

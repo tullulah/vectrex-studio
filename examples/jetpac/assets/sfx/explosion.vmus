@@ -1,0 +1,17 @@
+{
+  "version": "1.0",
+  "name": "Explosion",
+  "author": "VPy",
+  "tempo": 240,
+  "ticksPerBeat": 24,
+  "totalTicks": 48,
+  "notes": [],
+  "noise": [
+    {"id": "noise1", "start": 0, "duration": 12, "period": 1, "channels": 7},
+    {"id": "noise2", "start": 12, "duration": 12, "period": 5, "channels": 7},
+    {"id": "noise3", "start": 24, "duration": 12, "period": 10, "channels": 7},
+    {"id": "noise4", "start": 36, "duration": 12, "period": 20, "channels": 7}
+  ],
+  "loopStart": 0,
+  "loopEnd": 0
+}

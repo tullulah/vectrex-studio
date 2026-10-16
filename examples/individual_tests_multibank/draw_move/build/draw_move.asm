@@ -37,6 +37,8 @@ START:
     STA VIA_t1_cnt_lo
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -55,20 +57,23 @@ VPY_MOVE_Y           EQU $C880+$09   ; MOVE() current Y offset (signed byte, 0 b
 TEMP_YX              EQU $C880+$0A   ; Temporary Y/X coordinate storage (2 bytes)
 BTN_PREV_STATE       EQU $C880+$0C   ; Button edge-detection: holds bit 7,6,5,4 = prev press state for btn 1,2,3,4 (1 bytes)
 BTN_RAW              EQU $C880+$0D   ; Raw PSG reg 14 (active-LOW: 0=pressed, 1=released) - Vectorblade pattern (1 bytes)
-DRAW_LINE_ARGS       EQU $C880+$0E   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$18   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$1A   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$1C   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$1D   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$1E   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$20   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
-
+DRAW_VEC_INTENSITY   EQU $C880+$0E   ; Vector intensity override (0=use vector data) (1 bytes)
+DRAW_LINE_ARGS       EQU $C880+$0F   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$19   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$1B   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$1D   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$1E   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$1F   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$21   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+VAR_ARG0             EQU $C880+$23   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$25   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$27   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$29   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$2B   ; Function argument 4 (16-bit) (2 bytes)
+VAR_ARG5             EQU $C880+$2D   ; Function argument 5 (16-bit) (2 bytes)
+VAR_ARG6             EQU $C880+$2F   ; Function argument 6 (16-bit) (2 bytes)
+VAR_ARG7             EQU $C880+$31   ; Function argument 7 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$33   ; Current ROM bank ID (multibank tracking) (1 bytes)
 
 ;***************************************************************************
 ; MAIN PROGRAM (Bank #0)
@@ -78,6 +83,7 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    CLR DRAW_VEC_INTENSITY ; 0 = use recorded/vector intensity (no override)
     ; === Initialize Joystick (one-time setup) ===
     JSR $F1AF    ; DP_to_C8 (required for RAM access)
     CLR $C823    ; CRITICAL: Clear analog mode flag (Joy_Analog does DEC on this)
@@ -93,6 +99,7 @@ MAIN:
     ; Mux configured - J1_X()/J1_Y() can now be called
 
     ; Call main() for initialization
+; VPy_LINE:11
     ; TODO: Statement Pass { source_line: 11 }
 
 .MAIN_LOOP:
@@ -102,6 +109,7 @@ MAIN:
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
     JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
+; VPy_LINE:15
     ; ===== MOVE builtin =====
     LDA #$C4                ; X coordinate
     STA VPY_MOVE_X
@@ -109,6 +117,8 @@ LOOP_BODY:
     STA VPY_MOVE_Y
     LDD #0
     STD RESULT
+; VPy_LINE:16
+; NATIVE_CALL: DRAW_LINE at line 16
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD #0
     STD DRAW_LINE_ARGS+0    ; x0
@@ -123,6 +133,7 @@ LOOP_BODY:
     JSR DRAW_LINE_WRAPPER
     LDD #0
     STD RESULT
+; VPy_LINE:19
     ; ===== MOVE builtin =====
     LDA #$3C                ; X coordinate
     STA VPY_MOVE_X
@@ -130,6 +141,8 @@ LOOP_BODY:
     STA VPY_MOVE_Y
     LDD #0
     STD RESULT
+; VPy_LINE:20
+; NATIVE_CALL: DRAW_LINE at line 20
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD #0
     STD DRAW_LINE_ARGS+0    ; x0
@@ -144,6 +157,7 @@ LOOP_BODY:
     JSR DRAW_LINE_WRAPPER
     LDD #0
     STD RESULT
+; VPy_LINE:23
     ; ===== MOVE builtin =====
     LDA #$00                ; X coordinate
     STA VPY_MOVE_X
@@ -151,6 +165,8 @@ LOOP_BODY:
     STA VPY_MOVE_Y
     LDD #0
     STD RESULT
+; VPy_LINE:24
+; NATIVE_CALL: DRAW_LINE at line 24
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD #-30
     STD DRAW_LINE_ARGS+0    ; x0

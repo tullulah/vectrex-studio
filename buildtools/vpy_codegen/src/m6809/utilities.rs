@@ -1,7 +1,7 @@
 // Utility Builtins for VPy
 // Simple utility functions for common tasks
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use vpy_parser::Expr;
 
 /// Emit MOVE(x, y) - Move beam to position without drawing
@@ -28,37 +28,44 @@ pub fn emit_move(args: &[Expr], out: &mut String) {
         out.push_str(&format!("    LDA #${:02X}                ; Y coordinate\n", (*y as i8) as u8));
         out.push_str("    STA VPY_MOVE_Y\n");
     } else {
-        // Variable args: evaluate each and store low byte
-        out.push_str("    ; TODO: variable MOVE args (store expressions)\n");
+        // Variable args: evaluate each (D = value) and store the low byte
+        super::expressions::emit_simple_expr(&args[0], out, &[]);
+        out.push_str("    STB VPY_MOVE_X            ; X coordinate (low byte)\n");
+        super::expressions::emit_simple_expr(&args[1], out, &[]);
+        out.push_str("    STB VPY_MOVE_Y            ; Y coordinate (low byte)\n");
     }
     
     out.push_str("    LDD #0\n");
     out.push_str("    STD RESULT\n");
 }
 
-/// Emit LEN(array) - Get array length
-/// 
-/// For now, returns size from array metadata (stored at array_ptr - 2)
-/// 
-/// Note: This is a placeholder - proper implementation needs:
-/// - Array metadata tracking
-/// - String length calculation
-/// - Variable length extraction
+/// Emit LEN(array) - number of elements of a global array.
+///
+/// The length of a global list literal (`xs = [..]` or `const XS = [..]`) is a
+/// compile-time constant, emitted as the `ARRAY_<NAME>_LEN` equate. Any other
+/// argument has no length known at compile time; [`validate_len_calls`] rejects
+/// those before code generation, so this function only sees valid calls.
 pub fn emit_len(args: &[Expr], out: &mut String) {
-    out.push_str("    ; ===== LEN builtin =====\n");
-    
-    if args.len() != 1 {
-        out.push_str("    ; ERROR: LEN requires 1 argument (array or string)\n");
-        out.push_str("    LDD #0\n");
-        out.push_str("    STD RESULT\n");
-        return;
+    match args {
+        [Expr::Ident(id)] if super::context::global_array_base_label(&id.name).is_some() => {
+            out.push_str(&format!(
+                "    LDD #ARRAY_{}_LEN   ; len({}) (compile-time constant)\n",
+                id.name.to_uppercase(),
+                id.name
+            ));
+        }
+        _ => {
+            // Unreachable after validate_len_calls; keep the generated code well-formed.
+            out.push_str("    ; ERROR: len() argument is not a global array\n");
+            out.push_str("    LDD #0\n");
+        }
     }
-    
-    // Placeholder - always return 0 for now
-    out.push_str("    ; TODO: Implement array/string length extraction\n");
-    out.push_str("    ; Needs metadata tracking in array system\n");
-    out.push_str("    LDD #0                 ; Placeholder return\n");
-    out.push_str("    STD RESULT\n");
+}
+
+/// Reject every `len(...)` whose result is not known at compile time
+/// (shared with the ARM backends: [`crate::validate::check_len_calls`]).
+pub fn validate_len_calls(module: &vpy_parser::Module) -> Result<(), String> {
+    crate::validate::check_len_calls(module, "m6809")
 }
 
 /// Emit GET_TIME() - Get frame counter
@@ -96,7 +103,7 @@ pub fn emit_peek(args: &[Expr], out: &mut String) {
         out.push_str("    CLR RESULT             ; Clear high byte\n");
         out.push_str("    STA RESULT+1           ; Store low byte\n");
     } else {
-        out.push_str("    ; TODO: Support variable address\n");
+        super::diagnostics::error("peek() needs a constant address on m6809 (e.g. `peek(0xC880)`)");
         out.push_str("    LDD #0\n");
         out.push_str("    STD RESULT\n");
     }
@@ -124,7 +131,7 @@ pub fn emit_poke(args: &[Expr], out: &mut String) {
         out.push_str(&format!("    LDA #{}                ; Value to write\n", value));
         out.push_str(&format!("    STA ${:04X}             ; Write to address\n", addr));
     } else {
-        out.push_str("    ; TODO: Support variable address/value\n");
+        super::diagnostics::error("poke() needs a constant address and value on m6809 (e.g. `poke(0xC880, 1)`)");
     }
     
     out.push_str("    LDD #0\n");
@@ -134,9 +141,9 @@ pub fn emit_poke(args: &[Expr], out: &mut String) {
 /// Emit WAIT(frames) - Wait for N frames
 /// 
 /// Parameters:
-/// - frames: Number of frames to wait (1-255)
+/// - frames: Number of frames to wait: a literal or a const (up to 65535)
 /// 
-/// Calls WAIT_RECAL() N times
+/// Calls WAIT_RECAL() N times (inline up to 10, a loop above)
 pub fn emit_wait(args: &[Expr], out: &mut String) {
     out.push_str("    ; ===== WAIT builtin =====\n");
     
@@ -147,25 +154,28 @@ pub fn emit_wait(args: &[Expr], out: &mut String) {
         return;
     }
     
-    // Check if frames is constant
-    if let Expr::Number(frames) = &args[0] {
-        if *frames <= 10 {
+    // The frame count must be a compile-time constant (a literal or a const).
+    if let Some(frames) = super::expressions::try_extract_int_literal(&args[0]) {
+        if frames <= 10 {
             // Inline for small counts
-            for _ in 0..*frames {
+            for _ in 0..frames.max(0) {
                 out.push_str("    JSR Wait_Recal\n");
             }
         } else {
-            // Use loop for larger counts
-            out.push_str(&format!("    LDA #{}                ; Frame counter\n", frames));
-            out.push_str("WAIT_LOOP:\n");
-            out.push_str("    PSHS A\n");
+            // Loop for larger counts. The label is unique per call: two waits in
+            // one program used to define WAIT_LOOP twice. 16-bit counter on the
+            // stack (Wait_Recal clobbers D and X); balanced PSHS/PULS.
+            let lbl = super::functions::fresh_label("WAIT_LOOP");
+            out.push_str(&format!("    LDD #{}                ; Frame counter\n", frames));
+            out.push_str(&format!("{}:\n", lbl));
+            out.push_str("    PSHS D\n");
             out.push_str("    JSR Wait_Recal\n");
-            out.push_str("    PULS A\n");
-            out.push_str("    DECA\n");
-            out.push_str("    BNE WAIT_LOOP\n");
+            out.push_str("    PULS D\n");
+            out.push_str("    SUBD #1\n");
+            out.push_str(&format!("    BNE {}\n", lbl));
         }
     } else {
-        out.push_str("    ; TODO: Support variable frame count\n");
+        super::diagnostics::error("wait() needs a constant frame count on m6809 (e.g. `wait(30)`)");
     }
     
     out.push_str("    LDD #0\n");
@@ -191,7 +201,7 @@ pub fn emit_beep(args: &[Expr], out: &mut String) {
         if let (Expr::Number(f), Expr::Number(d)) = (&args[0], &args[1]) {
             (*f, *d)
         } else {
-            out.push_str("    ; TODO: Support variable frequency/duration\n");
+            super::diagnostics::error("beep(freq, frames) needs constant arguments on m6809 (e.g. `beep(50, 8)`)");
             out.push_str("    LDD #0\n    STD RESULT\n");
             return;
         }
@@ -228,6 +238,6 @@ pub fn emit_beep(args: &[Expr], out: &mut String) {
 
 /// Emit runtime helpers for utilities builtins
 /// Only emits helpers that are actually used in the code (tree shaking)
-pub fn emit_runtime_helpers(_out: &mut String, _needed: &HashSet<String>) {
+pub fn emit_runtime_helpers(_out: &mut String, _needed: &BTreeSet<String>) {
     // No utility runtime helpers currently needed
 }

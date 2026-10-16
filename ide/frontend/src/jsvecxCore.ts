@@ -1,6 +1,7 @@
 import type { MetricsSnapshot, RegistersSnapshot, Segment, IEmulatorCore } from './emulatorCore.js';
 import { VectrexSystem } from './emulator/systems/VectrexSystem.js';
 import { Rp2350System } from './emulator/systems/Rp2350System.js';
+import { Uvm2System }   from './emulator/systems/Uvm2System.js';
 
 export class JsVecxEmulatorCore implements IEmulatorCore {
   private mod: any = null;
@@ -20,7 +21,32 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
 
   // Phase 4: Rp2350System — ARM emulation backend.
   private _rp2350System: Rp2350System | null = null;
-  private _activeTarget: 'm6809' | 'rp2350' = 'm6809';
+  // Phase 4b: Uvm2System — the Ultimate Vectrex Multicart 2. A separate system
+  // rather than a mode of Rp2350System: that one implements the syscalls in JS,
+  // whereas a UVM2 image implements them itself and drives the VIA over a
+  // halt-mode bus, which is the whole thing worth simulating.
+  private _uvm2System: Uvm2System | null = null;
+  private _activeTarget: 'm6809' | 'rp2350' | 'uvm2' = 'm6809';
+
+  /** Told of each ARM program loaded, with its ELF (debug/armSourceDebug.ts reads its lines). */
+  private readonly armLoadListeners = new Set<(elf: Uint8Array | null) => void>();
+  onArmProgramLoaded(fn: (elf: Uint8Array | null) => void): void { this.armLoadListeners.add(fn); }
+  /** The ELF for the debugger's line table only, when it is not given to the system
+   *  (a uvm2 image runs without its ELF: setElf would change how its SD is served). */
+  private armDebugElf: Uint8Array | null = null;
+  setArmDebugElf(elf: Uint8Array | null): void { this.armDebugElf = elf; }
+  private armLoaded(elf: Uint8Array | undefined): void {
+    for (const fn of this.armLoadListeners) {
+      try { fn(elf ?? this.armDebugElf); } catch (e) { console.warn('[JsVecxCore] ARM load listener failed:', e); }
+    }
+  }
+
+  /** The ARM system running now (the debugger's target), or null on the 6809. */
+  get activeArmSystem(): Rp2350System | Uvm2System | null {
+    if (this._activeTarget === 'uvm2') return this._uvm2System;
+    if (this._activeTarget === 'rp2350') return this._rp2350System;
+    return null;
+  }
   
   // Debug output system
   private debugMessages: string[] = [];
@@ -484,6 +510,9 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
     if (this._activeTarget === 'rp2350' && this._rp2350System) {
       this._rp2350System.setJoyAxis(x, y);
     }
+    if (this._activeTarget === 'uvm2' && this._uvm2System) {
+      this._uvm2System.setJoyAxis(x, y);
+    }
     if (this._activeTarget === 'm6809' && this._vectrexSystem) {
       this._vectrexSystem.setJoyAxis(x, y);
     }
@@ -507,6 +536,9 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
     if (this._activeTarget === 'rp2350' && this._rp2350System) {
       this._rp2350System.setJoyButtons(portBMask);
     }
+    if (this._activeTarget === 'uvm2' && this._uvm2System) {
+      this._uvm2System.setJoyButtons(portBMask);
+    }
   }
 
   /** Player 2 button state (active-low, bits 0-3 = btn 1-4). */
@@ -516,22 +548,128 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
     }
   }
 
+  /**
+   * Return the active target's live AudioContext + output node so the video
+   * recorder can attach a parallel MediaStream destination (see
+   * VideoRecorder). Returns null when the active target has no audio running.
+   * Read-only tap — never disconnects or alters the path to the speakers.
+   */
+  getAudioContextAndOutputNode(): { ctx: AudioContext; outputNode: AudioNode } | null {
+    if (this._activeTarget === 'rp2350' && this._rp2350System) {
+      return this._rp2350System.getAudioContextAndOutputNode();
+    }
+    if (this._activeTarget === 'uvm2' && this._uvm2System) {
+      return this._uvm2System.getAudioContextAndOutputNode();
+    }
+    if (this._vectrexSystem) {
+      return this._vectrexSystem.getAudioContextAndOutputNode();
+    }
+    return null;
+  }
+
   /** Load an ARM binary (rp2350 target). Switches the active emulation system to Rp2350System. */
-  loadArm(bin: Uint8Array, elf?: Uint8Array, canvas?: HTMLCanvasElement): void {
-    console.log(`[loadArm] START bin=${bin.length}b elf=${elf?.length ?? 0}b canvas=${canvas ? `${canvas.width}x${canvas.height}` : 'none'}`);
+  loadArm(bin: Uint8Array, elf?: Uint8Array, canvas?: HTMLCanvasElement, simSdFiles?: string[], simSdPreviews?: Record<string, string>, simRomZip?: Uint8Array): void {
+    console.log(`[loadArm] START bin=${bin.length}b elf=${elf?.length ?? 0}b canvas=${canvas ? `${canvas.width}x${canvas.height}` : 'none'} sdFiles=${simSdFiles?.length ?? 0} previews=${simSdPreviews ? Object.keys(simSdPreviews).length : 0}`);
     if (!this._rp2350System) {
       this._rp2350System = new Rp2350System();
     }
-    this._rp2350System.init(bin, elf);
+    // Simulated SD game list + .vrec previews (folder ~/VectrexStudio/sd) — set
+    // before init so the SD_FILE_* / DRAW_SD_PREVIEW traps see them.
+    if (simSdFiles) this._rp2350System.setSimSdFiles(simSdFiles);
+    if (simSdPreviews) this._rp2350System.setSimSdPreviews(simSdPreviews);
+    // Romset (MAME model): ports no longer embed the ROM, they read
+    // `roms/<STEM>.ZIP` off the card. The simulated card already lives in
+    // ~/VectrexStudio/sd, so the zip belongs in ~/VectrexStudio/sd/roms/ —
+    // same layout as the real one, nothing new to learn.
+    this._rp2350System.setRomZip(simRomZip ?? null);
+    // Two rp2350 image kinds, told apart by the 'VPy2' header entry pointer:
+    //   • flash/XIP-linked (VPy inline mode): entry in flash 0x1020xxxx → init()
+    //     runs it with PC-symbol traps.
+    //   • RAM-linked (SD-launched games, incl. the C rp2350 SDK backend): entry
+    //     in SRAM (GAME_RAM origin 0x20010000 .. 0x2007FFFF) → initRamGame() loads
+    //     it at the origin and runs it through the `svc` BIOS-syscall dispatcher.
+    const hasMagic = bin.length >= 8 &&
+      bin[0] === 0x56 && bin[1] === 0x50 && bin[2] === 0x79 && bin[3] === 0x32;
+    const entry = hasMagic ? ((bin[4] | (bin[5] << 8) | (bin[6] << 16) | (bin[7] << 24)) >>> 0) : 0;
+    // Dos ventanas, porque hay dos generaciones de imagen: los juegos C de rp2350
+    // enlazan en la PSRAM (rp2350_game_ram.ld GAME_RAM ORIGIN = 0x11000000, que es
+    // GAME_LOAD_ADDR de sd.rs) y las imagenes VPy antiguas en SRAM (0x2001xxxx).
+    // Solo se miraba la segunda, asi que TODO juego C caia al camino de flash/XIP y
+    // se quedaba negro. Debe cuadrar con el .ld y con Rp2350System.
+    const ramLinked = (entry >= 0x20010000 && entry < 0x20080000)
+                   || (entry >= 0x11000000 && entry < 0x11800000);
+    if (ramLinked && typeof this._rp2350System.initRamGame === 'function') {
+      console.log('[loadArm] RAM-linked svc image (entry 0x' + entry.toString(16) + ') → initRamGame');
+      this._rp2350System.initRamGame(bin);
+    } else {
+      this._rp2350System.init(bin, elf);
+    }
     if (canvas) this._rp2350System.setCanvas(canvas);
     this._activeTarget = 'rp2350';
     // Start PSG audio synthesis (requires user gesture — loadArm is always
     // triggered by a user action, so the AudioContext can start here).
     this._rp2350System.startAudio();
     console.log(`[loadArm] DONE — activeTarget=${this._activeTarget} traps registered`);
+    this.armLoaded(elf);
+  }
+
+  /**
+   * Load a `.um2` image (uvm2 target) and switch the active system to
+   * Uvm2System. Unlike loadArm there is no ELF and no trap registration: the
+   * image carries its own syscall handler, and the simulator runs it.
+   */
+  loadUvm2(um2: Uint8Array, canvas?: HTMLCanvasElement,
+           elf?: Uint8Array, sdFiles?: Record<string, Uint8Array>, psramElf?: Uint8Array,
+           sdDeferred?: Record<string, number>): void {
+    console.log(`[loadUvm2] START um2=${um2.length}b canvas=${canvas ? `${canvas.width}x${canvas.height}` : 'none'}`);
+    if (this._activeTarget === 'rp2350' && this._rp2350System) {
+      try { this._rp2350System.stopAudio(); } catch {}
+    }
+    if (!this._uvm2System) this._uvm2System = new Uvm2System();
+    /* ANTES de init: los simbolos y la SD tienen que estar puestos cuando la imagen
+     * arranque, porque el romset se lee en el arranque (uvm2_romzip_cargar). Al reves, el
+     * juego pinta su X de "falta el romset" y ya no vuelve a mirar. */
+    if (elf) this._uvm2System.setElf(elf);
+    if (sdFiles) {
+      const leer = (window as any).electronAPI?.sdReadSync as ((rel: string) => Uint8Array | null) | undefined;
+      this._uvm2System.setSdFiles(sdFiles, sdDeferred,
+        leer ? (rel) => { const b = leer(rel); return b ? new Uint8Array(b) : null; } : undefined);
+    }
+    this._uvm2System.setPsramElf(psramElf ?? null);
+    this._uvm2System.init(um2);
+    if (canvas) this._uvm2System.setCanvas(canvas);
+    this._activeTarget = 'uvm2';
+    this._uvm2System.startAudio();
+    console.log('[loadUvm2] DONE — activeTarget=uvm2');
+    this.armLoaded(elf);
+  }
+
+  /** Lo que costo el ultimo frame COMPLETO del juego, en ciclos de bus del Vectrex, y los
+   *  vectores que dibujo. Vacio mientras no haya ELF: sale de los contadores del juego. */
+  get uvm2FrameStats(): { ciclos: number; vectores: number; frames: number } | null {
+    return this._uvm2System
+      ? { ciclos: this._uvm2System.ciclosDeBus, vectores: this._uvm2System.vectoresDeBus,
+          frames: this._uvm2System.framesDelJuego }
+      : null;
+  }
+
+  private _runFrameUvm2(): { stepsRun: number; vectors: Segment[] } {
+    if (!this._uvm2System) return { stepsRun: 0, vectors: [] };
+    try {
+      const segments = this._uvm2System.runFrame();
+      this.lastFrameSegments = segments;
+      this.frameCounter++;
+      return { stepsRun: 2_500_000, vectors: segments };
+    } catch (e) {
+      console.error(`[uvm2 runFrame] frame=${this.frameCounter} THREW:`, e);
+      return { stepsRun: 0, vectors: [] };
+    }
   }
 
   runFrame(_maxInstr?: number){
+    if (this._activeTarget === 'uvm2' && this._uvm2System) {
+      return this._runFrameUvm2();
+    }
     // Phase 4: ARM target routes through Rp2350System (doesn't need this.inst).
     if (this._activeTarget === 'rp2350' && this._rp2350System) {
       return this._runFrameRp2350();

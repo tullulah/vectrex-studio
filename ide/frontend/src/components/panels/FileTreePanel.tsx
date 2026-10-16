@@ -1,24 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../../state/projectStore';
 import { useEditorStore } from '../../state/editorStore';
 import type { FileNode } from '../../types/models';
+import { languageOfFile as getLanguageFromFilename } from '../../utils/openFile';
+import { FileTreeMenu, type MenuItem } from './FileTreeMenu';
 
-// Helper function to detect language from file extension
-function getLanguageFromFilename(filename: string): 'vpy' | 'c' | 'cpp' | 'json' | 'plaintext' | 'asm' | 'javascript' | 'typescript' | 'markdown' {
-  const ext = filename.split('.').pop()?.toLowerCase() || '';
-  switch (ext) {
-    case 'vpy': return 'vpy';
-    case 'c': return 'c';
-    case 'cpp': case 'cc': case 'cxx': return 'cpp';
-    case 'h': case 'hpp': return 'cpp';
-    case 'asm': case 's': return 'asm';
-    case 'json': case 'vec': case 'vmus': return 'json';
-    case 'js': return 'javascript';
-    case 'ts': return 'typescript';
-    case 'md': return 'markdown';
-    default: return 'plaintext';
-  }
-}
+const IS_MAC = typeof navigator !== 'undefined' && /mac/i.test(navigator.platform);
+const IS_WIN = typeof navigator !== 'undefined' && /win/i.test(navigator.platform);
+const MOD = IS_MAC ? '⌘' : 'Ctrl+';
+
+/** The folder a relative tree path lives in ('' = the project root). */
+const parentOf = (rel: string) => (rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '');
+
+/** An inline name box in the tree: renaming `node`, or a new file/folder inside `parent`. */
+type Editing =
+  | { kind: 'rename'; node: FileNode }
+  | { kind: 'newFile' | 'newFolder'; parent: string };
 
 // Helper function to normalize file paths to proper file:// URIs (same logic as File > Open)
 function normalizeFileUri(path: string): string {
@@ -42,6 +40,42 @@ function normalizeFileUri(path: string): string {
   return result;
 }
 
+/** The inline name box: Enter or leaving it accepts (onFinish(value)), Escape cancels
+ *  (onFinish(null)). At module level: a component defined inside the panel would be a new
+ *  type on every render (a hover re-renders) and remount, losing what was typed. */
+const NameInput: React.FC<{ initial: string; isDir: boolean; onFinish: (v: string | null) => void }> =
+  ({ initial, isDir, onFinish }) => {
+  const done = useRef(false);
+  const finish = (v: string | null) => {
+    if (done.current) return;
+    done.current = true;
+    onFinish(v);
+  };
+  return (
+    <input
+      autoFocus
+      defaultValue={initial}
+      spellCheck={false}
+      onFocus={(e) => {
+        // select the name without its extension, as Finder and VS Code do
+        const dot = isDir ? -1 : initial.lastIndexOf('.');
+        e.currentTarget.setSelectionRange(0, dot > 0 ? dot : initial.length);
+      }}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') { e.preventDefault(); finish(e.currentTarget.value); }
+        else if (e.key === 'Escape') { e.preventDefault(); finish(null); }
+      }}
+      onBlur={(e) => finish(e.currentTarget.value)}
+      style={{
+        flex: 1, minWidth: 0, font: 'inherit', fontSize: 13, color: '#cccccc',
+        background: '#3c3c3c', border: '1px solid #007fd4', outline: 'none', padding: '0 4px', height: 20,
+      }}
+    />
+  );
+};
+
 export const FileTreePanel: React.FC = () => {
   const { project, workspaceName, selectFile, hasWorkspace, refreshWorkspace, vpyProject } = useProjectStore();
   const { openDocument, closeDocument, documents, active } = useEditorStore();
@@ -51,6 +85,12 @@ export const FileTreePanel: React.FC = () => {
   const [hoveredFile, setHoveredFile] = useState<string | null>(null);
   const [draggedFiles, setDraggedFiles] = useState<Set<string>>(new Set());
   const [lastClickedFile, setLastClickedFile] = useState<string | null>(null);
+  const { t } = useTranslation(['common']);
+  // The context menu (node null = the empty area under the tree), the inline name box,
+  // and the tree's own clipboard of paths for Copy/Cut/Paste.
+  const [menu, setMenu] = useState<{ x: number; y: number; node: FileNode | null } | null>(null);
+  const [editing, setEditing] = useState<Editing | null>(null);
+  const [clipboard, setClipboard] = useState<{ paths: string[]; cut: boolean } | null>(null);
 
   // Determine display name - prefer .vpyproj project name
   const displayName = vpyProject?.config?.project?.name || workspaceName || 'Workspace';
@@ -170,6 +210,7 @@ export const FileTreePanel: React.FC = () => {
     let isSubscribed = true;
     
     let cleanupListener: (() => void) | null = null;
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
     
     const setupWatcher = async () => {
       try {
@@ -219,8 +260,12 @@ export const FileTreePanel: React.FC = () => {
               }
             }
             
-            // Refresh the workspace after a short delay to batch changes
-            setTimeout(() => {
+            // Refresh the workspace after a short delay to batch changes: ONE pending refresh,
+            // pushed back by every event. It was one timer per event, so a burst of N changes
+            // ran N full workspace refreshes.
+            if (refreshTimer) clearTimeout(refreshTimer);
+            refreshTimer = setTimeout(() => {
+              refreshTimer = null;
               if (isSubscribed) {
                 refreshWorkspace();
               }
@@ -239,6 +284,7 @@ export const FileTreePanel: React.FC = () => {
     
     return () => {
       isSubscribed = false;
+      if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
       
       // Remove event listener (check if it's a function)
       if (cleanupListener && typeof cleanupListener === 'function') {
@@ -254,49 +300,6 @@ export const FileTreePanel: React.FC = () => {
     };
   }, [project?.rootPath, refreshWorkspace]);
 
-  // Handle keyboard events for file deletion
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Delete' && selectedFiles.size > 0) {
-        event.preventDefault();
-        
-        // Find the selected nodes to get their names and types
-        const findNodeByPath = (nodes: any[], path: string): any => {
-          for (const node of nodes) {
-            if (node.path === path) return node;
-            if (node.children) {
-              const found = findNodeByPath(node.children, path);
-              if (found) return found;
-            }
-          }
-          return null;
-        };
-
-        // Delete all selected files
-        const firstSelectedPath = Array.from(selectedFiles)[0];
-        const selectedNode = project?.files ? findNodeByPath(project.files, firstSelectedPath) : null;
-        if (selectedNode && selectedFiles.size === 1) {
-          handleDeleteFile(selectedNode.path, selectedNode.name, selectedNode.isDir);
-        } else if (selectedFiles.size > 1) {
-          const confirmed = window.confirm(
-            `¿Estás seguro de que quieres eliminar ${selectedFiles.size} archivos seleccionados?\n\nEsta acción no se puede deshacer.`
-          );
-          if (confirmed) {
-            selectedFiles.forEach(async (path) => {
-              const node = project?.files ? findNodeByPath(project.files, path) : null;
-              if (node) {
-                await handleDeleteFile(node.path, node.name, node.isDir);
-              }
-            });
-          }
-        }
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [selectedFiles, project?.files]);
-
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
@@ -306,69 +309,226 @@ export const FileTreePanel: React.FC = () => {
     }
   };
 
-  const handleDeleteFile = async (filePath: string, fileName: string, isDir: boolean) => {
-    // Confirmar eliminación
-    const fileType = isDir ? 'carpeta' : 'archivo';
-    const confirmed = window.confirm(
-      `¿Estás seguro de que quieres eliminar ${fileType} "${fileName}"?\n\n` +
-      `${isDir ? 'Esta acción eliminará la carpeta y todo su contenido.' : 'Esta acción no se puede deshacer.'}`
-    );
-    
-    if (!confirmed) return;
+  /** Absolute path of a tree path ('' = the project root), with the platform's separator. */
+  const fullPathOf = (rel: string): string => {
+    const root = project?.rootPath ?? '';
+    if (!rel) return root;
+    return root.includes('\\') ? `${root}\\${rel.replace(/\//g, '\\')}` : `${root}/${rel}`;
+  };
 
-    try {
-      // Construir ruta completa del archivo
-      const fullPath = project?.rootPath ? 
-        (project.rootPath.includes('\\') 
-          ? `${project.rootPath}\\${filePath.replace(/\//g, '\\')}`
-          : `${project.rootPath}/${filePath}`
-        ) : filePath;
-
-      console.log('Deleting file:', fullPath);
-      
-      // Llamar a la API de eliminación
-      const result = await (window as any).files?.deleteFile?.(fullPath);
-      
-      if (result?.error) {
-        alert(`Error al eliminar ${fileType}: ${result.error}`);
-        return;
+  const findNode = (path: string): FileNode | null => {
+    const walk = (nodes: FileNode[]): FileNode | null => {
+      for (const n of nodes) {
+        if (n.path === path) return n;
+        if (n.children) { const f = walk(n.children); if (f) return f; }
       }
+      return null;
+    };
+    return project?.files ? walk(project.files) : null;
+  };
 
-      // Si el archivo está abierto en el editor, cerrarlo
-      if (!isDir) {
-        const fileUri = normalizeFileUri(fullPath);
-        const openDoc = documents.find(doc => doc.uri === fileUri || doc.diskPath === fullPath);
-        if (openDoc) {
-          console.log('Closing open document:', openDoc.uri);
-          closeDocument(openDoc.uri);
-        }
-      } else {
-        // Si es una carpeta, cerrar todos los documentos que estén dentro
-        documents.forEach(doc => {
-          if (doc.diskPath?.startsWith(fullPath)) {
-            console.log('Closing document in deleted folder:', doc.uri);
-            closeDocument(doc.uri);
-          }
-        });
-      }
+  /** True if `full` is `base` or inside it. */
+  const isUnder = (full: string, base: string) =>
+    full === base || full.startsWith(base + '/') || full.startsWith(base + '\\');
 
-      // Actualizar el workspace después de eliminar
-      await refreshWorkspace();
-      
-      // Limpiar selección si el archivo eliminado estaba seleccionado
-      if (selectedFiles.has(filePath)) {
-        setSelectedFiles(prev => {
-          const next = new Set(prev);
-          next.delete(filePath);
-          return next;
-        });
-      }
-
-      console.log(`${fileType} eliminado exitosamente:`, filePath);
-    } catch (error) {
-      console.error('Error deleting file:', error);
-      alert(`Error al eliminar ${fileType}: ${error}`);
+  /** Open editor tabs follow a file or folder that moved from oldFull to newFull. */
+  const remapOpenDocs = (oldFull: string, newFull: string) => {
+    for (const doc of useEditorStore.getState().documents) {
+      if (!doc.diskPath || !isUnder(doc.diskPath, oldFull)) continue;
+      const diskPath = newFull + doc.diskPath.slice(oldFull.length);
+      closeDocument(doc.uri);
+      openDocument({ ...doc, uri: normalizeFileUri(diskPath), diskPath });
     }
+  };
+
+  const showError = (what: string, error: string) => {
+    alert(error === 'exists' ? t('fileTree.error.exists') : `${what}: ${error}`);
+  };
+
+  /** The nodes an action applies to: the selection if the clicked node is in it, else the node. */
+  const targetsFor = (node: FileNode): FileNode[] => {
+    if (!selectedFiles.has(node.path) || selectedFiles.size < 2) return [node];
+    const nodes = [...selectedFiles].map(findNode).filter((n): n is FileNode => !!n);
+    // a folder and something inside it: the folder covers it
+    return nodes.filter(n => !nodes.some(o => o !== n && o.isDir && n.path.startsWith(o.path + '/')));
+  };
+
+  /** To the system trash (undoable there), after one confirmation. */
+  const deleteNodes = async (nodes: FileNode[]) => {
+    if (!nodes.length) return;
+    const msg = nodes.length === 1
+      ? t(nodes[0].isDir ? 'fileTree.confirm.deleteFolder' : 'fileTree.confirm.deleteFile', { name: nodes[0].name })
+      : t('fileTree.confirm.deleteMany', { count: nodes.length });
+    if (!window.confirm(msg)) return;
+    for (const n of nodes) {
+      const full = fullPathOf(n.path);
+      const r = await (window as any).files?.trash?.(full);
+      if (r?.error) { showError(t('fileTree.error.delete'), r.error); break; }
+      for (const doc of useEditorStore.getState().documents)
+        if (doc.diskPath && isUnder(doc.diskPath, full)) closeDocument(doc.uri);
+    }
+    setSelectedFiles(new Set());
+    await refreshWorkspace();
+  };
+
+  const startNew = (kind: 'newFile' | 'newFolder', node: FileNode | null) => {
+    const parent = node ? (node.isDir ? node.path : parentOf(node.path)) : '';
+    if (parent) setExpandedDirs(prev => new Set([...prev, parent]));
+    setEditing({ kind, parent });
+  };
+
+  /** The name box was accepted: create or rename. An empty or unchanged name cancels. */
+  const commitEditing = async (value: string) => {
+    const ed = editing;
+    setEditing(null);
+    const name = value.trim();
+    if (!ed || !name) return;
+    const files = (window as any).files;
+    if (ed.kind === 'rename') {
+      if (name === ed.node.name) return;
+      const oldFull = fullPathOf(ed.node.path);
+      const r = await files?.rename?.({ path: oldFull, newName: name });
+      if (r?.error) { showError(t('fileTree.error.rename'), r.error); return; }
+      remapOpenDocs(oldFull, r.path);
+      const parent = parentOf(ed.node.path);
+      const newRel = parent ? `${parent}/${name}` : name;
+      if (ed.node.isDir) {
+        setExpandedDirs(prev => new Set([...prev].map(p =>
+          p === ed.node.path || p.startsWith(ed.node.path + '/') ? newRel + p.slice(ed.node.path.length) : p)));
+      }
+      setSelectedFiles(new Set([newRel]));
+      await refreshWorkspace();
+      return;
+    }
+    const rel = ed.parent ? `${ed.parent}/${name}` : name;
+    const r = ed.kind === 'newFolder'
+      ? await files?.mkdir?.(fullPathOf(rel))
+      : await files?.createFile?.(fullPathOf(rel));
+    if (r?.error) { showError(t(ed.kind === 'newFolder' ? 'fileTree.error.newFolder' : 'fileTree.error.newFile'), r.error); return; }
+    await refreshWorkspace();
+    setSelectedFiles(new Set([rel]));
+    if (ed.kind === 'newFile') await handleFileClick({ path: rel, name, isDir: false });
+    else setExpandedDirs(prev => new Set([...prev, rel]));
+  };
+
+  /** Copy or move the clipboard's paths into the folder of `node` (null = the root). */
+  const paste = async (node: FileNode | null) => {
+    if (!clipboard) return;
+    const destRel = node ? (node.isDir ? node.path : parentOf(node.path)) : '';
+    const destFull = fullPathOf(destRel);
+    const files = (window as any).files;
+    for (const rel of clipboard.paths) {
+      const src = fullPathOf(rel);
+      if (clipboard.cut) {
+        if (parentOf(rel) === destRel) continue;                 // already there
+        if (isUnder(destFull, src)) { alert(t('fileTree.error.intoItself')); continue; }
+        const r = await files?.moveFile?.({ sourcePath: src, targetDir: destFull });
+        if (r?.error) { showError(t('fileTree.error.move'), r.error === 'target_exists' ? 'exists' : r.error); continue; }
+        remapOpenDocs(src, r.targetPath);
+      } else {
+        const r = await files?.copy?.({ sourcePath: src, targetDir: destFull });
+        if (r?.error) { showError(t('fileTree.error.copy'), r.error === 'into_itself' ? t('fileTree.error.intoItself') : r.error); continue; }
+      }
+    }
+    if (clipboard.cut) setClipboard(null);
+    if (destRel) setExpandedDirs(prev => new Set([...prev, destRel]));
+    await refreshWorkspace();
+  };
+
+  const duplicate = async (nodes: FileNode[]) => {
+    for (const n of nodes) {
+      const r = await (window as any).files?.copy?.({ sourcePath: fullPathOf(n.path), targetDir: fullPathOf(parentOf(n.path)) });
+      if (r?.error) { showError(t('fileTree.error.copy'), r.error); break; }
+    }
+    await refreshWorkspace();
+  };
+
+  const copyText = (text: string) => { navigator.clipboard?.writeText(text).catch(() => {}); };
+
+  const revealLabel = IS_MAC ? t('fileTree.revealFinder') : IS_WIN ? t('fileTree.revealExplorer') : t('fileTree.revealFolder');
+
+  const menuItems = (node: FileNode | null): MenuItem[] => {
+    const targets = node ? targetsFor(node) : [];
+    const one = targets.length === 1;
+    const items: MenuItem[] = [
+      { label: t('fileTree.newFile'), onClick: () => startNew('newFile', node) },
+      { label: t('fileTree.newFolder'), onClick: () => startNew('newFolder', node) },
+      'separator',
+    ];
+    if (node) {
+      items.push(
+        { label: t('fileTree.cut'), shortcut: `${MOD}X`, onClick: () => setClipboard({ paths: targets.map(n => n.path), cut: true }) },
+        { label: t('fileTree.copy'), shortcut: `${MOD}C`, onClick: () => setClipboard({ paths: targets.map(n => n.path), cut: false }) },
+      );
+    }
+    items.push({ label: t('fileTree.paste'), shortcut: `${MOD}V`, disabled: !clipboard, onClick: () => paste(node) });
+    if (node) {
+      items.push(
+        { label: t('fileTree.duplicate'), onClick: () => duplicate(targets) },
+        'separator',
+        { label: t('fileTree.copyPath'), onClick: () => copyText(targets.map(n => fullPathOf(n.path)).join('\n')) },
+        { label: t('fileTree.copyRelativePath'), onClick: () => copyText(targets.map(n => n.path).join('\n')) },
+        { label: revealLabel, onClick: () => (window as any).files?.reveal?.(fullPathOf(node.path)) },
+        'separator',
+        { label: t('fileTree.rename'), shortcut: IS_MAC ? '↵' : 'F2', disabled: !one, onClick: () => setEditing({ kind: 'rename', node }) },
+        { label: t('fileTree.delete'), shortcut: IS_MAC ? '⌘⌫' : 'Del', danger: true, onClick: () => deleteNodes(targets) },
+      );
+    } else {
+      items.push(
+        'separator',
+        { label: t('fileTree.copyPath'), onClick: () => copyText(fullPathOf('')) },
+        { label: revealLabel, onClick: () => (window as any).files?.reveal?.(fullPathOf('')) },
+      );
+    }
+    return items;
+  };
+
+  const openMenu = (e: React.MouseEvent, node: FileNode | null) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Right-clicking outside the selection selects that node alone, as every file manager does.
+    if (node && !selectedFiles.has(node.path)) {
+      setSelectedFiles(new Set([node.path]));
+      setLastClickedFile(node.path);
+    }
+    setMenu({ x: e.clientX, y: e.clientY, node });
+  };
+
+  /** The tree's keys, only while it has the focus (never in the editor or a text field). */
+  const handleTreeKeyDown = (e: React.KeyboardEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+    const nodes = [...selectedFiles].map(findNode).filter((n): n is FileNode => !!n);
+    const mod = IS_MAC ? e.metaKey : e.ctrlKey;
+    if (!nodes.length) {
+      if (mod && e.key.toLowerCase() === 'v' && clipboard) { e.preventDefault(); paste(null); }
+      return;
+    }
+    const first = nodes[0];
+    if (e.key === 'Delete' || (IS_MAC && e.metaKey && e.key === 'Backspace')) {
+      e.preventDefault(); deleteNodes(targetsFor(first));
+    } else if ((e.key === 'F2' || (IS_MAC && e.key === 'Enter')) && nodes.length === 1) {
+      e.preventDefault(); setEditing({ kind: 'rename', node: first });
+    } else if (mod && e.key.toLowerCase() === 'c') {
+      e.preventDefault(); setClipboard({ paths: targetsFor(first).map(n => n.path), cut: false });
+    } else if (mod && e.key.toLowerCase() === 'x') {
+      e.preventDefault(); setClipboard({ paths: targetsFor(first).map(n => n.path), cut: true });
+    } else if (mod && e.key.toLowerCase() === 'v') {
+      e.preventDefault(); paste(first);
+    }
+  };
+
+  const finishEditing = (v: string | null) => { if (v === null) setEditing(null); else void commitEditing(v); };
+
+  const newItemRow = (parent: string, depth: number): React.ReactNode => {
+    if (!editing || editing.kind === 'rename' || editing.parent !== parent) return null;
+    return (
+      <div style={{ paddingLeft: depth * 16 + 4, paddingRight: 4, display: 'flex', alignItems: 'center', gap: 4, height: 24 }}>
+        <span style={{ width: 12 }} />
+        <span style={{ width: 16, textAlign: 'center', fontSize: 14 }}>{editing.kind === 'newFolder' ? '📁' : '📄'}</span>
+        <NameInput initial="" isDir={editing.kind === 'newFolder'} onFinish={finishEditing} />
+      </div>
+    );
   };
 
   const toggleDir = (path: string) => {
@@ -547,6 +707,9 @@ export const FileTreePanel: React.FC = () => {
       case 'vec': return '🎨';
       case 'anim': return '🎬';
       case 'vplay': return '🎮';
+      case 'vmesh': return '🧊';
+      case 'vscene': return '🏞️';
+      case 'vskel': case 'vclip': return '🦴';
       case 'c': case 'cpp': case 'h': case 'hpp': return '⚙️';
       case 'asm': case 's': return '📜';
       case 'js': case 'ts': return '📦';
@@ -612,11 +775,12 @@ export const FileTreePanel: React.FC = () => {
             fontSize: 13,
             lineHeight: '20px',
             backgroundColor,
-            opacity: isDragged ? 0.5 : 1,
+            opacity: isDragged || (clipboard?.cut && clipboard.paths.includes(node.path)) ? 0.5 : 1,
             userSelect: 'none',
             position: 'relative'
           }}
           onClick={(e) => handleFileClick(node, e)}
+          onContextMenu={(e) => openMenu(e, node)}
           onMouseEnter={() => {
             // Set hover state - the background color will be calculated in render
             setHoveredFile(node.path);
@@ -625,7 +789,7 @@ export const FileTreePanel: React.FC = () => {
             // Clear hover state
             setHoveredFile(null);
           }}
-          draggable={!node.isDir}
+          draggable={!node.isDir && !(editing?.kind === 'rename' && editing.node.path === node.path)}
           onDragStart={(e) => {
             setDraggedFiles(prev => new Set([...prev, node.path]));
             e.dataTransfer.setData('text/plain', JSON.stringify({ 
@@ -672,9 +836,9 @@ export const FileTreePanel: React.FC = () => {
                   
                   if (result?.error) {
                     if (result.error === 'target_exists') {
-                      alert(`No se puede mover el archivo: Ya existe un archivo con el mismo nombre en "${node.name}"`);
+                      alert(t('fileTree.error.exists'));
                     } else {
-                      alert(`Error al mover archivo: ${result.error}`);
+                      showError(t('fileTree.error.move'), result.error);
                     }
                     return;
                   }
@@ -702,7 +866,7 @@ export const FileTreePanel: React.FC = () => {
                   console.log('File moved successfully:', data.path, '→', node.path);
                 } catch (error) {
                   console.error('Error moving file:', error);
-                  alert(`Error al mover archivo: ${error}`);
+                  showError(t('fileTree.error.move'), String(error));
                 }
               }
             }
@@ -743,13 +907,16 @@ export const FileTreePanel: React.FC = () => {
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap'
           }}>
-            {node.name}
+            {editing?.kind === 'rename' && editing.node.path === node.path
+              ? <NameInput initial={node.name} isDir={node.isDir} onFinish={finishEditing} />
+              : node.name}
           </span>
         </div>
         
-        {node.isDir && isExpanded && node.children && (
+        {node.isDir && isExpanded && (
           <div>
-            {node.children.map(child => renderFileNode(child, depth + 1))}
+            {newItemRow(node.path, depth + 1)}
+            {node.children?.map(child => renderFileNode(child, depth + 1))}
           </div>
         )}
       </div>
@@ -761,8 +928,8 @@ export const FileTreePanel: React.FC = () => {
       <div style={{ padding: 16, textAlign: 'center', color: '#666' }}>
         <div style={{ marginBottom: 12 }}>📁</div>
         <div style={{ fontSize: 12, lineHeight: 1.4 }}>
-          No hay workspace abierto.<br />
-          Abre una carpeta desde la página de bienvenida.
+          {t('fileTree.noWorkspace')}<br />
+          {t('fileTree.noWorkspaceHint')}
         </div>
       </div>
     );
@@ -806,7 +973,7 @@ export const FileTreePanel: React.FC = () => {
             alignItems: 'center',
             gap: 4
           }}
-          title="Actualizar archivos"
+          title={t('fileTree.refresh')}
         >
           {isRefreshing ? '🔄' : '↻'}
         </button>
@@ -819,12 +986,18 @@ export const FileTreePanel: React.FC = () => {
           overflow: 'auto', 
           padding: '8px 0',
           scrollbarWidth: 'thin',
-          scrollbarColor: '#424242 #1e1e1e'
+          scrollbarColor: '#424242 #1e1e1e',
+          outline: 'none'
         }}
         className="file-tree-scroll"
+        tabIndex={0}
+        onKeyDown={handleTreeKeyDown}
+        onContextMenu={(e) => openMenu(e, null)}
       >
+        {newItemRow('', 0)}
         {project?.files.map(node => renderFileNode(node))}
       </div>
+      {menu && <FileTreeMenu x={menu.x} y={menu.y} items={menuItems(menu.node)} onClose={() => setMenu(null)} />}
 
 
     </div>

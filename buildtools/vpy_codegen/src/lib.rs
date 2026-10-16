@@ -8,9 +8,15 @@
 
 pub mod m6809;
 pub mod arm;
+pub mod cgen;
 pub mod pitrex;
 pub mod uvm2;
 pub mod vecres;
+pub mod vmeshres;
+pub mod vsceneres;
+pub mod vclipres;
+pub mod vskelres;
+pub mod psg;
 pub mod musres;
 pub mod levelres;
 pub mod sfxres;
@@ -18,6 +24,10 @@ pub mod instrres;
 pub mod animres;
 pub mod venemy;
 pub mod stack_validator;
+pub mod known_functions;
+pub mod validate;
+pub mod origins;
+pub mod vrec_chain;
 
 pub use venemy::*;
 
@@ -103,6 +113,10 @@ pub enum AssetType {
     Animation,  // .vanim file (frame-by-frame vector animation)
     Instrument, // .vinstr file (pitched instrument timbre)
     Enemy,      // .venemy file (enemy type definition)
+    Recording,  // .vrec file (multi-frame vector recording for attract/preview playback)
+    Sample,     // .vsmp file (4-bit PCM audio sample streamed to the PSG volume DAC)
+    Mesh,       // .vmesh file (surface mesh for vpy3d; assets/meshes/, any folder)
+    Scene,      // .vscene file (a set of .vmesh pieces for vpy3d; assets/scenes/)
 }
 
 #[derive(Debug, Clone, Error)]
@@ -180,6 +194,69 @@ pub struct SymbolInfo {
     pub metadata: String,
 }
 
+/// Code sizes measured from a previous assembly of the same program, handed to the
+/// m6809 bank allocator in place of its AST estimates (multibank only).
+///
+/// Produced by `vpy_linker::sizing` (generate → assemble → measure → regenerate).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CodeSizeHints {
+    /// Assembled bytes of each user function, keyed by its assembly label
+    /// (`vpy_parser::symbols::m6809_label`, upper case). MAIN/LOOP_BODY are not here:
+    /// they are part of bank #0's fixed bytes.
+    pub function_sizes: std::collections::BTreeMap<String, usize>,
+    /// Assembled bytes of each code bank that do not belong to a movable function
+    /// (index = bank id). Bank #0: cartridge header, START, MAIN and LOOP_BODY.
+    pub bank_fixed_bytes: Vec<usize>,
+}
+
+impl CodeSizeHints {
+    /// No measurements: the allocator uses its AST estimates.
+    pub fn is_empty(&self) -> bool {
+        self.function_sizes.is_empty() && self.bank_fixed_bytes.is_empty()
+    }
+}
+
+/// Comment the m6809 backend writes right after the user functions of each code bank
+/// (multibank only); the size measurement uses it as the end of the last function.
+pub const FUNCTIONS_END_MARKER: &str = "; VPY_BANK_FUNCTIONS_END";
+
+/// True when the m6809 backend lays this configuration out as a banked cartridge
+/// (at least 2 code banks + the helpers bank). Same rule as the code generator.
+pub fn is_m6809_multibank(bank_config: &BankConfig) -> bool {
+    let bank_size = if bank_config.rom_bank_size > 0 { bank_config.rom_bank_size } else { 16384 };
+    bank_config.rom_total_size > 32768 && bank_config.rom_total_size / bank_size > 2
+}
+
+/// Generate m6809 assembly, letting the bank allocator use measured code sizes.
+/// With empty hints this is exactly [`generate_from_module`].
+pub fn generate_from_module_with_hints(
+    module: &Module,
+    bank_config: &BankConfig,
+    title: &str,
+    assets: &[AssetInfo],
+    hints: &CodeSizeHints,
+) -> Result<GeneratedASM, CodegenError> {
+    known_functions::register(module);
+    validate::check_array_literals(module).map_err(CodegenError::Error)?;
+    arm::three_d::check(module, assets, "m6809").map_err(CodegenError::Error)?;
+    validate::check_array_types(module, "m6809").map_err(CodegenError::Error)?;
+    let asm_source = m6809::generate_m6809_asm_with_hints(
+        module,
+        title,
+        bank_config.rom_total_size,
+        bank_config.rom_bank_size,
+        assets,
+        hints,
+    ).map_err(CodegenError::Error)?;
+    let _validation_result = stack_validator::validate_stack_balance(&asm_source);
+    Ok(GeneratedASM {
+        asm_source,
+        bank_config: bank_config.clone(),
+        symbols: HashMap::new(),
+        external_refs: Vec::new(),
+    })
+}
+
 /// Generate unified ASM with bank markers (NEW - uses real M6809 codegen)
 pub fn generate_from_module(
     module: &Module,
@@ -198,6 +275,16 @@ pub fn generate_from_module_with_target(
     assets: &[AssetInfo],
     target: &Target,
 ) -> Result<GeneratedASM, CodegenError> {
+    known_functions::register(module);
+    validate::check_array_literals(module).map_err(CodegenError::Error)?;
+    let target_name = match target {
+        Target::M6809 => "m6809",
+        Target::Rp2350 => "rp2350",
+        Target::Uvm2 => "uvm2",
+        Target::PiTrex => "pitrex",
+    };
+    arm::three_d::check(module, assets, target_name).map_err(CodegenError::Error)?;
+    validate::check_array_types(module, target_name).map_err(CodegenError::Error)?;
     match target {
         Target::Rp2350 => {
             let asm_source = arm::generate_arm_asm(module, title, assets)

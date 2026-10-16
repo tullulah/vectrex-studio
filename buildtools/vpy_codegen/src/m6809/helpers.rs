@@ -2,24 +2,21 @@
 //!
 //! Mathematical and utility functions
 
-use vpy_parser::{Module, Item, Stmt, Expr, BinOp};
-use std::collections::HashSet;
+use vpy_parser::{Module, Expr, BinOp};
+use std::collections::BTreeSet;
 use super::ram_layout::RamLayout;
 
 /// Analyze module to detect which runtime helpers are needed
-/// Returns set of helper names that should be emitted
-pub fn analyze_module_helpers(module: &Module) -> HashSet<String> {
-    let mut needed = HashSet::new();
-
-    // Scan all functions in module
-    for item in &module.items {
-        if let Item::Function(func) = item {
-            for stmt in &func.body {
-                analyze_stmt_for_helpers(stmt, &mut needed);
-            }
-        }
-    }
-
+/// Returns set of helper names that should be emitted (a BTreeSet: callers iterate it
+/// to allocate RAM, so its order must be the same every build).
+///
+/// Walks every statement and expression the code generator emits (all function
+/// bodies, including `for`/`switch` bodies, conditions, call arguments, index
+/// expressions and compound assignments, plus global initializers evaluated at
+/// startup) via the exhaustive [`super::ast_walk`] visitor.
+pub fn analyze_module_helpers(module: &Module) -> BTreeSet<String> {
+    let mut needed = BTreeSet::new();
+    super::ast_walk::for_each_expr(module, |expr| note_expr_helpers(expr, &mut needed));
     needed
 }
 
@@ -40,6 +37,11 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
     ram.allocate("TMPVAL", 2, "Temporary value storage (alias for RESULT)");
     ram.allocate("TMPPTR", 2, "Temporary pointer");
     ram.allocate("TMPPTR2", 2, "Temporary pointer 2");
+    // Builtin arguments computed ahead of the call (expressions::emit_hoisted_args),
+    // only as many as the program's calls need.
+    for i in 0..crate::m6809::expressions::hoist_slots_needed(module) {
+        ram.allocate(&format!("VAR___HOIST{}", i), 2, "Builtin argument computed ahead of the call");
+    }
     ram.allocate("VPY_MOVE_X", 1, "MOVE() current X offset (signed byte, 0 by default)");
     ram.allocate("VPY_MOVE_Y", 1, "MOVE() current Y offset (signed byte, 0 by default)");
     ram.allocate("TEMP_YX", 2, "Temporary Y/X coordinate storage");
@@ -98,6 +100,24 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
         }
     }
     
+    // DRAW_RECORDING (.vrec vector-movie playback) scratch — SINGLE-BANK, VIDEO-ONLY
+    if needed.contains("DRAW_RECORDING_RUNTIME") {
+        ram.allocate("DRAW_REC_PTR", 2, "DRAW_RECORDING: _<NAME>_VREC header base");
+        ram.allocate("DRAW_REC_FRAME", 2, "DRAW_RECORDING: caller frame counter (i16, non-negative)");
+        ram.allocate("DRAW_REC_X", 1, "DRAW_RECORDING: center X (i8)");
+        ram.allocate("DRAW_REC_Y", 1, "DRAW_RECORDING: center Y (i8)");
+        ram.allocate("DRAW_REC_SCALE", 1, "DRAW_RECORDING: scale 0-128 (128=100%)");
+        ram.allocate("DRAW_REC_SEGCNT", 2, "DRAW_RECORDING: remaining chain count in frame");
+        ram.allocate("DRAW_REC_SEGPTR", 2, "DRAW_RECORDING: current chain/delta pointer (survives BIOS calls)");
+        ram.allocate("DRAW_REC_CHAIN_SEGS", 1, "DRAW_RECORDING: remaining deltas in current chain");
+        ram.allocate("DRAW_REC_SX0", 1, "DRAW_RECORDING: scaled+centered x0 (i8)");
+        ram.allocate("DRAW_REC_SY0", 1, "DRAW_RECORDING: scaled+centered y0 (i8)");
+        ram.allocate("DRAW_REC_SX1", 1, "DRAW_RECORDING: scaled+centered x1 (i8)");
+        ram.allocate("DRAW_REC_SY1", 1, "DRAW_RECORDING: scaled+centered y1 (i8)");
+        ram.allocate("DRAW_REC_I", 1, "DRAW_RECORDING: per-segment intensity (u8)");
+        ram.allocate("DRAW_REC_TMP16", 2, "DRAW_RECORDING: 16-bit scratch for clamped coord/delta math");
+    }
+
     // DRAW_VECTOR_3D rotation scratch variables
     if needed.contains("DRAW_VECTOR_3D") {
         ram.allocate("ROT3D_AX", 1, "3D raw angle X (0-127)");
@@ -129,6 +149,28 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
         ram.allocate("ROT3D_TEMP2", 1, "3D rotation temp 2");
         // Rotated vertex cache: up to 127 unique vertices × 2 bytes (x', y')
         ram.allocate("ROT3D_VBUF", 254, "3D rotated vertex cache (127 verts × 2 bytes: x',y')");
+    }
+
+    // DRAW_VECTOR_ROT scratch (DRAW_VEC_ROT_RUNTIME). ROT2D_PX/PY are written with
+    // one STD, so they must stay adjacent and in this order.
+    if needed.contains("DRAW_VECTOR_ROT") {
+        ram.allocate("ROT2D_ANGLE", 1, "DRAW_VECTOR_ROT angle (0-127 = full turn)");
+        ram.allocate("ROT2D_MIRROR", 1, "DRAW_VECTOR_ROT mirror before rotating (bit0 X, bit1 Y)");
+        ram.allocate("ROT2D_S", 1, "DRAW_VECTOR_ROT sin(angle)*127 (i8)");
+        ram.allocate("ROT2D_C", 1, "DRAW_VECTOR_ROT cos(angle)*127 (i8)");
+        ram.allocate("ROT2D_UX", 1, "DRAW_VECTOR_ROT unrotated sprite-local x");
+        ram.allocate("ROT2D_UY", 1, "DRAW_VECTOR_ROT unrotated sprite-local y");
+        ram.allocate("ROT2D_PX", 1, "DRAW_VECTOR_ROT previous rotated x");
+        ram.allocate("ROT2D_PY", 1, "DRAW_VECTOR_ROT previous rotated y (after PX)");
+        ram.allocate("ROT2D_RX", 1, "DRAW_VECTOR_ROT rotated x being built");
+        ram.allocate("ROT2D_MA", 1, "DRAW_VECTOR_ROT signed multiply operand A");
+        ram.allocate("ROT2D_MB", 1, "DRAW_VECTOR_ROT signed multiply operand B");
+        ram.allocate("ROT2D_ACC", 2, "DRAW_VECTOR_ROT 16-bit product accumulator");
+        ram.allocate("ROT2D_T16", 2, "DRAW_VECTOR_ROT 16-bit product temp");
+        ram.allocate("ROT2D_TMP", 2, "DRAW_VECTOR_ROT beam target / delta (x,y)");
+        ram.allocate("ROT2D_D", 2, "DRAW_VECTOR_ROT source delta (dx,dy)");
+        ram.allocate("ROT2D_H", 2, "DRAW_VECTOR_ROT first half of a split delta");
+        ram.allocate("ROT2D_PC", 2, "DRAW_VECTOR_ROT paths remaining");
     }
 
     // DRAW_LINE argument buffer (10 bytes: x0, y0, x1, y1, intensity)
@@ -348,23 +390,23 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
     }
 
     // =========================================================================
-    // FUNCTION ARGUMENT SLOTS — allocated EARLY so they always live inside the
-    // 1KB Vectrex RAM window ($C800-$CBFF). When allocated last in a program
-    // with many globals (e.g. SnowBros), VAR_ARG0-4 fell into $CC00+, which
-    // aliases to $C800+ (BIOS music workspace). Each PLAY_MUSIC would then
-    // corrupt VAR_ARG between every frame, breaking PRINT_NUMBER, function
-    // calls, etc.
+    // BUILTIN ARGUMENT SLOTS + FUNCTION FRAMES — allocated EARLY so they always
+    // live inside the 1KB Vectrex RAM window ($C800-$CBFF). When allocated last
+    // in a program with many globals (e.g. SnowBros), the argument slots fell
+    // into $CC00+, which aliases to $C800+ (BIOS music workspace): each
+    // PLAY_MUSIC corrupted them between frames.
     // CURRENT_ROM_BANK has the same problem in multibank ROMs.
+    //
+    // VAR_ARG0-2 are the argument slots of the runtime helpers (PRINT_TEXT,
+    // PRINT_NUMBER, DRAW_LINE...). User functions do not use them: their
+    // parameters and locals live in per-function frames inside FRAME_POOL,
+    // overlaid by call graph (see `frames`).
     // =========================================================================
-    ram.allocate("VAR_ARG0", 2, "Function argument 0 (16-bit)");
-    ram.allocate("VAR_ARG1", 2, "Function argument 1 (16-bit)");
-    ram.allocate("VAR_ARG2", 2, "Function argument 2 (16-bit)");
-    ram.allocate("VAR_ARG3", 2, "Function argument 3 (16-bit)");
-    ram.allocate("VAR_ARG4", 2, "Function argument 4 (16-bit)");
-    ram.allocate("VAR_ARG5", 2, "Function argument 5 (16-bit)");
-    ram.allocate("VAR_ARG6", 2, "Function argument 6 (16-bit)");
-    ram.allocate("VAR_ARG7", 2, "Function argument 7 (16-bit)");
+    ram.allocate("VAR_ARG0", 2, "Builtin argument 0 (16-bit)");
+    ram.allocate("VAR_ARG1", 2, "Builtin argument 1 (16-bit)");
+    ram.allocate("VAR_ARG2", 2, "Builtin argument 2 (16-bit)");
     ram.allocate("CURRENT_ROM_BANK", 1, "Current ROM bank ID (multibank tracking)");
+    allocate_frames(&mut ram);
 
     // =========================================================================
     // USER VARIABLES (continue allocation after system vars)
@@ -391,7 +433,9 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
         ram.allocate("SFX_BANK", 1, "SFX bank ID (for multibank)");
     }
 
-    // (VAR_ARG0-4 + CURRENT_ROM_BANK already allocated above, before user vars.)
+    // (VAR_ARG0-2, CURRENT_ROM_BANK and FRAME_POOL already allocated above, before user vars.)
+
+    check_ram_fits(&ram)?;
 
     // =========================================================================
     // EMIT EQU DEFINITIONS
@@ -417,176 +461,75 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
     Ok(asm)
 }
 
-/// Recursively analyze statement for helper usage
-fn analyze_stmt_for_helpers(stmt: &Stmt, needed: &mut HashSet<String>) {
-    match stmt {
-        Stmt::Expr(expr, _) => analyze_expr_for_helpers(expr, needed),
-        Stmt::Assign { value, .. } => analyze_expr_for_helpers(value, needed),
-        Stmt::If { cond, body, elifs, else_body, .. } => {
-            analyze_expr_for_helpers(cond, needed);
-            for s in body {
-                analyze_stmt_for_helpers(s, needed);
-            }
-            for (elif_cond, elif_body) in elifs {
-                analyze_expr_for_helpers(elif_cond, needed);
-                for s in elif_body {
-                    analyze_stmt_for_helpers(s, needed);
-                }
-            }
-            if let Some(else_stmts) = else_body {
-                for s in else_stmts {
-                    analyze_stmt_for_helpers(s, needed);
-                }
-            }
+/// Allocate the frame pool and name every parameter/local slot inside it.
+///
+/// The pool is as large as the deepest chain of frames (`FrameLayout::pool_size`);
+/// each slot gets an EQU at pool + frame offset + slot offset, so overlaid frames
+/// give several names to the same bytes.
+fn allocate_frames(ram: &mut RamLayout) {
+    let layout = crate::m6809::context::frames();
+    if layout.pool_size == 0 {
+        return;
+    }
+    let pool = ram.allocate(
+        "FRAME_POOL",
+        layout.pool_size,
+        format!(
+            "Function parameters + locals, frames overlaid by call graph ({} bytes unshared)",
+            layout.unshared_size()
+        ),
+    );
+    for frame in layout.frames.values() {
+        for slot in &frame.slots {
+            let kind = match slot.kind {
+                crate::m6809::frames::SlotKind::Param => "Parameter",
+                crate::m6809::frames::SlotKind::Local => "Local",
+            };
+            ram.alias(
+                &slot.label,
+                pool + frame.offset + slot.offset,
+                slot.size.bytes,
+                format!("{kind} `{}` of {}()", slot.name, frame.function),
+            );
         }
-        Stmt::While { cond, body, .. } => {
-            analyze_expr_for_helpers(cond, needed);
-            for s in body {
-                analyze_stmt_for_helpers(s, needed);
-            }
-        }
-        Stmt::Return(Some(expr), _) => analyze_expr_for_helpers(expr, needed),
-        _ => {}
     }
 }
 
-/// Recursively analyze expression for helper usage
-fn analyze_expr_for_helpers(expr: &Expr, needed: &mut HashSet<String>) {
+/// End of the 1 KB of cartridge-visible RAM ($C800-$CBFF; $CC00-$CFFF mirrors it).
+const RAM_END: usize = 0xCC00;
+/// Bytes left for the hardware stack (it grows down from the top of RAM) below
+/// which the build warns.
+const STACK_HEADROOM: usize = 64;
+
+/// Fail the build when the RAM variables do not fit in RAM; warn when they leave
+/// little room for the stack.
+fn check_ram_fits(ram: &RamLayout) -> Result<(), String> {
+    let end = ram.base_address() as usize + ram.total_size();
+    let frames = crate::m6809::context::frames().pool_size;
+    if end > RAM_END {
+        return Err(format!(
+            "RAM overflow: the program's variables need {} bytes from ${:04X} and end at ${:04X},              past the end of the Vectrex RAM (${:04X}) by {} bytes ({} of them are the function frame pool).              Use 8-bit types (u8/i8) for globals and arrays, fewer or smaller arrays, or fewer locals",
+            ram.total_size(), ram.base_address(), end, RAM_END, end - RAM_END, frames
+        ));
+    }
+    if RAM_END - end < STACK_HEADROOM {
+        eprintln!(
+            "warning: RAM variables end at ${:04X}; only {} bytes are left for the stack (below $CC00)",
+            end,
+            RAM_END - end
+        );
+    }
+    Ok(())
+}
+
+/// Record the helpers a single expression node needs (children are visited by the walker).
+fn note_expr_helpers(expr: &Expr, needed: &mut BTreeSet<String>) {
     match expr {
-        // Builtin calls that may need runtime helpers
-        Expr::Call(call_info) => {
-            let name_upper = call_info.name.to_uppercase();
-            let args = &call_info.args;
-            
-            // Text/Number printing
-            if name_upper == "PRINT_TEXT" {
-                needed.insert("PRINT_TEXT".to_string());
-            }
-            if name_upper == "PRINT_NUMBER" {
-                needed.insert("PRINT_NUMBER".to_string());
-            }
-            
-            // Drawing helpers: Always needed when called (even with constant args)
-            if name_upper == "DRAW_CIRCLE" {
-                needed.insert("DRAW_CIRCLE".to_string());
-                needed.insert("DRAW_CIRCLE_RUNTIME".to_string());
-            }
-            if name_upper == "DRAW_RECT" {
-                needed.insert("DRAW_RECT".to_string());
-                needed.insert("DRAW_RECT_RUNTIME".to_string());
-            }
-            if name_upper == "DRAW_LINE" {
-                needed.insert("DRAW_LINE_WRAPPER".to_string());
-            }
-            if name_upper == "DRAW_VECTOR" {
-                needed.insert("DRAW_VECTOR".to_string());
-            }
-            if name_upper == "DRAW_VECTOR_EX" {
-                needed.insert("DRAW_VECTOR_EX".to_string());
-            }
-            if name_upper == "DRAW_VECTOR_3D" {
-                needed.insert("DRAW_VECTOR_3D".to_string());
-                needed.insert("DRAW_VECTOR".to_string()); // for DRAW_VEC_X/Y RAM vars
-            }
-            
-            // Joystick helpers: Always needed when called
-            if name_upper == "J1_X" {
-                needed.insert("J1X_BUILTIN".to_string());
-            }
-            if name_upper == "J1_Y" {
-                needed.insert("J1Y_BUILTIN".to_string());
-            }
-            if name_upper == "J2_X" {
-                needed.insert("J2X_BUILTIN".to_string());
-            }
-            if name_upper == "J2_Y" {
-                needed.insert("J2Y_BUILTIN".to_string());
-            }
-            
-            // Level system helpers
-            if name_upper == "SHOW_LEVEL" {
-                needed.insert("SHOW_LEVEL_RUNTIME".to_string());
-                // SHOW_LEVEL_RUNTIME calls Draw_Sync_List_At_With_Mirrors,
-                // which is emitted in drawing.rs when DRAW_VECTOR is in needed.
-                needed.insert("DRAW_VECTOR".to_string());
-            }
-            if name_upper == "LOAD_LEVEL" {
-                needed.insert("LOAD_LEVEL".to_string());
-                needed.insert("LOAD_LEVEL_RUNTIME".to_string());
-            }
-            if name_upper == "UPDATE_LEVEL" {
-                needed.insert("UPDATE_LEVEL_RUNTIME".to_string());
-            }
-            if name_upper == "LEVEL_COLLISION_Y" {
-                needed.insert("LEVEL_COLLISION_Y_RUNTIME".to_string());
-            }
-            if name_upper == "LEVEL_COLLISION_X" {
-                needed.insert("LEVEL_COLLISION_X_RUNTIME".to_string());
-            }
-            if name_upper == "GET_LEVEL_FLOOR_Y" {
-                // Multibank emits a JSR to this helper instead of inlining the
-                // bank-switch (which would self-corrupt PC from switchable banks).
-                // Single-bank inline path doesn't need it. See emit_get_level_floor_y.
-                needed.insert("GET_LEVEL_FLOOR_Y_RUNTIME".to_string());
-            }
-            
-// Math helpers: Need runtime if operands contain variables
-            if name_upper == "SQRT" && has_variable_args(args) {
-                needed.insert("SQRT_HELPER".to_string());
-                needed.insert("DIV16".to_string()); // SQRT uses DIV16
-            }
-            if name_upper == "POW" && has_variable_args(args) {
-                needed.insert("POW_HELPER".to_string());
-            }
-            if name_upper == "ATAN2" && has_variable_args(args) {
-                needed.insert("ATAN2_HELPER".to_string());
-            }
-            if name_upper == "RAND" {
-                needed.insert("RAND_HELPER".to_string());
-            }
-            if name_upper == "RAND_RANGE" {
-                needed.insert("RAND_RANGE_HELPER".to_string());
-                needed.insert("RAND_HELPER".to_string()); // RAND_RANGE uses RAND
-            }
-            if name_upper == "BEEP" {
-                needed.insert("BEEP".to_string());
-            }
-
-            if name_upper == "DRAW_ANIM" {
-                needed.insert("DRAW_ANIM_RUNTIME".to_string());
-                needed.insert("DRAW_VECTOR".to_string()); // for DRAW_VEC_X/Y RAM vars
-                // Record which animation names are used (for state RAM allocation)
-                if let Some(Expr::StringLit(anim_name)) = args.first() {
-                    needed.insert(format!("DRAW_ANIM_STATE_{}", anim_name.to_uppercase().replace('-', "_").replace(' ', "_")));
-                }
-            }
-
-            // Enemy system helpers
-            if name_upper == "SPAWN_ENEMIES" || name_upper == "UPDATE_ENEMIES" || name_upper == "DRAW_ENEMIES" {
-                needed.insert("SPAWN_ENEMIES".to_string());
-                needed.insert("UPDATE_ENEMIES".to_string());
-                needed.insert("DRAW_ENEMIES".to_string());
-                needed.insert("DRAW_VECTOR".to_string()); // for DRAW_VEC_X/Y RAM vars
-                // Enemies may have vanim actions → always include DRAW_ANIM_RUNTIME so its
-                // RAM variables (DRAW_ANIM_MIRROR_X, DRAW_ANIM_SCALE, DRAW_SCALE, …) are allocated
-                // and the DRAW_ANIM_RUNTIME subroutine is emitted into the helpers bank.
-                needed.insert("DRAW_ANIM_RUNTIME".to_string());
-                // Wander enemies use RAND_HELPER for randomized idle pauses
-                needed.insert("RAND_HELPER".to_string());
-            }
-
-            // Recursively analyze arguments
-            for arg in args {
-                analyze_expr_for_helpers(arg, needed);
-            }
-        }
-        
-        // Binary operations that may need math helpers
+        Expr::Call(call_info) => note_call_helpers(call_info, needed),
         Expr::Binary { left, op, right } => {
-            // Check if operands are variables (not constants)
+            // Constant-folded when both operands are literals; otherwise a runtime helper.
             let left_is_const = matches!(**left, Expr::Number(_));
             let right_is_const = matches!(**right, Expr::Number(_));
-            
             if !left_is_const || !right_is_const {
                 match op {
                     BinOp::Mul => { needed.insert("MUL16".to_string()); }
@@ -595,23 +538,145 @@ fn analyze_expr_for_helpers(expr: &Expr, needed: &mut HashSet<String>) {
                     _ => {}
                 }
             }
-            
-            analyze_expr_for_helpers(left, needed);
-            analyze_expr_for_helpers(right, needed);
-        }
-        
-        // Other expression types (Not and BitNot are unary operations)
-        Expr::Not(operand) | Expr::BitNot(operand) => analyze_expr_for_helpers(operand, needed),
-        Expr::Index { target, index } => {
-            analyze_expr_for_helpers(target, needed);
-            analyze_expr_for_helpers(index, needed);
-        }
-        Expr::List(items) => {
-            for item in items {
-                analyze_expr_for_helpers(item, needed);
-            }
         }
         _ => {}
+    }
+}
+
+/// Record the helpers a builtin call needs.
+fn note_call_helpers(call_info: &vpy_parser::CallInfo, needed: &mut BTreeSet<String>) {
+    let name_upper = call_info.name.to_uppercase();
+    let args = &call_info.args;
+    
+    // Text/Number printing
+    if name_upper == "PRINT_TEXT" {
+        needed.insert("PRINT_TEXT".to_string());
+    }
+    if name_upper == "PRINT_NUMBER" {
+        needed.insert("PRINT_NUMBER".to_string());
+    }
+    
+    // Drawing helpers: Always needed when called (even with constant args)
+    if name_upper == "DRAW_CIRCLE" {
+        needed.insert("DRAW_CIRCLE".to_string());
+        needed.insert("DRAW_CIRCLE_RUNTIME".to_string());
+    }
+    if name_upper == "DRAW_RECT" {
+        needed.insert("DRAW_RECT".to_string());
+        needed.insert("DRAW_RECT_RUNTIME".to_string());
+    }
+    if name_upper == "DRAW_LINE" {
+        needed.insert("DRAW_LINE_WRAPPER".to_string());
+    }
+    if name_upper == "DRAW_VECTOR" {
+        needed.insert("DRAW_VECTOR".to_string());
+    }
+    if name_upper == "DRAW_VECTOR_EX" {
+        needed.insert("DRAW_VECTOR_EX".to_string());
+    }
+    if name_upper == "DRAW_VECTOR_3D" {
+        needed.insert("DRAW_VECTOR_3D".to_string());
+        needed.insert("DRAW_VECTOR".to_string()); // for DRAW_VEC_X/Y RAM vars
+    }
+    if name_upper == "DRAW_VECTOR_ROT" {
+        needed.insert("DRAW_VECTOR_ROT".to_string());
+        needed.insert("DRAW_VECTOR".to_string()); // for DRAW_VEC_X/Y RAM vars
+    }
+    
+    // Joystick helpers: Always needed when called
+    if name_upper == "J1_X" {
+        needed.insert("J1X_BUILTIN".to_string());
+    }
+    if name_upper == "J1_Y" {
+        needed.insert("J1Y_BUILTIN".to_string());
+    }
+    if name_upper == "J2_X" {
+        needed.insert("J2X_BUILTIN".to_string());
+    }
+    if name_upper == "J2_Y" {
+        needed.insert("J2Y_BUILTIN".to_string());
+    }
+    
+    // Level system helpers
+    if name_upper == "SHOW_LEVEL" {
+        needed.insert("SHOW_LEVEL_RUNTIME".to_string());
+        // SHOW_LEVEL_RUNTIME calls Draw_Sync_List_At_With_Mirrors,
+        // which is emitted in drawing.rs when DRAW_VECTOR is in needed.
+        needed.insert("DRAW_VECTOR".to_string());
+    }
+    if name_upper == "LOAD_LEVEL" {
+        needed.insert("LOAD_LEVEL".to_string());
+        needed.insert("LOAD_LEVEL_RUNTIME".to_string());
+    }
+    if name_upper == "UPDATE_LEVEL" {
+        needed.insert("UPDATE_LEVEL_RUNTIME".to_string());
+    }
+    if name_upper == "LEVEL_COLLISION_Y" {
+        needed.insert("LEVEL_COLLISION_Y_RUNTIME".to_string());
+    }
+    if name_upper == "LEVEL_COLLISION_X" {
+        needed.insert("LEVEL_COLLISION_X_RUNTIME".to_string());
+    }
+    if name_upper == "GET_LEVEL_FLOOR_Y" {
+        // Multibank emits a JSR to this helper instead of inlining the
+        // bank-switch (which would self-corrupt PC from switchable banks).
+        // Single-bank inline path doesn't need it. See emit_get_level_floor_y.
+        needed.insert("GET_LEVEL_FLOOR_Y_RUNTIME".to_string());
+    }
+    
+// Math helpers: Need runtime if operands contain variables
+    if name_upper == "SQRT" && has_variable_args(args) {
+        needed.insert("SQRT_HELPER".to_string());
+        needed.insert("DIV16".to_string()); // SQRT uses DIV16
+    }
+    if name_upper == "POW" && has_variable_args(args) {
+        needed.insert("POW_HELPER".to_string());
+    }
+    if name_upper == "ATAN2" && has_variable_args(args) {
+        needed.insert("ATAN2_HELPER".to_string());
+    }
+    if name_upper == "RAND" {
+        needed.insert("RAND_HELPER".to_string());
+    }
+    if name_upper == "RAND_RANGE" {
+        needed.insert("RAND_RANGE_HELPER".to_string());
+        needed.insert("RAND_HELPER".to_string()); // RAND_RANGE uses RAND
+    }
+    if name_upper == "BEEP" {
+        needed.insert("BEEP".to_string());
+    }
+
+    if name_upper == "DRAW_ANIM" {
+        needed.insert("DRAW_ANIM_RUNTIME".to_string());
+        needed.insert("DRAW_VECTOR".to_string()); // for DRAW_VEC_X/Y RAM vars
+        // Record which animation names are used (for state RAM allocation)
+        if let Some(Expr::StringLit(anim_name)) = args.first() {
+            needed.insert(format!("DRAW_ANIM_STATE_{}", anim_name.to_uppercase().replace('-', "_").replace(' ', "_")));
+        }
+    }
+
+    // .vrec vector-movie playback (VIDEO-ONLY, SINGLE-BANK).
+    // MOD16 is always emitted by math::emit_runtime_helpers, so the
+    // runtime can JSR MOD16 for frame % frame_count unconditionally.
+    if name_upper == "DRAW_RECORDING" {
+        needed.insert("DRAW_RECORDING_RUNTIME".to_string());
+        // DREC_SCALE uses MUL16 for the signed (coord*scale)>>7 math.
+        // (MOD16 is always emitted, so no need to request it.)
+        needed.insert("MUL16".to_string());
+    }
+
+    // Enemy system helpers
+    if name_upper == "SPAWN_ENEMIES" || name_upper == "UPDATE_ENEMIES" || name_upper == "DRAW_ENEMIES" {
+        needed.insert("SPAWN_ENEMIES".to_string());
+        needed.insert("UPDATE_ENEMIES".to_string());
+        needed.insert("DRAW_ENEMIES".to_string());
+        needed.insert("DRAW_VECTOR".to_string()); // for DRAW_VEC_X/Y RAM vars
+        // Enemies may have vanim actions → always include DRAW_ANIM_RUNTIME so its
+        // RAM variables (DRAW_ANIM_MIRROR_X, DRAW_ANIM_SCALE, DRAW_SCALE, …) are allocated
+        // and the DRAW_ANIM_RUNTIME subroutine is emitted into the helpers bank.
+        needed.insert("DRAW_ANIM_RUNTIME".to_string());
+        // Wander enemies use RAND_HELPER for randomized idle pauses
+        needed.insert("RAND_HELPER".to_string());
     }
 }
 
@@ -904,9 +969,19 @@ pub fn generate_helpers(module: &Module, is_multibank: bool, assets: &[crate::As
         emit_draw_vector_3d_runtime(&mut asm);
     }
 
+    // DRAW_VEC_ROT_RUNTIME: .vec sprite rotated about its origin
+    if needed.contains("DRAW_VECTOR_ROT") {
+        emit_draw_vec_rot_runtime(&mut asm, super::builtins::use_banked_assets());
+    }
+
     // DRAW_ANIM_RUNTIME: animation player
     if needed.contains("DRAW_ANIM_RUNTIME") {
         emit_draw_anim_runtime(&mut asm);
+    }
+
+    // DRAW_RECORDING_RUNTIME: .vrec vector-movie player (single-bank, video-only)
+    if needed.contains("DRAW_RECORDING_RUNTIME") {
+        emit_draw_recording_runtime(&mut asm);
     }
 
     // Enemy system runtime subroutines
@@ -1640,20 +1715,19 @@ BEEP_UPDATE_DONE:\n\
 }
 
 /// Emit NOTE_PERIOD_TABLE: 84 FDB entries for MIDI notes 24-107 → AY period
-/// Formula (calibrated for JSVecX): period = round(88200 / (440 * 2^((n-69)/12)))
+/// Formula: period = clk / (16 * f), con clk = 1,5 MHz (IC208 pin 15 <- E). Ver crate::psg.
 fn emit_note_period_table(asm: &mut String) {
     asm.push_str(
         "; ============================================================================\n\
         ; NOTE_PERIOD_TABLE — MIDI note 24 (C1) to 107 (B7) → AY-3-8910 period\n\
         ; Each entry is a 2-byte FDB (big-endian). Index = midi_note - 24.\n\
-        ; Formula: period = round(88200 / (440 * 2^((midi_note - 69) / 12)))\n\
+        ; Formula: period = 1500000 / (16 * 440 * 2^((midi_note - 69) / 12))\n\
         ; ============================================================================\n\
         NOTE_PERIOD_TABLE:\n"
     );
     for midi in 24u8..=107u8 {
-        let freq = 440.0_f32 * 2.0_f32.powf((midi as f32 - 69.0) / 12.0);
-        let period = (88200.0_f32 / freq).round() as u16;
-        let period = period.max(1).min(4095);
+        let period = crate::psg::midi_to_period(midi as f64);
+        let freq = crate::psg::midi_to_hz(midi as f64);
         // Emit note name as comment
         let note_names = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
         let octave = (midi as i32 - 12) / 12;
@@ -1853,7 +1927,8 @@ fn emit_note_update_runtime(asm: &mut String) {
         "    LDB A,X                 ; B = signed semitone offset",
         "    LDX >TMPPTR",
         "    LDA 3,X                 ; A = base_note",
-        "    ABA                     ; A = base_note + offset",
+        "    PSHS B                  ; (6809 has no ABA)",
+        "    ADDA ,S+                ; A = base_note + offset",
         "    ; Clamp 24-107",
         "    CMPA #24",
         "    BHS note_upd_hi",
@@ -2011,6 +2086,287 @@ DV3D_ROTATE:\n\
     RTS\n\
 \n");
     s
+}
+
+/// Emit DRAW_VEC_ROT_RUNTIME (+ DRAW_VEC_ROT_BANKED for distributed assets).
+///
+/// Draws an ordinary `_NAME_VECTORS` sprite (the DRAW_VECTOR data, nothing extra
+/// per asset) turned by ROT2D_ANGLE about its origin. sin/cos are looked up ONCE
+/// per call; each point then costs four 8x8 multiplies. The point is turned from
+/// its unrotated sprite-local position (accumulated from the deltas), not delta by
+/// delta, so rounding never builds up along a path. A source delta over 64 units is
+/// drawn in two halves, which keeps every turned delta inside the 8-bit DAC.
+fn emit_draw_vec_rot_runtime(asm: &mut String, banked: bool) {
+    asm.push_str(r#"; ============================================================================
+; DRAW_VEC_ROT_RUNTIME - .vec sprite rotated about its origin (DRAW_VECTOR_ROT)
+; ============================================================================
+; Input:  X = _NAME_VECTORS (FDB path_count, FDB path pointers)
+;         ROT2D_ANGLE (0-127 = full turn, counter-clockwise), ROT2D_MIRROR (bit0
+;         flip X, bit1 flip Y, in sprite space before turning; flip Y is done as
+;         flip X + half a turn), DRAW_VEC_X/Y = screen position,
+;         DRAW_VEC_INTENSITY (0 = each path's own intensity)
+; Point (u,v) -> ((u*cos - v*sin + 64) >> 7, (u*sin + v*cos + 64) >> 7), cos/sin
+; = SIN_TABLE/COS_TABLE (x127). DP-independent: RAM with '>', VIA by address.
+; Destroys: A, B, X, Y, U
+DRAW_VEC_ROT_RUNTIME:
+    PSHS X
+    LDB >ROT2D_ANGLE
+    LDA >ROT2D_MIRROR
+    BITA #2
+    BEQ DVR_NOFY
+    ADDB #64            ; flip Y = flip X + half a turn
+    EORA #1
+DVR_NOFY:
+    ANDA #1
+    STA >ROT2D_MIRROR   ; 0/1 = flip X from here on
+    ANDB #$7F
+    ASLB                ; FDB entries (angle*2 <= 254)
+    LDX #SIN_TABLE
+    ABX
+    LDA 1,X             ; low byte = sin*127 (i8)
+    STA >ROT2D_S
+    LDX #COS_TABLE
+    ABX
+    LDA 1,X
+    STA >ROT2D_C
+    PULS X
+    LDD ,X++            ; path count
+    STD >ROT2D_PC
+    LBEQ DVR_DONE
+    TFR X,Y             ; Y = path pointer table
+DVR_PATH:
+    LDU ,Y++            ; U = path data
+    ; --- intensity: Z axis sample/hold (BIOS Intensity_a sequence) ---
+    LDA ,U+
+    LDB >DRAW_VEC_INTENSITY
+    BEQ DVR_INT
+    TFR B,A
+DVR_INT:
+    STA >$C832          ; Vec_Misc_Count (as DSWM)
+    STA VIA_port_a
+    LDA #$05
+    STA VIA_port_b
+    LDA #$04
+    STA VIA_port_b
+    STA VIA_port_b
+    LDA #$01
+    STA VIA_port_b
+    ; --- header: y0, x0, 2 pad bytes ---
+    LDB ,U+
+    LDA ,U+
+    LEAU 2,U
+    TST >ROT2D_MIRROR
+    BEQ DVR_HM
+    NEGA
+DVR_HM:
+    STA >ROT2D_UX
+    STB >ROT2D_UY
+    JSR ROT2D_XFORM     ; A = x', B = y'
+    STD >ROT2D_PX       ; PX, PY
+    ADDA >DRAW_VEC_X    ; screen start, saturated to the 8-bit range
+    BVC DVR_SX
+    BMI DVR_SXP
+    LDA #$81
+    BRA DVR_SX
+DVR_SXP:
+    LDA #$7F
+DVR_SX:
+    ADDB >DRAW_VEC_Y
+    BVC DVR_SY
+    BMI DVR_SYP
+    LDB #$81
+    BRA DVR_SY
+DVR_SYP:
+    LDB #$7F
+DVR_SY:
+    STD >ROT2D_TMP
+    ; --- reset integrators, then move to the start (as DSWM) ---
+    CLR VIA_shift_reg
+    LDA #$CC
+    STA VIA_cntl
+    CLR VIA_port_a
+    LDA #$03
+    STA VIA_port_b
+    LDA #$02
+    STA VIA_port_b
+    STA VIA_port_b
+    LDA #$01
+    STA VIA_port_b
+    LDD >ROT2D_TMP
+    STB VIA_port_a      ; Y to DAC
+    CLR VIA_port_b
+    PSHS A              ; settle
+    LDA #$CE
+    STA VIA_cntl
+    CLR VIA_shift_reg
+    INC VIA_port_b
+    PULS A
+    STA VIA_port_a      ; X to DAC
+    LDA #$7F
+    STA VIA_t1_cnt_lo
+    CLR VIA_t1_cnt_hi
+DVR_W1:
+    LDA VIA_int_flags
+    ANDA #$40
+    BEQ DVR_W1
+DVR_SEG:
+    LDA ,U+             ; flag
+    CMPA #2
+    BEQ DVR_PATH_END
+    LDB ,U+             ; dy
+    LDA ,U+             ; dx
+    TST >ROT2D_MIRROR
+    BEQ DVR_SM
+    NEGA
+DVR_SM:
+    STD >ROT2D_D
+    CMPA #64
+    BGT DVR_SPLIT
+    CMPA #-64
+    BLT DVR_SPLIT
+    CMPB #64
+    BGT DVR_SPLIT
+    CMPB #-64
+    BLT DVR_SPLIT
+    BSR DVR_DRAW
+    BRA DVR_SEG
+DVR_SPLIT:
+    ASRA                ; first half
+    ASRB
+    STD >ROT2D_H
+    BSR DVR_DRAW
+    LDA >ROT2D_D        ; second half = delta - first half
+    SUBA >ROT2D_H
+    LDB >ROT2D_D+1
+    SUBB >ROT2D_H+1
+    BSR DVR_DRAW
+    BRA DVR_SEG
+DVR_PATH_END:
+    LDD >ROT2D_PC
+    SUBD #1
+    STD >ROT2D_PC
+    LBNE DVR_PATH
+DVR_DONE:
+    RTS
+
+; DVR_DRAW - A = dx, B = dy (sprite space): advance the unrotated point, turn it,
+; draw from the previous turned point. PB=1 on entry and exit.
+DVR_DRAW:
+    ADDA >ROT2D_UX
+    STA >ROT2D_UX
+    ADDB >ROT2D_UY
+    STB >ROT2D_UY
+    JSR ROT2D_XFORM     ; A = x', B = y'
+    PSHS D
+    SUBA >ROT2D_PX
+    SUBB >ROT2D_PY
+    STD >ROT2D_TMP      ; turned delta
+    PULS D
+    STD >ROT2D_PX
+    LDD >ROT2D_TMP
+    STB VIA_port_a      ; DY to DAC
+    CLR VIA_port_b
+    NOP
+    NOP
+    NOP
+    INC VIA_port_b
+    STA VIA_port_a      ; DX to DAC
+    LDA #$FF
+    STA VIA_shift_reg   ; beam on
+    CLR VIA_t1_cnt_hi   ; ramp
+DVR_W2:
+    LDA VIA_int_flags
+    ANDA #$40
+    BEQ DVR_W2
+    CLR VIA_port_a
+    CLR VIA_shift_reg   ; beam off
+    RTS
+
+; ROT2D_XFORM - (ROT2D_UX, ROT2D_UY) -> A = x', B = y'
+ROT2D_XFORM:
+    LDA >ROT2D_UX
+    LDB >ROT2D_C
+    BSR ROT2D_SMUL
+    STD >ROT2D_ACC      ; u*cos
+    LDA >ROT2D_UY
+    LDB >ROT2D_S
+    BSR ROT2D_SMUL
+    STD >ROT2D_T16      ; v*sin
+    LDD >ROT2D_ACC
+    SUBD >ROT2D_T16
+    BSR ROT2D_SCALE
+    STA >ROT2D_RX
+    LDA >ROT2D_UX
+    LDB >ROT2D_S
+    BSR ROT2D_SMUL
+    STD >ROT2D_ACC      ; u*sin
+    LDA >ROT2D_UY
+    LDB >ROT2D_C
+    BSR ROT2D_SMUL      ; v*cos
+    ADDD >ROT2D_ACC
+    BSR ROT2D_SCALE
+    TFR A,B
+    LDA >ROT2D_RX
+    RTS
+
+; ROT2D_SMUL - D = A * B, both signed 8-bit (unsigned MUL, then the sign fix-up)
+ROT2D_SMUL:
+    STA >ROT2D_MA
+    STB >ROT2D_MB
+    MUL
+    TST >ROT2D_MA
+    BPL RSM_1
+    SUBA >ROT2D_MB
+RSM_1:
+    TST >ROT2D_MB
+    BPL RSM_2
+    SUBA >ROT2D_MA
+RSM_2:
+    RTS
+
+; ROT2D_SCALE - A = (D + 64) >> 7, clamped to -127..127 (|D| <= 32258)
+ROT2D_SCALE:
+    ADDD #64
+    ASLB
+    ROLA                ; A = bits 14..7, C = sign
+    BCS RSC_NEG
+    TSTA
+    BPL RSC_OK
+    LDA #$7F
+    RTS
+RSC_NEG:
+    TSTA
+    BMI RSC_OK
+    LDA #$81
+RSC_OK:
+    RTS
+
+"#);
+    if banked {
+        asm.push_str(r#"; DRAW_VEC_ROT_BANKED - X = vector asset index: switch to its bank, draw, restore
+DRAW_VEC_ROT_BANKED:
+    TFR X,U
+    LDA >CURRENT_ROM_BANK
+    PSHS A
+    TFR X,D
+    LDX #VECTOR_BANK_TABLE
+    LDA D,X
+    STA >CURRENT_ROM_BANK
+    STA $DF00
+    TFR U,D
+    ASLB
+    ROLA
+    LDX #VECTOR_ADDR_TABLE
+    LEAX D,X
+    LDX ,X              ; _NAME_VECTORS in the asset's bank
+    JSR DRAW_VEC_ROT_RUNTIME
+    PULS A
+    STA >CURRENT_ROM_BANK
+    STA $DF00
+    RTS
+
+"#);
+    }
 }
 
 /// Emit SMUL8 (kept for backward compat), SMUL_LUT, SMUL_PROD table,
@@ -2571,6 +2927,193 @@ DAR_DONE:\n\
     RTS\n\n");
 }
 
+/// Emit DRAW_RECORDING_RUNTIME — plays one frame of a .vrec vector recording,
+/// walking POLYLINE CHAINS (start point + deltas) instead of independent lines.
+///
+/// SINGLE-BANK, VIDEO-ONLY. frame % frame_count → frame ptr → per chain: one
+/// Reset0Ref + Moveto_d to the scaled+centered start, then continuous
+/// Draw_Line_d over the scaled deltas (NO Reset0Ref/Moveto between deltas — the
+/// beam is left at each endpoint, giving true polyline continuity + speed).
+///
+/// Caller sets (all in RAM, DP=$C8):
+///   DRAW_REC_PTR   = _<NAME>_VREC header base (also passed in X at entry)
+///   DRAW_REC_FRAME = free-running frame counter (i16, non-negative)
+///   DRAW_REC_X/Y   = center (i8)
+///   DRAW_REC_SCALE = scale 0-128 (128 = 100%; identity for recorded ±127 coords)
+///   DRAW_VEC_INTENSITY = SET_INTENSITY override (0 = use recorded per-chain i)
+///
+/// Chained data layout (assets.rs compile_vrec):
+///   _<NAME>_VREC: FDB frame_count
+///                 FDB frame0_ptr, frame1_ptr, ...     (absolute pointers)
+///   frame N:      FDB chain_count
+///     per chain:  FCB start_x, start_y  (i8), FCB intensity (u8), FCB seg_count (u8)
+///                 FCB dx,dy × seg_count  (i8 deltas)
+///
+/// DP discipline: table reads + scale math (MUL16 uses direct-addressed TMPPTR)
+/// MUST run with DP=$C8. The start point is scaled+centered (DREC_COORD) under
+/// DP=$C8, then DP=$D0 for the one-time Reset0Ref/ACR/Intensity_a/Moveto_d.
+/// Each delta is scaled (DREC_SCALE, deltas are RELATIVE — no center) under
+/// DP=$C8, then DP flips to $D0 only for the Draw_Line_d, then back. All RAM
+/// reads use `>` extended addressing so they are DP-agnostic.
+///
+/// Register/temp usage: A/B/D/X scratch; MOD16 clobbers TMPVAL/TMPPTR/TMPPTR2;
+/// chain cursor + counters live in RAM (DRAW_REC_SEGPTR / DRAW_REC_SEGCNT /
+/// DRAW_REC_CHAIN_SEGS) so they survive BIOS calls. Deltas are pre-clamped to i8
+/// at compile time (compile_vrec), so no runtime delta subtraction is needed.
+fn emit_draw_recording_runtime(asm: &mut String) {
+    asm.push_str(
+"; ============================================================================\n\
+; DRAW_RECORDING_RUNTIME  (.vrec polyline-chained player — single-bank, video-only)\n\
+; ============================================================================\n\
+DRAW_RECORDING_RUNTIME:\n\
+    PSHS D,X,Y,U\n\
+    STX >DRAW_REC_PTR      ; save header base (survives MOD16 / BIOS clobber)\n\
+    LDD ,X                 ; D = frame_count (FDB, big-endian)\n\
+    LBEQ DREC_DONE         ; empty recording: nothing to draw\n\
+    ; --- frame_idx = frame % frame_count ---\n\
+    LDX >DRAW_REC_FRAME    ; X = frame counter (MOD16 dividend)\n\
+    JSR MOD16              ; D = frame % frame_count (0..frame_count-1)\n\
+    ; --- frame_ptr = offset_table[frame_idx]  (table starts at base+2) ---\n\
+    LSLB\n\
+    ROLA                   ; D = frame_idx * 2 (FDB entries)\n\
+    LDX >DRAW_REC_PTR\n\
+    LEAX 2,X               ; X = &offset_table[0] (skip frame_count word)\n\
+    LEAX D,X               ; X = &offset_table[frame_idx]\n\
+    LDX ,X                 ; X = frame data pointer (absolute)\n\
+    LDD ,X                 ; D = chain_count\n\
+    LBEQ DREC_DONE         ; empty frame\n\
+    STD >DRAW_REC_SEGCNT   ; remaining chains in frame\n\
+    LEAX 2,X               ; X = first chain header\n\
+    STX >DRAW_REC_SEGPTR\n\
+DREC_CHAIN_LOOP:\n\
+    ; --- scaled+centered start point (DP=$C8), clamped to i8 ---\n\
+    LDX >DRAW_REC_SEGPTR\n\
+    LDA ,X                 ; start_x (i8)\n\
+    LDB >DRAW_REC_X        ; center X (i8)\n\
+    JSR DREC_COORD         ; B = clamp_i8((start_x*scale>>7) + centerX)\n\
+    STB >DRAW_REC_SX0\n\
+    LDX >DRAW_REC_SEGPTR\n\
+    LDA 1,X                ; start_y\n\
+    LDB >DRAW_REC_Y\n\
+    JSR DREC_COORD\n\
+    STB >DRAW_REC_SY0\n\
+    ; --- intensity: SET_INTENSITY override (DRAW_VEC_INTENSITY) wins if nonzero ---\n\
+    LDA >DRAW_VEC_INTENSITY\n\
+    BNE DREC_HAVE_I\n\
+    LDX >DRAW_REC_SEGPTR\n\
+    LDA 2,X                ; recorded chain intensity\n\
+DREC_HAVE_I:\n\
+    STA >DRAW_REC_I\n\
+    ; --- seg_count, then advance cursor to first delta ---\n\
+    LDX >DRAW_REC_SEGPTR\n\
+    LDB 3,X                ; seg_count (deltas in this chain)\n\
+    STB >DRAW_REC_CHAIN_SEGS\n\
+    LEAX 4,X               ; X = first delta (skip start_x,start_y,i,seg_count)\n\
+    STX >DRAW_REC_SEGPTR\n\
+    ; --- beam setup ONCE per chain (DP=$D0) ---\n\
+    LDA #$D0\n\
+    TFR A,DP               ; DP=$D0 for VIA/BIOS access\n\
+    JSR Reset0Ref          ; once per chain — deltas continue from the endpoint\n\
+    LDA #$80\n\
+    STA <$04               ; ACR: SR shift-out (beam control)\n\
+    LDA >DRAW_REC_I\n\
+    JSR Intensity_a\n\
+    LDA >DRAW_REC_SY0      ; A = start Y (Moveto_d absolute: A=Y, B=X)\n\
+    LDB >DRAW_REC_SX0\n\
+    JSR Moveto_d\n\
+    LDA #$C8\n\
+    TFR A,DP               ; back to DP=$C8 to read/scale deltas\n\
+DREC_DELTA_LOOP:\n\
+    LDB >DRAW_REC_CHAIN_SEGS\n\
+    LBEQ DREC_CHAIN_NEXT   ; chain done\n\
+    ; scale dx (relative — no center), DP=$C8\n\
+    LDX >DRAW_REC_SEGPTR\n\
+    LDA ,X                 ; dx (i8)\n\
+    JSR DREC_SCALE         ; D = (dx*scale)>>7\n\
+    JSR DREC_CLAMP8        ; safety clamp (scale<=128 keeps it in range); B = scaled dx\n\
+    STB >DRAW_REC_SX1\n\
+    LDX >DRAW_REC_SEGPTR\n\
+    LDA 1,X                ; dy (i8)\n\
+    JSR DREC_SCALE\n\
+    JSR DREC_CLAMP8        ; B = scaled dy\n\
+    STB >DRAW_REC_SY1\n\
+    ; draw one chained line (DP=$D0) — NO Reset0Ref/Moveto\n\
+    LDA #$D0\n\
+    TFR A,DP\n\
+    LDA >DRAW_REC_SY1      ; A = dy\n\
+    LDB >DRAW_REC_SX1      ; B = dx\n\
+    CLR Vec_Misc_Count\n\
+    JSR Draw_Line_d\n\
+    LDA #$C8\n\
+    TFR A,DP               ; back to DP=$C8\n\
+    ; advance to next delta (2 bytes) and decrement delta count\n\
+    LDX >DRAW_REC_SEGPTR\n\
+    LEAX 2,X\n\
+    STX >DRAW_REC_SEGPTR\n\
+    LDB >DRAW_REC_CHAIN_SEGS\n\
+    DECB\n\
+    STB >DRAW_REC_CHAIN_SEGS\n\
+    LBRA DREC_DELTA_LOOP\n\
+DREC_CHAIN_NEXT:\n\
+    ; DRAW_REC_SEGPTR now points at the next chain header (past last delta)\n\
+    LDD >DRAW_REC_SEGCNT   ; remaining chains\n\
+    SUBD #1\n\
+    STD >DRAW_REC_SEGCNT\n\
+    LBNE DREC_CHAIN_LOOP\n\
+DREC_DONE:\n\
+    LDA #$C8\n\
+    TFR A,DP               ; ensure DP restored on all exit paths\n\
+    PULS D,X,Y,U\n\
+    RTS\n\
+; DREC_COORD: A = raw coord (i8), B = center (i8)\n\
+;   -> B = clamp_i8((coord*scale>>7) + center). Clobbers A,D,X. DP must be $C8.\n\
+DREC_COORD:\n\
+    PSHS B                 ; save center (i8)\n\
+    JSR DREC_SCALE         ; D = (coord*scale)>>7 as i16 (already in [-128,127])\n\
+    STD >DRAW_REC_TMP16\n\
+    LDB ,S                 ; B = center byte\n\
+    SEX                    ; D = sign-extended center (i16)\n\
+    ADDD >DRAW_REC_TMP16   ; D = scaled + center (i16)\n\
+    JSR DREC_CLAMP8        ; D clamped to [-127,127]; low byte in B\n\
+    LEAS 1,S               ; drop saved center\n\
+    RTS\n\
+; DREC_CLAMP8: D (i16) -> D clamped to [-127,127] (signed). Low byte usable as i8.\n\
+DREC_CLAMP8:\n\
+    CMPD #127\n\
+    BLE DREC_CLAMP8_LO\n\
+    LDD #127\n\
+DREC_CLAMP8_LO:\n\
+    CMPD #-127\n\
+    BGE DREC_CLAMP8_OK\n\
+    LDD #-127\n\
+DREC_CLAMP8_OK:\n\
+    RTS\n\
+; DREC_SCALE: A = raw coord (i8) -> D = (coord*scale)>>7 as i16 (in [-128,127])\n\
+;   scale from DRAW_REC_SCALE (0-128). Clobbers X. DP must be $C8.\n\
+DREC_SCALE:\n\
+    TFR A,B\n\
+    SEX                    ; D = sign-extended coord (i16)\n\
+    TFR D,X                ; X = coord (MUL16 operand)\n\
+    LDB >DRAW_REC_SCALE\n\
+    CLRA                   ; D = scale (0-128, positive)\n\
+    JSR MUL16              ; D = coord*scale (signed, fits 16-bit)\n\
+    ASRA\n\
+    RORB                   ; >>1 (arithmetic, sign into A)\n\
+    ASRA\n\
+    RORB                   ; >>2\n\
+    ASRA\n\
+    RORB                   ; >>3\n\
+    ASRA\n\
+    RORB                   ; >>4\n\
+    ASRA\n\
+    RORB                   ; >>5\n\
+    ASRA\n\
+    RORB                   ; >>6\n\
+    ASRA\n\
+    RORB                   ; >>7  (D now holds scaled coord, sign-extended in A)\n\
+    RTS\n\n");
+}
+
 /// Emit SPAWN_ENEMIES_RUNTIME, UPDATE_ENEMIES_RUNTIME, DRAW_ENEMIES_RUNTIME.
 ///
 /// Enemy pool record layout (ENEMY_POOL_STRIDE = 13 bytes):
@@ -2953,11 +3496,13 @@ UPD_W_WALK:\n\
     LBLT UPD_W_EDGE_R   ; proposed > x_max → edge\n\
     PULS D\n\
     STD 1,Y\n\
+    JSR UPD_W_SETY      ; world_y = surface_y_at(area, new_x) + feet_offset\n\
     LBRA UPD_ENE_NEXT_POP\n\
 UPD_W_EDGE_R:\n\
     LEAS 2,S\n\
     LDD 4,X             ; clamp to x_max\n\
     STD 1,Y\n\
+    JSR UPD_W_SETY      ; world_y at clamped x (= y2 side)\n\
     LBRA UPD_W_EDGE\n\
 UPD_W_WALK_L:\n\
     LDD 1,Y\n\
@@ -2968,11 +3513,13 @@ UPD_W_WALK_L:\n\
     LBGT UPD_W_EDGE_L\n\
     PULS D\n\
     STD 1,Y\n\
+    JSR UPD_W_SETY      ; world_y = surface_y_at(area, new_x) + feet_offset\n\
     LBRA UPD_ENE_NEXT_POP\n\
 UPD_W_EDGE_L:\n\
     LEAS 2,S\n\
     LDD 2,X             ; clamp to x_min\n\
     STD 1,Y\n\
+    JSR UPD_W_SETY      ; world_y at clamped x (= y1 side)\n\
 UPD_W_EDGE:\n\
     ; Reached an edge: flip dir, enter IDLE\n\
     LDA 17,Y\n\
@@ -2986,6 +3533,16 @@ UPD_W_EDGE:\n\
     ADDB #90\n\
     STB 20,Y            ; idle_timer\n\
     LBRA UPD_ENE_NEXT_POP\n\
+\n\
+; Set pool world_y from the sloped surface at the enemy's current x.\n\
+; Entry: X = &area (current area), Y = pool. Clobbers A,B,X.\n\
+UPD_W_SETY:\n\
+    LDD 1,Y             ; query x = current x (after ±1 update / clamp)\n\
+    JSR AREA_SURF_Y     ; D = surface_y_at(area, x)  (X clobbered)\n\
+    ADDB 26,Y           ; + feet_offset (low byte)\n\
+    ADCA #0             ; propagate carry (feet is 0..255)\n\
+    STD 3,Y             ; world_y\n\
+    RTS\n\
 \n\
 UPD_W_IDLE:\n\
     DEC 20,Y\n\
@@ -3010,10 +3567,9 @@ UPD_W_TRY_LOOP:\n\
     ; Match: roll 25% chance\n\
     PSHS B,X\n\
     JSR RAND_HELPER\n\
-    ANDB #3\n\
-    TSTB\n\
-    PULS B,X\n\
-    BNE UPD_W_NEXT_TRY\n\
+    CMPA #32            ; ~25% commit. Use the high byte (A, 0..127): the LCG's\n\
+    PULS B,X            ; low 2 bits flip +1/call, and with 2 rolls/idle cycle a\n\
+    BHS UPD_W_NEXT_TRY  ; low-bit coin locks to {1,3} for odd seeds -> never fires.\n\
     ; Commit transition: X = &trans[matched]\n\
     LDA 1,X\n\
     STA 19,Y            ; cur_area_idx = to\n\
@@ -3126,9 +3682,10 @@ UPD_W_AIR_VYOK:\n\
     MUL\n\
     ADDD #2\n\
     LEAX D,X            ; X = &area[cur_area_idx] (target)\n\
-    LDB 26,Y            ; B = feet_offset (low byte)\n\
-    CLRA                ; A = 0 (high byte)\n\
-    ADDD ,X             ; D = feet_offset + area.y (16-bit at X)\n\
+    LDD 22,Y            ; target_x (to_x)\n\
+    JSR AREA_SURF_Y     ; D = surface_y_at(area, to_x)\n\
+    ADDB 26,Y           ; + feet_offset (low byte)\n\
+    ADCA #0             ; propagate carry (feet is 0..255)\n\
     ; If trans_type=2 (drop) or vy<=0 (descending): land if cur_y <= target_y\n\
     ; Else (ascending jump_up): just keep going\n\
     PSHS D              ; stash target_y (we'll need it twice)\n\
@@ -3162,9 +3719,10 @@ UPD_W_AIR_LAND:\n\
     MUL\n\
     ADDD #2\n\
     LEAX D,X\n\
-    LDB 26,Y\n\
-    CLRA\n\
-    ADDD ,X             ; D = feet_offset + area.y\n\
+    LDD 22,Y            ; target_x (to_x)\n\
+    JSR AREA_SURF_Y     ; D = surface_y_at(area, to_x)\n\
+    ADDB 26,Y           ; + feet_offset (low)\n\
+    ADCA #0\n\
     STD 3,Y\n\
     CLR 18,Y            ; sub_state = WALK\n\
     LDA #1\n\
@@ -3288,11 +3846,13 @@ UPD_W_WALK:\n\
     LBLT UPD_W_EDGE_R\n\
     PULS D\n\
     STD 1,Y\n\
+    JSR UPD_W_SETY      ; world_y = surface_y_at(area, new_x) + feet_offset\n\
     LBRA UPD_ENE_NEXT_POP\n\
 UPD_W_EDGE_R:\n\
     LEAS 2,S\n\
     LDD 4,X\n\
     STD 1,Y\n\
+    JSR UPD_W_SETY\n\
     LBRA UPD_W_EDGE\n\
 UPD_W_WALK_L:\n\
     LDD 1,Y\n\
@@ -3303,11 +3863,13 @@ UPD_W_WALK_L:\n\
     LBGT UPD_W_EDGE_L\n\
     PULS D\n\
     STD 1,Y\n\
+    JSR UPD_W_SETY      ; world_y = surface_y_at(area, new_x) + feet_offset\n\
     LBRA UPD_ENE_NEXT_POP\n\
 UPD_W_EDGE_L:\n\
     LEAS 2,S\n\
     LDD 2,X\n\
     STD 1,Y\n\
+    JSR UPD_W_SETY\n\
 UPD_W_EDGE:\n\
     LDA 17,Y\n\
     EORA #1\n\
@@ -3320,6 +3882,16 @@ UPD_W_EDGE:\n\
     ADDB #90\n\
     STB 20,Y\n\
     LBRA UPD_ENE_NEXT_POP\n\
+\n\
+; Set pool world_y from the sloped surface at the enemy's current x.\n\
+; Entry: X = &area, Y = pool. Clobbers A,B,X.\n\
+UPD_W_SETY:\n\
+    LDD 1,Y             ; query x = current x\n\
+    JSR AREA_SURF_Y     ; D = surface_y_at(area, x)\n\
+    ADDB 26,Y           ; + feet_offset (low)\n\
+    ADCA #0\n\
+    STD 3,Y             ; world_y\n\
+    RTS\n\
 \n\
 UPD_W_IDLE:\n\
     DEC 20,Y\n\
@@ -3342,10 +3914,9 @@ UPD_W_TRY_LOOP:\n\
     BNE UPD_W_NEXT_TRY\n\
     PSHS B,X\n\
     JSR RAND_HELPER\n\
-    ANDB #3\n\
-    TSTB\n\
-    PULS B,X\n\
-    BNE UPD_W_NEXT_TRY\n\
+    CMPA #32            ; ~25% commit. Use the high byte (A, 0..127): the LCG's\n\
+    PULS B,X            ; low 2 bits flip +1/call, and with 2 rolls/idle cycle a\n\
+    BHS UPD_W_NEXT_TRY  ; low-bit coin locks to {1,3} for odd seeds -> never fires.\n\
     LDA 1,X\n\
     STA 19,Y\n\
     LDA 2,X\n\
@@ -3449,9 +4020,10 @@ UPD_W_AIR_VYOK:\n\
     MUL\n\
     ADDD #2\n\
     LEAX D,X            ; X = &area[cur_area]\n\
-    LDB 26,Y            ; B = feet_offset\n\
-    CLRA\n\
-    ADDD ,X             ; D = feet_offset + area.y\n\
+    LDD 22,Y            ; target_x (to_x)\n\
+    JSR AREA_SURF_Y     ; D = surface_y_at(area, to_x)\n\
+    ADDB 26,Y           ; + feet_offset (low)\n\
+    ADCA #0\n\
     PSHS D              ; stash target_y\n\
     LDA 21,Y\n\
     CMPA #2\n\
@@ -3481,9 +4053,10 @@ UPD_W_AIR_LAND:\n\
     MUL\n\
     ADDD #2\n\
     LEAX D,X\n\
-    LDB 26,Y\n\
-    CLRA\n\
-    ADDD ,X             ; D = feet_offset + area.y\n\
+    LDD 22,Y            ; target_x (to_x)\n\
+    JSR AREA_SURF_Y     ; D = surface_y_at(area, to_x)\n\
+    ADDB 26,Y           ; + feet_offset (low)\n\
+    ADCA #0\n\
     STD 3,Y\n\
     CLR 18,Y\n\
     LDA #1\n\
@@ -3499,6 +4072,142 @@ UPD_ENE_DONE:\n\
     RTS\n\n"
         );
     }
+
+    // AREA_SURF_Y — sloped walkable-area surface height sampler.
+    // Reproduces bit-exactly the reference surface_y_at(area, x):
+    //   y1=i16[X+0] x_min=i16[X+2] x_max=i16[X+4] y2=i16[X+6]
+    //   if y2==y1 || x_max<=x_min || x<=x_min: return y1
+    //   if x>=x_max: return y2
+    //   return y1 + (y2-y1)*(x-x_min)/(x_max-x_min)   (signed, truncate toward zero)
+    // Contract:
+    //   Entry: X = &area (8-byte record), D = query x (i16).
+    //   Exit : D = interpolated i16 surface y (feet_offset NOT added — caller adds it).
+    //   Preserves Y and U. Clobbers A,B,X,CC. Uses ONLY the hardware stack for
+    //   scratch (no RAM temps) so it never disturbs TMPVAL/TMPPTR/TMPPTR2/RESULT.
+    // Math: 32-bit product |dy|*(x-x_min) via four 8x8 MULs, divided by
+    //   (x_max-x_min) with a constant-time 16-iteration shift-subtract long
+    //   division (quotient always fits 16 bits since t<=w => Q<=|dy|), sign
+    //   re-applied afterwards (truncate toward zero), then y1 added.
+    asm.push_str(
+"; ---- AREA_SURF_Y: sloped walkable-area surface height ----\n\
+AREA_SURF_Y:\n\
+    PSHS D              ; [S+0..1] = query_x (saved for interp)\n\
+    LDD 6,X             ; y2\n\
+    CMPD 0,X            ; vs y1\n\
+    BEQ ASY_FLAT        ; flat area -> y1\n\
+    LDD 4,X             ; x_max\n\
+    CMPD 2,X            ; vs x_min (signed)\n\
+    BLE ASY_FLAT        ; x_max <= x_min -> y1\n\
+    LDD ,S              ; query_x\n\
+    CMPD 2,X            ; vs x_min (signed)\n\
+    BLE ASY_FLAT        ; x <= x_min -> y1\n\
+    CMPD 4,X            ; query_x vs x_max (signed)\n\
+    BGE ASY_FAR         ; x >= x_max -> y2\n\
+    BRA ASY_INTERP\n\
+ASY_FLAT:\n\
+    LDD 0,X             ; return y1\n\
+    LEAS 2,S            ; drop saved query_x\n\
+    RTS\n\
+ASY_FAR:\n\
+    LDD 6,X             ; return y2\n\
+    LEAS 2,S\n\
+    RTS\n\
+ASY_INTERP:\n\
+    LEAS -14,S          ; locals: [0..3]P [4..5]w [6..7]t [8]sign [9..10]|dy| [11..12]y1 [13]cnt ; [14..15]query_x\n\
+    LDD 0,X             ; y1\n\
+    STD 11,S\n\
+    LDD 6,X             ; y2\n\
+    SUBD 0,X            ; dy = y2 - y1 (signed)\n\
+    TSTA\n\
+    BPL ASY_DYP\n\
+    COMA\n\
+    COMB\n\
+    ADDD #1             ; |dy|\n\
+    STD 9,S\n\
+    LDA #1\n\
+    STA 8,S             ; sign = negative\n\
+    BRA ASY_DYD\n\
+ASY_DYP:\n\
+    STD 9,S             ; |dy| = dy\n\
+    CLR 8,S             ; sign = positive\n\
+ASY_DYD:\n\
+    LDD 4,X             ; x_max\n\
+    SUBD 2,X            ; w = x_max - x_min (>0)\n\
+    STD 4,S\n\
+    LDD 14,S            ; query_x\n\
+    SUBD 2,X            ; t = query_x - x_min (>=1)\n\
+    STD 6,S\n\
+    ; ---- X is now free; build 32-bit product P = |dy| * t ----\n\
+    LDA 10,S            ; al = |dy| low\n\
+    LDB 7,S             ; bl = t low\n\
+    MUL                 ; D = al*bl (p_ll)\n\
+    STD 2,S             ; P1:P0\n\
+    LDA 9,S             ; ah = |dy| high\n\
+    LDB 6,S             ; bh = t high\n\
+    MUL                 ; D = ah*bh (p_hh)\n\
+    STD 0,S             ; P3:P2\n\
+    LDA 9,S             ; ah\n\
+    LDB 7,S             ; bl\n\
+    MUL                 ; D = ah*bl (mid1)\n\
+    ADDB 2,S            ; add mid1<<8 into P\n\
+    STB 2,S\n\
+    ADCA 1,S\n\
+    STA 1,S\n\
+    LDA 0,S\n\
+    ADCA #0\n\
+    STA 0,S\n\
+    LDA 10,S            ; al\n\
+    LDB 6,S             ; bh\n\
+    MUL                 ; D = al*bh (mid2)\n\
+    ADDB 2,S            ; add mid2<<8 into P\n\
+    STB 2,S\n\
+    ADCA 1,S\n\
+    STA 1,S\n\
+    LDA 0,S\n\
+    ADCA #0\n\
+    STA 0,S\n\
+    ; ---- divide P (32-bit) by w -> Q in P1:P0, 16-iter shift-subtract ----\n\
+    ; The 32-bit dividend is shifted left through carry using only register\n\
+    ; rotates (ASLB/ROLA/ROLB); LDD/STD do not affect C, so the carry chains\n\
+    ; across the two 16-bit halves (the assembler has no indexed shifts).\n\
+    LDA #16\n\
+    STA 13,S            ; loop counter\n\
+ASY_DIVLOOP:\n\
+    LDD 2,S             ; low word P1:P0\n\
+    ASLB                ; P0<<1, bit0=0, C=old bit7(P0)\n\
+    ROLA                ; P1<<1 | C, C=old bit7(P1)\n\
+    STD 2,S             ; store low word (C preserved)\n\
+    LDD 0,S             ; high word P3:P2 = rem (C preserved)\n\
+    ROLB                ; P2<<1 | C, C=old bit7(P2)\n\
+    ROLA                ; P3<<1 | C, C=old bit7(P3) = bit16\n\
+    STD 0,S             ; store rem (C preserved), D still = rem\n\
+    BCS ASY_DSUB        ; bit16 set -> rem definitely >= w\n\
+    CMPD 4,S            ; rem vs w (unsigned); D = rem\n\
+    BLO ASY_DNOSUB      ; rem < w -> quotient bit 0\n\
+ASY_DSUB:\n\
+    LDD 0,S\n\
+    SUBD 4,S            ; rem -= w\n\
+    STD 0,S\n\
+    INC 3,S             ; quotient bit = 1 (LSB of P0, was 0 after shift)\n\
+ASY_DNOSUB:\n\
+    DEC 13,S\n\
+    BNE ASY_DIVLOOP\n\
+    ; ---- apply sign (truncate toward zero) and add y1 ----\n\
+    LDA 8,S             ; sign flag (0=pos, 1=neg); sets Z\n\
+    BNE ASY_QNEG\n\
+    LDD 2,S             ; Q (fits 16 bits)\n\
+    ADDD 11,S           ; result = y1 + Q\n\
+    LEAS 16,S           ; drop 14 locals + saved query_x\n\
+    RTS\n\
+ASY_QNEG:\n\
+    LDD 2,S             ; Q\n\
+    COMA\n\
+    COMB\n\
+    ADDD #1             ; -Q (truncate toward zero)\n\
+    ADDD 11,S           ; result = y1 - Q\n\
+    LEAS 16,S           ; drop 14 locals + saved query_x\n\
+    RTS\n\n"
+    );
 
     asm.push_str(
 "; DRAW_ENEMIES_RUNTIME\n\

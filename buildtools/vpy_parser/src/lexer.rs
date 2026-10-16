@@ -37,6 +37,7 @@ pub enum TokenKind {
     As,
     Export,
     Struct,
+    Enum,
     Self_,
     At,
 
@@ -84,6 +85,11 @@ pub enum TokenKind {
     SlashEqual,
     SlashSlashEqual,
     PercentEqual,
+    AmpEqual,
+    PipeEqual,
+    CaretEqual,
+    ShiftLeftEqual,
+    ShiftRightEqual,
 
     // Structural
     Newline,
@@ -113,9 +119,24 @@ pub struct Token {
 ///
 /// # Returns
 /// * `ParseResult<Vec<Token>>` - Token stream or error with line/col
+/// Opening minus closing brackets among `tokens`.
+fn bracket_balance(tokens: &[Token]) -> i32 {
+    tokens
+        .iter()
+        .map(|t| match t.kind {
+            TokenKind::LParen | TokenKind::LBracket => 1,
+            TokenKind::RParen | TokenKind::RBracket => -1,
+            _ => 0,
+        })
+        .sum()
+}
+
 pub fn lex(input: &str) -> ParseResult<Vec<Token>> {
     let mut tokens = Vec::new();
     let mut indent_stack: Vec<usize> = vec![0];
+    // Brackets still open: as in Python, a line inside ( ) or [ ] goes on onto the next
+    // one, whose indentation does not count and no Newline ends it.
+    let mut open: i32 = 0;
 
     for (line_idx, raw_line) in input.lines().enumerate() {
         let line_no = line_idx + 1;
@@ -123,6 +144,17 @@ pub fn lex(input: &str) -> ParseResult<Vec<Token>> {
 
         // Skip blank lines and comments
         if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with(';') {
+            continue;
+        }
+
+        if open > 0 {
+            let start = tokens.len();
+            lex_line(trimmed, line_no, &mut tokens)?;
+            open += bracket_balance(&tokens[start..]);
+            if open <= 0 {
+                open = 0;
+                tokens.push(Token { kind: TokenKind::Newline, line: line_no, col: raw_line.len() });
+            }
             continue;
         }
 
@@ -157,7 +189,12 @@ pub fn lex(input: &str) -> ParseResult<Vec<Token>> {
         }
 
         // Tokenize the line content
+        let start = tokens.len();
         lex_line(trimmed, line_no, &mut tokens)?;
+        open = bracket_balance(&tokens[start..]).max(0);
+        if open > 0 {
+            continue; // the statement goes on on the next line
+        }
 
         // Add newline marker
         tokens.push(Token {
@@ -165,6 +202,9 @@ pub fn lex(input: &str) -> ParseResult<Vec<Token>> {
             line: line_no,
             col: raw_line.len(),
         });
+    }
+    if open > 0 {
+        return Err(ParseError::Generic("a ( or [ is never closed: the file ends inside it".to_string()));
     }
 
     // Emit final DEDENT tokens
@@ -289,16 +329,31 @@ fn lex_line(line: &str, line_no: usize, out: &mut Vec<Token>) -> ParseResult<()>
 
             // Bitwise operators
             '&' => {
-                out.push(token(TokenKind::Amp, line_no, idx));
-                idx += 1;
+                if idx + 1 < chars.len() && chars[idx + 1] == '=' {
+                    out.push(token(TokenKind::AmpEqual, line_no, idx));
+                    idx += 2;
+                } else {
+                    out.push(token(TokenKind::Amp, line_no, idx));
+                    idx += 1;
+                }
             }
             '|' => {
-                out.push(token(TokenKind::Pipe, line_no, idx));
-                idx += 1;
+                if idx + 1 < chars.len() && chars[idx + 1] == '=' {
+                    out.push(token(TokenKind::PipeEqual, line_no, idx));
+                    idx += 2;
+                } else {
+                    out.push(token(TokenKind::Pipe, line_no, idx));
+                    idx += 1;
+                }
             }
             '^' => {
-                out.push(token(TokenKind::Caret, line_no, idx));
-                idx += 1;
+                if idx + 1 < chars.len() && chars[idx + 1] == '=' {
+                    out.push(token(TokenKind::CaretEqual, line_no, idx));
+                    idx += 2;
+                } else {
+                    out.push(token(TokenKind::Caret, line_no, idx));
+                    idx += 1;
+                }
             }
             '~' => {
                 out.push(token(TokenKind::Tilde, line_no, idx));
@@ -331,7 +386,10 @@ fn lex_line(line: &str, line_no: usize, out: &mut Vec<Token>) -> ParseResult<()>
                 }
             }
             '<' => {
-                if idx + 1 < chars.len() && chars[idx + 1] == '<' {
+                if idx + 2 < chars.len() && chars[idx + 1] == '<' && chars[idx + 2] == '=' {
+                    out.push(token(TokenKind::ShiftLeftEqual, line_no, idx));
+                    idx += 3;
+                } else if idx + 1 < chars.len() && chars[idx + 1] == '<' {
                     out.push(token(TokenKind::ShiftLeft, line_no, idx));
                     idx += 2;
                 } else if idx + 1 < chars.len() && chars[idx + 1] == '=' {
@@ -343,7 +401,10 @@ fn lex_line(line: &str, line_no: usize, out: &mut Vec<Token>) -> ParseResult<()>
                 }
             }
             '>' => {
-                if idx + 1 < chars.len() && chars[idx + 1] == '>' {
+                if idx + 2 < chars.len() && chars[idx + 1] == '>' && chars[idx + 2] == '=' {
+                    out.push(token(TokenKind::ShiftRightEqual, line_no, idx));
+                    idx += 3;
+                } else if idx + 1 < chars.len() && chars[idx + 1] == '>' {
                     out.push(token(TokenKind::ShiftRight, line_no, idx));
                     idx += 2;
                 } else if idx + 1 < chars.len() && chars[idx + 1] == '=' {
@@ -513,6 +574,7 @@ fn lex_line(line: &str, line_no: usize, out: &mut Vec<Token>) -> ParseResult<()>
                     "as" => TokenKind::As,
                     "export" => TokenKind::Export,
                     "struct" => TokenKind::Struct,
+                    "enum" => TokenKind::Enum,
                     "self" => TokenKind::Self_,
                     _ => TokenKind::Identifier(ident.to_string()),
                 };

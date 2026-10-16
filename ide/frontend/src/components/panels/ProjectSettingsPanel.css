@@ -1,0 +1,138 @@
+/* Project Settings panel: builds on SettingsPanel.css (.settings-panel,
+   .settings-section, .settings-description, .pitrex-sd-browse). */
+
+.project-settings-panel .ps-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.project-settings-panel .ps-label {
+  font-size: 13px;
+  color: #cccccc;
+}
+
+.project-settings-panel .ps-version {
+  font-family: monospace;
+  font-size: 13px;
+  color: #ffffff;
+}
+
+.project-settings-panel .ps-badge {
+  font-size: 11px;
+  border-radius: 3px;
+  padding: 1px 6px;
+}
+
+.project-settings-panel .ps-badge-ok {
+  background: rgba(78, 201, 176, 0.15);
+  color: #4ec9b0;
+}
+
+.project-settings-panel .ps-badge-missing {
+  background: rgba(204, 167, 0, 0.15);
+  color: #cca700;
+}
+
+.project-settings-panel .ps-select {
+  flex: 1;
+  min-width: 0;
+  background: #0d2133;
+  border: 1px solid #1e5a85;
+  border-radius: 4px;
+  color: #9dd3f5;
+  font-size: 12px;
+  font-family: monospace;
+  padding: 4px 6px;
+  outline: none;
+}
+
+.project-settings-panel .ps-select:focus {
+  border-color: #007acc;
+}
+
+.project-settings-panel .ps-select:disabled,
+.project-settings-panel .pitrex-sd-browse:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.project-settings-panel .ps-small {
+  display: block;
+  margin: 0 0 10px 0;
+  font-size: 11px;
+  color: #9d9d9d;
+  line-height: 1.4;
+}
+
+.project-settings-panel .ps-path {
+  font-family: monospace;
+  word-break: break-all;
+}
+
+.project-settings-panel .ps-message {
+  margin: 0 0 12px 0;
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  background: #2a2a2a;
+  border-left: 3px solid #007acc;
+}
+
+.project-settings-panel .ps-notice {
+  border-left-color: #007acc;
+  color: #cccccc;
+}
+
+.project-settings-panel .ps-error {
+  border-left-color: #f14c4c;
+  color: #f48771;
+  word-break: break-word;
+}
+
+.project-settings-panel .ps-retry {
+  margin-top: 6px;
+}
+
+.project-settings-panel .ps-progress {
+  margin-bottom: 10px;
+}
+
+.project-settings-panel .ps-progress-track {
+  position: relative;
+  height: 6px;
+  background: #2d2d2d;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.project-settings-panel .ps-progress-bar {
+  height: 100%;
+  background: #007acc;
+  transition: width 0.15s;
+}
+
+/* Unknown total size: a sliding segment instead of a percentage. */
+.project-settings-panel .ps-progress-indeterminate {
+  position: absolute;
+  width: 30%;
+  animation: ps-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes ps-indeterminate {
+  0% { left: -30%; }
+  100% { left: 100%; }
+}
+
+.project-settings-panel .ps-candidates {
+  margin: 6px 0 0;
+  padding-left: 16px;
+}
+
+.project-settings-panel .ps-candidates li {
+  word-break: break-all;
+}

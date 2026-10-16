@@ -32,17 +32,25 @@ Vectrex Studio lets you write games for the Vectrex in **VPy**, a Python-like hi
 **Build and launch:**
 
 ```bash
-# 1. Build the VPy compiler
-cargo build --bin vectrexc --release
+# 1. Build the VPy compiler (vpy_cli) and language server (vpy_lsp)
+cargo build --release --bin vpy_cli --bin vpy_lsp
 
 # 2. Install IDE dependencies
 cd ide/frontend && npm install
 cd ../electron && npm install
 cd ../..
 
-# 3. Launch IDE
-pwsh ./run-ide.ps1
+# 3. Launch IDE (builds vpy_cli + vpy_lsp and copies them into ide/electron/resources/)
+./run-ide.sh        # or: pwsh ./run-ide.ps1
 # Or manually: cd ide/frontend && npm run dev, then cd ../electron && npm start
+```
+
+**Compile from the command line:**
+
+```bash
+./target/release/vpy_cli build examples/pong/pong.vpyproj -o pong.bin
+# Options: --target m6809|rp2350|pitrex|uvm2  --debug (emit .pdb)
+# Assembly only: vpy_cli asm <file.vpy|project.vpyproj> -o out.asm
 ```
 
 See [docs/SETUP.md](docs/SETUP.md) for full step-by-step instructions.
@@ -101,8 +109,8 @@ buildtools/     # VPy compiler (Rust, one crate per phase)
   vpy_linker/   # Phase 7 — symbol resolution and linking
   vpy_binary_writer/  # Phase 8 — binary output
   vpy_debug_gen/ # Phase 9 — debug symbol generation
-  vpy_cli/      # CLI orchestrator (vectrexc)
-core/           # Shared VPy language services (LSP, lexer, parser)
+  vpy_cli/      # CLI orchestrator (binary: vpy_cli)
+  vpy_lsp/      # Language server (binary: vpy_lsp), same parser as the compiler
 ide/            # Electron IDE shell + React frontend
   frontend/     # React/TypeScript UI (Monaco, panels, emulator)
   electron/     # Electron shell

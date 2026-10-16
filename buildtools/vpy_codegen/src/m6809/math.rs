@@ -2,7 +2,7 @@
 //!
 //! Basic math operations for VPy
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use vpy_parser::Expr;
 use super::expressions;
@@ -115,51 +115,33 @@ pub fn emit_clamp(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     
     let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
     out.push_str("    ; CLAMP: Clamp value to range [min, max]\n");
-    
-    // Evaluate value (arg 0); D = value after emit
+    // Only TMPPTR and TMPPTR2 (the old code also wrote TMPPTR+4, i.e. whatever
+    // RAM follows TMPPTR2). The arguments are simple here: an expression
+    // argument was computed ahead (expressions::emit_hoisted_args), so
+    // evaluating `max` after the first compare cannot disturb anything.
     expressions::emit_simple_expr(&args[0], out, assets);
-    out.push_str("    STD TMPPTR     ; Save value\n");
-
-    // Evaluate min (arg 1); D = min after emit
+    out.push_str("    STD TMPPTR     ; value\n");
     expressions::emit_simple_expr(&args[1], out, assets);
-    out.push_str("    STD TMPPTR+2   ; Save min\n");
-
-    // Evaluate max (arg 2); D = max after emit
-    expressions::emit_simple_expr(&args[2], out, assets);
-    out.push_str("    STD TMPPTR+4   ; Save max\n");
-    
-    // Compare value with min
-    out.push_str("    LDD TMPPTR     ; Load value\n");
-    out.push_str("    CMPD TMPPTR+2  ; Compare with min\n");
-    out.push_str(&format!("    BGE .CLAMP_{}_CHK_MAX ; Branch if value >= min\n", label_id));
-    
-    // Value < min: return min
-    out.push_str("    LDD TMPPTR+2\n");
-    out.push_str("    STD RESULT\n");
-    out.push_str(&format!("    BRA .CLAMP_{}_END\n", label_id));
-    
-    out.push_str(&format!(".CLAMP_{}_CHK_MAX:\n", label_id));
-    // Compare value with max
-    out.push_str("    LDD TMPPTR     ; Load value again\n");
-    out.push_str("    CMPD TMPPTR+4  ; Compare with max\n");
-    out.push_str(&format!("    BLE .CLAMP_{}_OK  ; Branch if value <= max\n", label_id));
-    
-    // Value > max: return max
-    out.push_str("    LDD TMPPTR+4\n");
-    out.push_str("    STD RESULT\n");
-    out.push_str(&format!("    BRA .CLAMP_{}_END\n", label_id));
-    
-    out.push_str(&format!(".CLAMP_{}_OK:\n", label_id));
-    // Value is in range: return value
+    out.push_str("    STD TMPPTR2    ; min\n");
     out.push_str("    LDD TMPPTR\n");
-    out.push_str("    STD RESULT\n");
-    
+    out.push_str("    CMPD TMPPTR2   ; value - min\n");
+    out.push_str(&format!("    BGE .CLAMP_{}_CHK_MAX\n", label_id));
+    out.push_str("    LDD TMPPTR2    ; below min: min\n");
+    out.push_str(&format!("    BRA .CLAMP_{}_END\n", label_id));
+    out.push_str(&format!(".CLAMP_{}_CHK_MAX:\n", label_id));
+    expressions::emit_simple_expr(&args[2], out, assets);
+    out.push_str("    STD TMPPTR2    ; max\n");
+    out.push_str("    LDD TMPPTR\n");
+    out.push_str("    CMPD TMPPTR2   ; value - max\n");
+    out.push_str(&format!("    BLE .CLAMP_{}_END  ; in range: value\n", label_id));
+    out.push_str("    LDD TMPPTR2    ; above max: max\n");
     out.push_str(&format!(".CLAMP_{}_END:\n", label_id));
+    out.push_str("    STD RESULT\n");
 }
 
 /// Emit mathematical runtime helpers
 /// Only emits helpers that are actually used in the code (tree shaking)
-pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
+pub fn emit_runtime_helpers(out: &mut String, needed: &BTreeSet<String>) {
     // MUL16: Multiply X * D -> D
     if needed.contains("MUL16") {
         out.push_str("MUL16:\n");

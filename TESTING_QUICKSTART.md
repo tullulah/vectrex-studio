@@ -121,7 +121,7 @@ ctx.expect(condition, message)  // Assert with message
 
 **"Compiler not found"**
 ```bash
-cargo build --bin vectrexc
+cargo build --bin vpy_cli
 ```
 
 **Multi-backend fails with "Bundle not found"**

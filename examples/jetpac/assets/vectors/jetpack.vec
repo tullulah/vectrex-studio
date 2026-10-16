@@ -1,0 +1,101 @@
+{
+  "version": "1.0",
+  "name": "jetpack",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "pack_left",
+          "intensity": 127,
+          "closed": true,
+          "points": [
+            {
+              "x": -2,
+              "y": 2
+            },
+            {
+              "x": -2,
+              "y": 0
+            },
+            {
+              "x": -2,
+              "y": 0
+            },
+            {
+              "x": -2,
+              "y": 2
+            }
+          ]
+        },
+        {
+          "name": "pack_right",
+          "intensity": 127,
+          "closed": true,
+          "points": [
+            {
+              "x": 2,
+              "y": 2
+            },
+            {
+              "x": 2,
+              "y": 0
+            },
+            {
+              "x": 2,
+              "y": 0
+            },
+            {
+              "x": 2,
+              "y": 2
+            }
+          ]
+        },
+        {
+          "name": "flame_left",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {
+              "x": -2,
+              "y": 0
+            },
+            {
+              "x": -2,
+              "y": -2
+            },
+            {
+              "x": -2,
+              "y": -2
+            }
+          ]
+        },
+        {
+          "name": "flame_right",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {
+              "x": 2,
+              "y": 0
+            },
+            {
+              "x": 2,
+              "y": -2
+            },
+            {
+              "x": 2,
+              "y": -2
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -46,7 +46,7 @@ EXAMPLES:
 ✅ [just show the code block]
 
 ❌ "I've updated the VPyContext.ts file with the correct coordinate system information..."
-✅ "✅ Coordenadas actualizadas"
+✅ "✅ Coordinates updated"
 
 ` : '';
     
@@ -118,8 +118,8 @@ VPy IDE FEATURES & EDITORS:
 - emulator_get_state, project_get_structure
 - debugger_add_breakpoint, debugger_get_callstack
 
-**Example User Request:** "cierra el proyecto actual y abre test_mcp"
-❌ WRONG RESPONSE: "Para cerrar el proyecto, ve al menú File..."
+**Example User Request:** "cierra el proyecto actual y abre test_mcp" (English: "close the current project and open test_mcp")
+❌ WRONG RESPONSE: "Para cerrar el proyecto, ve al menú File..." (English: "To close the project, go to the File menu...")
 ✅ CORRECT RESPONSE: 
 \`\`\`json
 {"tool": "project_close", "arguments": {}}
@@ -127,7 +127,7 @@ VPy IDE FEATURES & EDITORS:
 \`\`\`json
 {"tool": "project_open", "arguments": {"path": "/path/to/test_mcp"}}
 \`\`\`
-Then say: "✅ Ejecutando herramientas..." 
+Then say: "✅ Running tools..." 
 
 **CRITICAL: You MUST use triple backticks around JSON:**
 - ✅ CORRECT: \`\`\`json\\n{"tool": "..."}\\n\`\`\`
@@ -137,11 +137,11 @@ Then say: "✅ Ejecutando herramientas..."
 **The tools will execute automatically if properly formatted.**
 
 **When to use MCP tools:**
-- User says "cierra", "abre", "crea", "lista", "muestra" → USE TOOLS
-- User asks "qué archivos hay?" → USE editor_list_documents
-- User says "muéstrame el código de X" → USE editor_read_document
-- User says "cambia la línea X" → USE editor_replace_range
-- User asks "qué proyecto está abierto?" → USE project_get_structure
+- User says "close", "open", "create", "list", "show" (or "cierra", "abre", "crea", "lista", "muestra") → USE TOOLS
+- User asks "what files are there?" / "qué archivos hay?" → USE editor_list_documents
+- User says "show me the code of X" / "muéstrame el código de X" → USE editor_read_document
+- User says "change line X" / "cambia la línea X" → USE editor_replace_range
+- User asks "which project is open?" / "qué proyecto está abierto?" → USE project_get_structure
 - **BE PROACTIVE - ACT, DON'T EXPLAIN**
 
 IMPORTANT CONTEXT ABOUT CURRENT VPy IMPLEMENTATION:
@@ -299,7 +299,7 @@ Maintain a technical but friendly tone and always provide working code examples 
   protected extractSuggestions(content: string): Array<{type: 'code' | 'fix' | 'optimization' | 'explanation', title: string, code?: string, description?: string}> {
     const suggestions: Array<{type: 'code' | 'fix' | 'optimization' | 'explanation', title: string, code?: string, description?: string}> = [];
     
-    // Buscar bloques de código
+    // Look for code blocks
     const codeBlocks = content.match(/```vpy\n([\s\S]*?)\n```/g);
     if (codeBlocks) {
       codeBlocks.forEach((block, index) => {

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { MemoryGridView } from './MemoryGridView';
+import { useDebugStore } from '../../state/debugStore';
 
 interface Region { name:string; start:number; end:number; }
 
@@ -41,73 +42,22 @@ function dumpRegion(bytes: Uint8Array, r: Region): string {
   return lines.join('\n');
 }
 
+const NO_VARIABLES: Record<string, VariableInfo> = {};
+
 export const MemoryPanel: React.FC = () => {
   const [text, setText] = useState<string>('');
   const [ts, setTs] = useState<number>(0);
   const [viewMode, setViewMode] = useState<'text' | 'grid'>('grid');
   const [memory, setMemory] = useState<Uint8Array>(new Uint8Array(65536));
-  const [variables, setVariables] = useState<Record<string, VariableInfo>>({});
   const [autoUpdate, setAutoUpdate] = useState<boolean>(false);
   const [targetAddress, setTargetAddress] = useState<number | null>(null);
   const [addressInput, setAddressInput] = useState<string>('');
 
-  // Load PDB file to get variable information
-  const loadPDB = useCallback(async () => {
-    try {
-      const Globals = (window as any).Globals;
-      console.log('[MemoryPanel] loadPDB - projectPath:', Globals?.projectPath);
-      if (!Globals?.projectPath) {
-        console.warn('[MemoryPanel] No project path available');
-        return;
-      }
-      
-      // Try to load main.pdb from project
-      const pdbPath = `${Globals.projectPath}/src/main.pdb`;
-      console.log('[MemoryPanel] Fetching PDB from:', pdbPath);
-      const response = await fetch(pdbPath);
-      console.log('[MemoryPanel] PDB response:', response.status, response.ok);
-      if (!response.ok) {
-        console.warn('[MemoryPanel] PDB fetch failed:', response.status);
-        return;
-      }
-      
-      const pdbData = await response.json();
-      console.log('[MemoryPanel] PDB data keys:', Object.keys(pdbData));
-      if (pdbData.variables) {
-        setVariables(pdbData.variables);
-        console.log('[MemoryPanel] ✓ Loaded', Object.keys(pdbData.variables).length, 'variables from PDB');
-      } else {
-        console.warn('[MemoryPanel] PDB has no variables field');
-      }
-    } catch (e) {
-      console.error('[MemoryPanel] Could not load PDB:', e);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadPDB();
-  }, [loadPDB]);
-
-  // Reload PDB when project changes or program is compiled/loaded
-  useEffect(() => {
-    const handleProgramLoaded = (event: Event) => {
-      console.log('[MemoryPanel] Program loaded event - reloading PDB');
-      
-      // Si el evento tiene pdbData, usarlo directamente
-      const customEvent = event as CustomEvent;
-      if (customEvent.detail?.pdbData?.variables) {
-        console.log('[MemoryPanel] Using PDB data from event');
-        setVariables(customEvent.detail.pdbData.variables);
-        console.log('[MemoryPanel] ✓ Loaded', Object.keys(customEvent.detail.pdbData.variables).length, 'variables from event');
-      } else {
-        // Fallback: intentar cargar desde disco
-        loadPDB();
-      }
-    };
-    
-    window.addEventListener('programLoaded', handleProgramLoaded);
-    return () => window.removeEventListener('programLoaded', handleProgramLoaded);
-  }, [loadPDB]);
+  // The program's variables: the .pdb of the last build (or of the project's last
+  // one, read when the project opens), kept in the debug store. Read from there, the
+  // panel has them however late it is opened.
+  const pdbVariables = useDebugStore((st) => st.pdbData?.variables);
+  const variables = (pdbVariables ?? NO_VARIABLES) as Record<string, VariableInfo>;
 
   const refresh = useCallback(() => {
     const vecx = (window as any).vecx;
@@ -283,7 +233,6 @@ export const MemoryPanel: React.FC = () => {
         >
           {autoUpdate ? '⏸ Pause' : '▶ Auto 200ms'}
         </button>
-        <button onClick={loadPDB}>Load PDB</button>        
         <button onClick={saveText}>Save TXT</button>
         <button onClick={saveBin}>Save BIN</button>
         

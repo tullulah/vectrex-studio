@@ -22,13 +22,16 @@ VLINE_DY_REMAINING   EQU $C880+$1F   ; DRAW_LINE remaining dy for segment 2 (16-
 VLINE_DX_REMAINING   EQU $C880+$21   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
 TEXT_SCALE_H         EQU $C880+$23   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
 TEXT_SCALE_W         EQU $C880+$24   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-VAR_BRIGHTNESS       EQU $C880+$25   ; User variable: BRIGHTNESS (2 bytes)
-VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_ARG0             EQU $C880+$25   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$27   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$29   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$2B   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$2D   ; Function argument 4 (16-bit) (2 bytes)
+VAR_ARG5             EQU $C880+$2F   ; Function argument 5 (16-bit) (2 bytes)
+VAR_ARG6             EQU $C880+$31   ; Function argument 6 (16-bit) (2 bytes)
+VAR_ARG7             EQU $C880+$33   ; Function argument 7 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$35   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_BRIGHTNESS       EQU $C880+$36   ; User variable: BRIGHTNESS (2 bytes)
 
 
 
@@ -42,26 +45,27 @@ CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 b
 VECTREX_PRINT_TEXT:
     ; VPy signature: PRINT_TEXT(x, y, string)
     ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
-    ; NOTE: Do NOT set VIA_cntl=$98 here - would release /ZERO prematurely
-    ;       causing integrators to drift toward joystick DAC value.
-    ;       Moveto_d_7F (called by Print_Str_d) handles VIA_cntl via $CE.
     LDA #$D0
-    TFR A,DP       ; Set Direct Page to $D0 for BIOS
-    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
-    JSR Reset0Ref   ; Reset beam to center before positioning text
-    LDU VAR_ARG2   ; string pointer
-    LDA >TEXT_SCALE_H ; height (signed byte, e.g. $F8=-8)
-    STA >$C82A      ; Vec_Text_Height: controls character Y scale
-    LDA >TEXT_SCALE_W ; width (unsigned byte, e.g. 72)
-    STA >$C82B      ; Vec_Text_Width: controls character X spacing
-    LDA >VAR_ARG1+1 ; Y coordinate
-    LDB >VAR_ARG0+1 ; X coordinate
+    TFR A,DP
+    JSR Intensity_5F
+    JSR Reset0Ref
+    LDU >VAR_ARG2
+    LDA >TEXT_SCALE_H
+    STA >$C82A          ; Vec_Text_Height
+    LDA >TEXT_SCALE_W
+    STA >$C82B          ; Vec_Text_Width
+    LDA >VAR_ARG1+1
+    LDB >VAR_ARG0+1
+    LDX >$C82C
+    PSHS X
     JSR Print_Str_d
+    PULS X
+    STX >$C82C
     LDA #$F8
-    STA >$C82A      ; Restore Vec_Text_Height to normal (-8)
+    STA >$C82A
     LDA #$48
-    STA >$C82B      ; Restore Vec_Text_Width to normal (72)
-    JSR $F1AF      ; DP_to_C8 - restore DP before return
+    STA >$C82B
+    JSR $F1AF
     RTS
 
 MOD16:

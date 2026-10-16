@@ -309,7 +309,7 @@ fn resolve_include_path(include_path: &str) -> Option<PathBuf> {
     let workspace_root = {
         let mut current = base_dir.clone();
         loop {
-            if current.join("Cargo.toml").exists() && current.join("core").exists() {
+            if current.join("Cargo.toml").exists() && current.join("buildtools").exists() {
                 break Some(current);
             }
             match current.parent() {
@@ -593,6 +593,7 @@ fn parse_and_emit_instruction(emitter: &mut BinaryEmitter, line: &str, equates: 
         "ORB" => emit_orb(emitter, operand, equates),
         "ORA" => emit_ora(emitter, operand, equates),
         "EORA" => emit_eora(emitter, operand, equates),
+        "EORB" => emit_eorb(emitter, operand, equates),
         
         // === REGISTER OPS ===
         "CLRA" => { emitter.clra(); Ok(()) },
@@ -864,8 +865,11 @@ fn expand_local_label(operand: &str, last_global: &str) -> String {
 }
 
 /// Helper: Checks whether an operand is a label (alphanumeric, underscore, or dot for locals)
+/// A leading digit means a numeric literal (`BRA 2`, `JSR 4096`), not a label.
 fn is_label(operand: &str) -> bool {
-    operand.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.')
+    !operand.is_empty()
+        && !operand.starts_with(|c: char| c.is_ascii_digit())
+        && operand.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.')
 }
 
 fn emit_lda(emitter: &mut BinaryEmitter, operand: &str, equates: &HashMap<String, u16>) -> Result<(), String> {
@@ -2276,6 +2280,42 @@ fn emit_eora(emitter: &mut BinaryEmitter, operand: &str, equates: &HashMap<Strin
     }
 }
 
+fn emit_eorb(emitter: &mut BinaryEmitter, operand: &str, equates: &HashMap<String, u16>) -> Result<(), String> {
+    if operand.starts_with('#') {
+        let val = parse_immediate(&operand[1..])?;
+        emitter.eorb_immediate(val);
+        Ok(())
+    } else if operand.contains(',') {
+        // INDEXED MODE
+        emitter.emit(0xE8); // EORB indexed opcode
+        let (postbyte, offset) = parse_indexed_mode(operand)?;
+        emitter.emit(postbyte);
+        if let Some(off) = offset {
+            emitter.emit(off as u8);
+        }
+        Ok(())
+    } else {
+        match evaluate_expression(operand, equates) {
+            Ok(addr) => {
+                emitter.emit(0xF8); // EORB extended opcode
+                emitter.emit_word(addr);
+                Ok(())
+            }
+            Err(msg) => {
+                if msg.starts_with("SYMBOL:") {
+                    let symbol = &msg[7..];
+                    emitter.add_symbol_ref(symbol, false, 2);
+                    emitter.emit(0xF8);
+                    emitter.emit_word(0);
+                    Ok(())
+                } else {
+                    Err(msg)
+                }
+            }
+        }
+    }
+}
+
 fn emit_tfr(emitter: &mut BinaryEmitter, operand: &str) -> Result<(), String> {
     use crate::m6809::binary_emitter::tfr_regs;
     
@@ -3111,6 +3151,27 @@ fn emit_ldu(emitter: &mut BinaryEmitter, operand: &str, equates: &HashMap<String
 }
 
 fn emit_stu(emitter: &mut BinaryEmitter, operand: &str, equates: &HashMap<String, u16>) -> Result<(), String> {
+    // Indexed addressing (,X  4,X  etc.) — used by the PLAY_NOTE runtime.
+    if operand.contains(',') {
+        let (postbyte, offset) = parse_indexed_mode(operand)?;
+        emitter.stu_indexed(postbyte);
+        if let Some(off) = offset {
+            emitter.emit(off as u8);
+        }
+        return Ok(());
+    }
+    if let Some(operand_without_prefix) = operand.strip_prefix('>') {
+        // Forced extended addressing (lwasm compatibility)
+        match resolve_address(operand_without_prefix, equates) {
+            Ok(addr) => emitter.stu_extended(addr),
+            Err(e) if e.starts_with("SYMBOL:") => {
+                let (symbol, addend) = parse_symbol_and_addend(&e)?;
+                emitter.emit_extended_symbol_ref(0xFF, &symbol, addend); // STU extended
+            }
+            Err(e) => return Err(e),
+        }
+        return Ok(());
+    }
     let upper = operand.to_uppercase();
     if let Some(&addr) = equates.get(&upper) {
         emitter.stu_extended(addr);
@@ -3304,3 +3365,7 @@ fn parse_push_pull_postbyte(operand: &str) -> Result<u8, String> {
     
     Ok(postbyte)
 }
+
+#[cfg(test)]
+#[path = "asm_to_binary_tests.rs"]
+mod tests;

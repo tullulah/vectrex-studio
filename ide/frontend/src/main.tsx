@@ -1,14 +1,22 @@
+import { installAudioGraphTracker } from './emulator/recorder/audioGraphTracker.js';
+// Patch AudioContext/AudioNode BEFORE any audio context is created so the video
+// recorder can find whichever context/node actually feeds the speakers.
+installAudioGraphTracker();
+
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import './i18n.js';
+// The UI's sans font travels with the IDE (see --vs-ui-font in global.css).
+import '@fontsource-variable/inter/index.css';
+import '@fontsource-variable/inter/wght-italic.css';
 import './global.css';
 import { useTranslation } from 'react-i18next';
 // (import eliminado duplicado) 
-import { initLsp, lspClient } from './lspClient.js';
+import { initLsp, lspClient, getLspClient } from './lspClient.js';
 import { DockWorkspace } from './components/DockWorkspace.js';
 import { restoreEditorState, ensureEditorPersistence } from './state/editorPersistence.js';
 import { deriveBinaryName } from './utils/index.js';
-import { toggleComponent, resetLayout, ensureComponent } from './state/dockBus.js';
+import { toggleComponent, resetLayout, ensureComponent, focusComponent } from './state/dockBus.js';
 import { useEditorStore } from './state/editorStore.js';
 import { useProjectStore, setEditorStoreRef } from './state/projectStore.js';
 import { useDebugStore } from './state/debugStore.js';
@@ -21,9 +29,22 @@ import { GitPanel } from './components/panels/GitPanel.js';
 import { FileTreePanel } from './components/panels/FileTreePanel.js';
 import { PlaygroundPanel } from './components/panels/PlaygroundPanel.js';
 import { SettingsPanel } from './components/panels/SettingsPanel.js';
+import { ProjectSettingsPanel } from './components/panels/ProjectSettingsPanel.js';
 import { EpromProgrammerDialog } from './components/dialogs/EpromProgrammerDialog.js';
-import { useSettings } from './state/settingsStore.js';
+import { useSettings, uvm2MakeFlags } from './state/settingsStore.js';
 import { useEmulatorSettings } from './state/emulatorSettings.js';
+import { useEmulatorStore } from './state/emulatorStore.js';
+import { openShellTerminal, openClaudeTerminal } from './components/panels/TerminalPanel.js';
+import { useTerminalStore, focusTerminal } from './services/terminalSessions.js';
+// Installs window.__mcpBridge__ — the renderer hooks the MCP tools call from main.
+import './services/mcpBridge.js';
+import { registerBuildRunner, registerCartridgeUploader, registerCartridgeDebugger } from './services/mcpBridge.js';
+import { installArmGdbTarget } from './debug/armGdbTarget';
+installArmGdbTarget(); // gdb's way into the ARM emulator (ide/electron/src/gdb/)
+import { installArmSourceDebug } from './debug/armSourceDebug';
+import { runOnCartridge, debugOnUvmc2, stopCartridgeDebug, cartridgeDebugActive, say as hwSay } from './debug/hwDebug';
+installArmSourceDebug(); // the editor's breakpoints and steps on rp2350/uvm2
+import type { BuildOutcome, BuildMode } from './services/buildOutcome.js';
 
 // Initialize store reference for cross-store access
 setEditorStoreRef(useEditorStore);
@@ -46,12 +67,21 @@ function App() {
   const updateContent = useEditorStore(s => s.updateContent);
   
   // Settings
-  const compilerBackend = useSettings(s => s.compiler);
   const buildTarget = useSettings(s => s.buildTarget);
   const pitrexCopyToSD = useSettings(s => s.pitrexCopyToSD);
   const pitrexSdPath = useSettings(s => s.pitrexSdPath);
   const uvm2CopyToSD = useSettings(s => s.uvm2CopyToSD);
   const uvm2SdPath = useSettings(s => s.uvm2SdPath);
+  /* Las perillas de build del UVM2, compuestas por la MISMA funcion que las enseña el
+   * panel: si se compusieran por separado, el panel diria una cosa y la build haria otra. */
+  const uvm2DualCore = useSettings(s => s.uvm2DualCore);
+  const uvm2PioStream = useSettings(s => s.uvm2PioStream);
+  const uvm2Hz = useSettings(s => s.uvm2Hz);
+  const uvm2ExtraFlags = useSettings(s => s.uvm2ExtraFlags);
+  const rp2350FlashMethod = useSettings(s => s.rp2350FlashMethod);
+  const rp2350FirmwareDir = useSettings(s => s.rp2350FirmwareDir);
+  const rp2350SdPath = useSettings(s => s.rp2350SdPath);
+  const rp2350BuildMode = useSettings(s => s.rp2350BuildMode);
 
   const initializedRef = useRef(false);
 
@@ -108,6 +138,27 @@ function App() {
       }
     };
     lspClient.onNotification(handler);
+  }, [setDiagnosticsBySource, documents]);
+
+  // Same, but for clangd (C/C++). Populates the Errors tab for C/C++ files so the
+  // panel reflects clangd diagnostics even when the editor isn't mounted.
+  useEffect(() => {
+    const handler = (method: string, params: any) => {
+      if (method !== 'textDocument/publishDiagnostics') return;
+      const { uri, diagnostics } = params || {};
+      if (!uri) return;
+      let decodedUri: string;
+      try { decodedUri = decodeURIComponent(uri); } catch { decodedUri = uri; }
+      const mapped = (diagnostics || []).map((d: any) => ({
+        message: d.message,
+        severity: (d.severity === 1 ? 'error' : d.severity === 2 ? 'warning' : 'info'),
+        line: d.range?.start?.line || 0,
+        column: d.range?.start?.character || 0
+      }));
+      try { setDiagnosticsBySource(decodedUri, 'clangd', mapped as any); }
+      catch (error) { logger.error('LSP', '[clangd] Error calling setDiagnosticsBySource:', error); }
+    };
+    getLspClient('clangd').onNotification(handler);
   }, [setDiagnosticsBySource, documents]);
 
   // Listen for compilation diagnostics from Electron backend (run://diagnostics)
@@ -306,10 +357,17 @@ function App() {
   const [defaultProjectLocation, setDefaultProjectLocation] = useState('');
   // New File dialog state (for .vec files that need a name)
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
-  const [newFileType, setNewFileType] = useState<'vec' | 'c' | 'vpy' | 'vmus' | 'vsfx' | 'vanim' | 'vinstr' | 'venemy'>('vec');
+  const [newFileType, setNewFileType] = useState<'vec' | 'c' | 'vpy' | 'vmus' | 'vsfx' | 'vanim' | 'vinstr' | 'venemy' | 'vmov' | 'vmesh' | 'vscene' | 'vskel' | 'vclip'>('vec');
   // EPROM Programmer dialog state
   const [showEpromDialog, setShowEpromDialog] = useState(false);
   const lastCompiledBinary = useEmulatorSettings(s => s.lastCompiledBinary);
+
+  // The project settings panel needs an open project: close it when the project closes.
+  useEffect(() => {
+    if (!vpyProject?.projectFile) {
+      setActiveSidebarPanel(prev => prev === 'projectSettings' ? 'files' : prev);
+    }
+  }, [vpyProject?.projectFile]);
 
   // Handle activity bar clicks — eprom opens a dialog instead of a panel
   const handleActivityBarClick = useCallback((item: ActivityBarItem) => {
@@ -328,6 +386,7 @@ function App() {
     { key: 'emulator', label: t('panel.emulator'), component: 'emulator' },
     { key: 'dual-emulator', label: 'Dual Test', component: 'dual-emulator' },
     { key: 'debug', label: t('panel.debug'), component: 'debug' },
+    { key: 'callstack', label: t('panel.callstack', 'Call Stack'), component: 'callstack' },
     { key: 'errors', label: t('panel.errors'), component: 'errors', badge: (errCount+warnCount>0) ? (errCount>0? `${errCount}E` : `${warnCount}W`) : undefined },
     { key: 'output', label: t('panel.output','Output'), component: 'output' },
     { key: 'build-output', label: 'Build Output', component: 'build-output' },
@@ -335,8 +394,10 @@ function App() {
     { key: 'memory', label: t('panel.memory','Memory'), component: 'memory' },
     { key: 'trace', label: t('panel.trace','Trace'), component: 'trace' },
     { key: 'psglog', label: 'PSG Log', component: 'psglog' },
+    { key: 'bioscalls', label: t('panel.bioscalls','BIOS Calls'), component: 'bioscalls' },
     { key: 'ai-assistant', label: t('panel.ai','PyPilot'), component: 'ai-assistant' },
-  ];
+    { key: 'terminal', label: `${t('panel.terminal','Terminal')} (Ctrl+\`)`, component: 'terminal' },
+  ].sort((a, b) => a.label.localeCompare(b.label)); // alphabetically, in the UI's language (as the native View menus)
 
   // Detect visibility via flexlayout model only
   const isComponentVisible = (comp: string) => {
@@ -372,11 +433,25 @@ function App() {
   const buildDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Función para manejar build y run
-  const handleBuild = useCallback(async (autoRun: boolean = false) => {
+  // Returns what happened (BuildOutcome) for callers that need it — the MCP bridge's
+  // runBuild. The keys and menu items ignore the value; behaviour does not depend on it.
+  const handleBuild = useCallback(async (autoRun: boolean = false, opts?: { forSd?: boolean; sim?: boolean; debug?: boolean; usbMonitor?: boolean }): Promise<BuildOutcome> => {
+    // "Build for SD": produce a RAM-linked rp2350 game for the cart's SD launcher.
+    // Triggered either explicitly (Build menu item) or by selecting the rp2350
+    // "SD card" build mode in Settings so a normal Build/Run makes the SD binary.
+    // Never auto-run (the RAM image isn't emulatable) and never flash.
+    // SWD debug builds the same RAM image (then runOnCartridge uploads and launches it).
+    const forSd = !!opts?.forSd || (buildTarget === 'rp2350' && (rp2350BuildMode === 'sd' || rp2350BuildMode === 'swd'));
+    // Built to be debugged on the cartridge: -Og, so the locals are there to see and change
+    const debugBuild = !!opts?.debug || (buildTarget === 'rp2350' && rp2350BuildMode === 'swd');
+    // "Upload to Cartridge" (UVMC2): the game carries the USB monitor, and goes over USB, not
+    // onto a card in the computer
+    const uvm2Flags = uvm2MakeFlags({ uvm2DualCore, uvm2PioStream, uvm2Hz, uvm2ExtraFlags }) + (opts?.usbMonitor ? ' UVM2_USB_MONITOR=1' : '');
+    const uvm2Deploy = uvm2CopyToSD && !opts?.usbMonitor;
     // CRITICAL: Prevent parallel compilations - return early if already compiling
     if (isCompilingRef.current) {
       logger.debug('Build', 'Build already in progress, skipping duplicate request');
-      return;
+      return { ok: false, project: null, target: null, launch: 'none', error: 'busy', detail: 'A build is already in progress' };
     }
     
     // Clear any pending debounced build to avoid stale calls
@@ -386,18 +461,24 @@ function App() {
     }
     
     isCompilingRef.current = true;
+    const notes: string[] = [];
     
     try {
       const electronAPI: any = (window as any).electronAPI;
       if (!electronAPI?.runCompile) {
         logger.warn('Build', 'electronAPI.runCompile not available');
-        return;
+        return { ok: false, project: null, target: null, launch: 'none', error: 'no_ipc', detail: 'electronAPI.runCompile not available' };
       }
 
-      // CRITICAL: Stop emulator BEFORE compilation to avoid hanging
+      // CRITICAL: Stop emulator BEFORE compilation to avoid hanging. ALL engines, not
+      // just the 6809: the others were left gated with their audio still rendering the
+      // last PSG state (a stuck note for the length of the build). The Emulator panel
+      // owns that function; with the panel closed only JSVecX can be running.
+      const engines = (window as any).emulatorEngines;
       const vecx = (window as any).vecx;
-      if (vecx?.stop) {
-        vecx.stop();
+      if (engines?.stopAll || vecx?.stop) {
+        if (engines?.stopAll) engines.stopAll('build started');
+        else vecx.stop();
         // Also update debug store state
         const useDebugStore = (window as any).useDebugStore;
         if (useDebugStore) {
@@ -414,7 +495,189 @@ function App() {
 
       const editorState = useEditorStore.getState();
       const projectState = useProjectStore.getState();
-    
+
+      // External C/C++ project: run its own build command (make, etc.) instead
+      // of the VPy compiler. Output streams over the same run://stdout/stderr
+      // channels the Build Output panel already subscribes to. Never load a
+      // .bin into the emulator or start the VPy debugger for these.
+      if (projectState.vpyProject?.isExternal) {
+        const manifestPath =
+          projectState.vpyProject.manifestPath || projectState.vpyProject.projectFile;
+        const projName = projectState.vpyProject.config.project.name;
+
+        // F5 = BUILD AND EMULATE THE SELECTED TARGET. Shift+F5 = build and simulate,
+        // and where the project has no simulator Shift does exactly what F5 does.
+        //
+        // The switch is by TARGET, not by project language. It used to be the other way
+        // round and split by language: a C project ran the WASM simulator on F5 whatever
+        // the target selector said, while a VPy project built the selected target — so
+        // the same two keys meant different things depending on which project was open,
+        // and the target selector was ignored half the time.
+        const quiereSim = !!opts?.sim;
+
+        // Shift: the WASM [simulate] module. Falls through to the target build below when
+        // the project has none, which is the "acts like F5" half of the rule.
+        // The WASM preview is ONE build that runs against the host SDK shim, so
+        // it is the same picture whichever hardware target is selected. Say so:
+        // otherwise F5 looks like it is ignoring the target selector, which is
+        // exactly how it reads when three targets produce identical output.
+        if (!forSd && quiereSim) {
+          logger.info('Build',
+            `Simulator preview (WASM) — the same build for every target; ` +
+            `press F5 to build and emulate ${buildTarget} instead.`);
+          if (buildTarget === 'm6809') {
+            logger.warn('Build',
+              `${projName} is a C/C++ project and has no 6809 build path, so ` +
+              `there is nothing to compile for m6809 — only this preview runs.`);
+            notes.push('C/C++ projects have no m6809 build path; only the simulator preview runs.');
+          }
+        }
+
+        if (!forSd && quiereSim) {
+          if (!electronAPI?.runBuildSim) {
+            logger.error('Build', 'electronAPI.runBuildSim not available');
+            return { ok: false, project: 'c', target: 'sim', launch: 'none', error: 'no_ipc', detail: 'electronAPI.runBuildSim not available' };
+          }
+          logger.info('Build', `Building simulator for external project: ${projName}`);
+          const simResult = await electronAPI.runBuildSim({ manifestPath });
+          if (simResult?.ok && simResult.modulePath) {
+            logger.info('Build', 'Simulator module ready:', simResult.modulePath);
+            // Hand the module to the emulator panel (PitrexSimView loads it).
+            // setSimModule bumps a nonce so a rebuilt same-path module reloads.
+            const romZip = simResult.romZipBase64
+              ? Uint8Array.from(atob(simResult.romZipBase64), c => c.charCodeAt(0))
+              : null;
+            useEmulatorStore.getState().setSimModule(simResult.modulePath, romZip);
+            return { ok: true, project: 'c', target: 'sim', artifact: simResult.modulePath, launch: 'sim', notes };
+          }
+          // No [simulate] target: fall through to the target build below, so Shift+F5
+          // behaves like F5 on a project with no simulator. Any other error surfaces.
+          if (simResult?.error && simResult.error !== 'no_simulate_target') {
+            logger.error('Build', 'Simulator build failed:', simResult.error, simResult.detail || '');
+            return { ok: false, project: 'c', target: 'sim', launch: 'none', error: simResult.error, detail: simResult.detail, notes };
+          }
+          logger.info('Build', `No [simulate] target for ${projName} — building for ${buildTarget}, same as F5.`);
+          notes.push(`No [simulate] section in the .cvproj: built ${buildTarget} instead, same as F5.`);
+        }
+        // THE TARGET BUILD — what F5 does, and what Shift+F5 falls back to.
+        //
+        // Runs the ACTUAL machine code of the selected target on its emulator: uvm2 in
+        // Uvm2System, rp2350 in Rp2350System (svc dispatcher / Thumb2 interpreter). That is
+        // the hardware oracle, and it is SLOW — triple emulation for a port, since JS
+        // interprets ARM, the ARM code runs the game's own CPU emulator, and that runs the
+        // game. Shift+F5 is the fast way out, not the other way round.
+        //
+        // pitrex has no emulator to preview in, so there this builds the kernel image (and
+        // copies it to the SD when "Copy to SD" is on) — the hardware action.
+        if (!forSd) {
+          if (!electronAPI?.runBuildExternal) {
+            logger.error('Build', 'electronAPI.runBuildExternal not available');
+            return { ok: false, project: 'c', target: buildTarget, launch: 'none', error: 'no_ipc', detail: 'electronAPI.runBuildExternal not available' };
+          }
+          useEmulatorStore.getState().setSimModule(null);
+          if (buildTarget === 'pitrex') {
+            logger.info('Build', `Building PiTrex kernel: ${projName}`);
+            const kr = await electronAPI.runBuildExternal({
+              manifestPath, target: 'pitrex',
+              deploy: pitrexCopyToSD, sdPath: pitrexSdPath,
+            });
+            if (kr?.error) logger.error('Build', 'PiTrex build failed:', kr.error, kr.detail || '');
+            else logger.info('Build', 'PiTrex kernel ready:', kr?.artifactPath || '');
+            notes.push('pitrex has no emulator in the IDE: the kernel image is built (and copied to the SD card when "Copy to SD" is on).');
+            return kr?.error
+              ? { ok: false, project: 'c', target: 'pitrex', launch: 'none', error: kr.error, detail: kr.detail, notes }
+              : { ok: true, project: 'c', target: 'pitrex', artifact: kr?.artifactPath ?? null, launch: 'none', notes };
+          }
+          // UVM2: construye el .um2 Y LO PREVISUALIZA en el panel, como rp2350.
+          //
+          // El comentario que habia aqui decia "nothing wires a C project's artifact into
+          // it", y era cierto: faltaban las DOS mitades. Esta —pedir `preview`— y la del
+          // proceso principal, cuya condicion solo miraba 'rp2350' y por tanto nunca
+          // emitia `emu://compiledBin` para un .um2. Con una sola de las dos seguia sin
+          // llegar nada, que es lo que costo una tarde: seis trazas instrumentadas aguas
+          // abajo y ninguna se imprimia, porque la cadena no empezaba.
+          //
+          // `deploy` sigue siendo la accion de hardware (copiar a la SD) y es
+          // independiente: se puede previsualizar sin tarjeta puesta.
+          if (buildTarget === 'uvm2') {
+            logger.info('Build', `Building UVM2 image: ${projName}`);
+            const ur = await electronAPI.runBuildExternal({
+              manifestPath, target: 'uvm2', preview: !opts?.usbMonitor,   // to the cartridge: not the emulator
+              deploy: uvm2Deploy, sdPath: uvm2SdPath,
+              uvm2Flags,
+            });
+            if (ur?.error) logger.error('Build', 'UVM2 build failed:', ur.error, ur.detail || '');
+            else logger.info('Build', 'UVM2 image ready:', ur?.artifactPath || '');
+            return ur?.error
+              ? { ok: false, project: 'c', target: 'uvm2', launch: 'none', error: ur.error, detail: ur.detail, notes }
+              : { ok: true, project: 'c', target: 'uvm2', artifact: ur?.artifactPath ?? null, launch: 'emulator', notes };
+          }
+          if (buildTarget === 'm6809') {
+            logger.error('Build',
+              `${projName} is a C/C++ project: there is no 6809 build path. ` +
+              `Pick rp2350, pitrex or uvm2, or press F5 for the simulator preview.`);
+            return {
+              ok: false, project: 'c', target: 'm6809', launch: 'none', error: 'no_m6809_for_c', notes,
+              detail: `${projName} is a C/C++ project: there is no 6809 build path. Select rp2350, uvm2 or pitrex, or use the simulator.`,
+            };
+          }
+          logger.info('Build', `Building + previewing RP2350 binary: ${projName}`);
+          const pv = await electronAPI.runBuildExternal({ manifestPath, target: 'rp2350', preview: true });
+          if (pv?.error) logger.error('Build', 'RP2350 preview build failed:', pv.error, pv.detail || '');
+          return pv?.error
+            ? { ok: false, project: 'c', target: 'rp2350', launch: 'none', error: pv.error, detail: pv.detail, notes }
+            : { ok: true, project: 'c', target: 'rp2350', artifact: pv?.artifactPath ?? null, launch: 'emulator', notes };
+        }
+
+
+        if (!electronAPI?.runBuildExternal) {
+          logger.error('Build', 'electronAPI.runBuildExternal not available');
+          return { ok: false, project: 'c', target: null, launch: 'none', error: 'no_ipc', detail: 'electronAPI.runBuildExternal not available' };
+        }
+        // Route to the compiler for the SELECTED target (previously a C project
+        // always built pitrex). "Build for SD" (forSd) is always an rp2350 game
+        // (matches the VPy path); otherwise follow the selected target. rp2350 →
+        // the RAM-linked SD game + copy to the card; else → the pitrex kernel.
+        // UVM2 ENTRA AQUI, y antes no podia: el tipo era 'pitrex' | 'rp2350', asi que con
+        // uvm2 seleccionado esta accion construia otra cosa. Con dkong el efecto era
+        // silencioso y feo — forzaba rp2350, su .cvproj no tenia [targets.rp2350], se caia
+        // al [build] por defecto (que es `make sim`) y **copiaba game.js a la SD**.
+        //
+        // "Build for SD" sigue implicando rp2350 cuando el target seleccionado no es de
+        // hardware, que es lo que hace el camino de VPy; lo que cambia es que un target de
+        // hardware EXPLICITO manda sobre esa suposicion.
+        const extTarget: 'pitrex' | 'rp2350' | 'uvm2' =
+          buildTarget === 'uvm2' ? 'uvm2'
+          : (forSd || buildTarget === 'rp2350') ? 'rp2350'
+          : 'pitrex';
+        const extSdPath = extTarget === 'rp2350' ? rp2350SdPath
+                        : extTarget === 'uvm2'   ? uvm2SdPath
+                        : pitrexSdPath;
+        const extDeploy = extTarget === 'rp2350' ? (rp2350BuildMode === 'sd' && !!rp2350SdPath)
+                        : extTarget === 'uvm2'   ? uvm2CopyToSD
+                        : pitrexCopyToSD;
+        logger.info('Build', `Building external project (${extTarget}): ${projName}`);
+        const extResult = await electronAPI.runBuildExternal({
+          manifestPath,
+          target: extTarget,
+          deploy: extDeploy,
+          sdPath: extSdPath,
+          // Y previsualizar, que para rp2350 el panel es la UNICA forma de ver
+          // correr esto: un proyecto C externo sin seccion [simulate] no tiene
+          // WASM, asi que sin esto "Build for SD" con la tarjeta desconectada no
+          // deja nada que probar. Es el mismo binario que se acaba de desplegar.
+          // (not in the SWD debug mode: the game runs on the cartridge, not in the panel too)
+          preview: extTarget === 'rp2350' && !(buildTarget === 'rp2350' && rp2350BuildMode === 'swd'),
+          debugBuild: extTarget === 'rp2350' && debugBuild,
+        });
+        if (extResult?.error) {
+          logger.error('Build', 'External build failed:', extResult.error, extResult.detail || '');
+          return { ok: false, project: 'c', target: extTarget, launch: 'none', error: extResult.error, detail: extResult.detail, notes };
+        }
+        logger.info('Build', 'External build complete:', extResult?.artifactPath || '');
+        return { ok: true, project: 'c', target: extTarget, artifact: extResult?.artifactPath ?? null, launch: extTarget === 'rp2350' ? 'emulator' : 'none', notes };
+      }
+
     // If we have a project, use project entry point
     let activeDoc;
     let buildFromProject = false;
@@ -444,14 +707,16 @@ function App() {
     
     if (!activeDoc) {
       logger.warn('Build', 'No active document to build');
-      return;
+      return { ok: false, project: null, target: null, launch: 'none', error: 'nothing_to_build', detail: 'No project is open and no .vpy document is active' };
     }
+    const kind: BuildOutcome['project'] = projectState.vpyProject ? 'vpy' : 'file';
+    const vpyTarget: BuildOutcome['target'] = forSd ? 'rp2350' : buildTarget;
 
     const filePath = activeDoc.diskPath || activeDoc.uri;
     
     if (!filePath.endsWith('.vpy') && !buildFromProject) {
       logger.warn('Build', 'Active document is not a .vpy file:', filePath);
-      return;
+      return { ok: false, project: kind, target: vpyTarget, launch: 'none', error: 'not_vpy', detail: `The active document is not a .vpy file: ${filePath}` };
     }
 
     const fileName = filePath.split('/').pop() || filePath;
@@ -462,20 +727,36 @@ function App() {
       
       if (filePath.startsWith('file://')) {
         logger.error('Build', 'Document has no diskPath, cannot compile:', activeDoc.uri);
-        return;
+        return { ok: false, project: kind, target: vpyTarget, launch: 'none', error: 'no_disk_path', detail: `The document has no file on disk: ${activeDoc.uri}` };
       }
       
       logger.debug('Build', 'Using file path:', filePath);
       
+      // A VPy project declares no simulator, so Shift+F5 does what F5 does — the second
+      // half of the rule. Said out loud: a key that silently does something else is how
+      // the two paths drifted apart in the first place.
+      if (opts?.sim) {
+        logger.info('Build',
+          `VPy projects have no separate simulator — building and emulating ${buildTarget}, same as F5.`);
+        notes.push(`VPy projects have no separate simulator: built and emulated ${buildTarget}, same as F5.`);
+      }
+
       const args: any = {
         path: filePath,
-        autoStart: autoRun,
-        compilerBackend, // from useSettings
-        target: buildTarget, // from useSettings
+        autoStart: forSd ? false : autoRun,
+        target: forSd ? 'rp2350' : buildTarget, // SD games are always rp2350
         pitrexCopyToSD,
         pitrexSdPath,
-        uvm2CopyToSD,
+        uvm2CopyToSD: uvm2Deploy,
         uvm2SdPath,
+        uvm2Flags,
+        rp2350FlashMethod: forSd ? 'none' : rp2350FlashMethod,
+        rp2350FirmwareDir,
+        rp2350Ram: forSd,
+        // SWD debug goes to the cartridge's memory, not to the card
+        rp2350SdPath: rp2350BuildMode === 'swd' && !opts?.forSd ? '' : rp2350SdPath,
+        debugBuild,
+        noPreview: !!opts?.usbMonitor,   // to the cartridge (Upload / Debug on Cartridge): not the emulator
       };
 
       // If building from project, include output path
@@ -501,7 +782,7 @@ function App() {
       // so that the compiler reads the latest BPM/vectors/SFX from disk.
       const allDirty = editorState.documents.filter(
         d => d.dirty && d.diskPath && d.uri !== (activeDoc.uri)
-          && /\.(vmus|vec|vsfx|vplay|vpy)$/.test(d.diskPath)
+          && /\.(vmus|vec|vsfx|vplay|vpy|vmesh|vscene|vskel|vclip)$/.test(d.diskPath)
       );
       for (const dirtyDoc of allDirty) {
         try {
@@ -533,7 +814,7 @@ function App() {
       if (result.error) {
         logger.error('Build', 'Compilation failed:', result.error, result.detail || '');
         // Don't proceed to emulator - binary deleted and compilation failed
-        return;
+        return { ok: false, project: kind, target: vpyTarget, launch: 'none', error: result.error, detail: result.detail, stderr: result.stderr, notes };
       }
 
       if (result.conflict) {
@@ -544,17 +825,18 @@ function App() {
           const forceResult = await electronAPI.runCompile(forceArgs);
           if (forceResult.error) {
             logger.error('Build', 'Force compilation failed:', forceResult.error);
-            return;
+            return { ok: false, project: kind, target: vpyTarget, launch: 'none', error: forceResult.error, detail: forceResult.detail, stderr: forceResult.stderr, notes };
           }
           useEditorStore.getState().markSaved(activeDoc.uri, forceResult.savedMTime);
           logger.info('Build', 'Force compilation successful:', forceResult.binPath, `(${forceResult.size} bytes)`);
           if (autoRun) {
             logger.debug('Build', 'Auto-run enabled - emulator should load the binary automatically');
           }
+          return { ok: true, project: kind, target: vpyTarget, artifact: forceResult.binPath, size: forceResult.size, launch: forSd ? 'none' : 'emulator', notes };
         } catch (forceError) {
           logger.error('Build', 'Failed to force compile during conflict:', forceError);
+          return { ok: false, project: kind, target: vpyTarget, launch: 'none', error: 'exception', detail: String((forceError as any)?.message || forceError), notes };
         }
-        return;
       }
 
       logger.info('Build', 'Compilation successful:', result.binPath, `(${result.size} bytes)`);
@@ -580,14 +862,66 @@ function App() {
       if (autoRun) {
         logger.debug('Build', 'Auto-run enabled - emulator should load the binary automatically');
       }
+      if (forSd) notes.push('SD build: RAM-linked rp2350 game for the cartridge launcher; it is not loaded into the emulator.');
+      return { ok: true, project: kind, target: vpyTarget, artifact: result.binPath, size: result.size, launch: forSd ? 'none' : 'emulator', notes };
     } catch (error) {
       logger.error('Build', 'Build process failed:', error);
+      return { ok: false, project: null, target: null, launch: 'none', error: 'exception', detail: String((error as any)?.message || error), notes };
     } finally {
       // CRITICAL: Clear compilation flag when done
       isCompilingRef.current = false;
       logger.debug('Build', 'Build process completed, flag cleared');
     }
-  }, [documents, compilerBackend, buildTarget, pitrexCopyToSD, pitrexSdPath, uvm2CopyToSD, uvm2SdPath]);
+  }, [documents, buildTarget, pitrexCopyToSD, pitrexSdPath, uvm2CopyToSD, uvm2SdPath, rp2350FlashMethod, rp2350FirmwareDir, rp2350SdPath, rp2350BuildMode]);
+
+  /**
+   * A build, and in the rp2350 "SWD debug" build mode its image uploaded to the cartridge,
+   * launched and debugged there (debug/hwDebug.ts): the editor's breakpoints stop the game on
+   * the console. What F7, F5 and the MCP's ide_run do.
+   */
+  const buildMaybeOnCartridge = useCallback(async (autoRun: boolean): Promise<BuildOutcome> => {
+    const out = await handleBuild(autoRun);
+    if (!(buildTarget === 'rp2350' && rp2350BuildMode === 'swd') || !out.ok || !out.artifact) return out;
+    await runOnCartridge(out.artifact);
+    return { ...out, launch: 'none', notes: [...(out.notes ?? []), 'SWD debug: uploaded to the cartridge and launched there.'] };
+  }, [handleBuild, buildTarget, rp2350BuildMode]);
+
+  /**
+   * Build with the USB monitor and upload the .um2 to the UVMC2's card (electron
+   * hwdebug/uvmc2Serial.ts):
+   * through the monitor of a game running there, or through the SD bridge from the multicart's
+   * menu; then the cartridge is reset to its menu. Build > Upload to Cartridge, and the MCP's
+   * cartridge_upload, which also gets the progress lines.
+   */
+  const uploadUvm2 = useCallback(async (opts?: { debug?: boolean }): Promise<{ ok: boolean; message: string; log: string[]; um2?: string }> => {
+    const log: string[] = [];
+    const say = (t: string, err = false) => { log.push(t); hwSay(t, err); };
+    if (buildTarget !== 'uvm2') return { ok: false, message: 'Upload to Cartridge (UVMC2): set the build target to UVM2 first (Settings).', log };
+    const out = await handleBuild(false, { usbMonitor: true, debug: !!opts?.debug });
+    if (!out.ok || !out.artifact) return { ok: false, message: `build failed: ${out.detail ?? out.error ?? 'unknown'}`, log };
+    const um2 = out.artifact.endsWith('.um2') ? out.artifact : out.artifact.replace(/\.bin$/i, '.um2');
+    const api = (window as any).uvmc2;
+    if (!api?.upload) return { ok: false, message: 'this IDE build cannot upload to the UVMC2', log };
+    await stopCartridgeDebug();   // the port is the upload's now
+    const res = await api.upload(um2, (t: string) => say(t));
+    return { ...res, log, um2 };
+  }, [buildTarget, handleBuild]);
+
+  useEffect(() => registerCartridgeUploader(uploadUvm2), [uploadUvm2]);
+
+  /** Debug on Cartridge, UVMC2: Upload to Cartridge, then the session on the game's monitor
+   *  (debug/hwDebug.ts). The menu command and the MCP's cartridge_debug. */
+  const debugUvm2 = useCallback(async (): Promise<{ ok: boolean; message: string; log: string[] }> => {
+    const up = await uploadUvm2({ debug: true });   // -Og: lines and locals as written
+    hwSay(up.message, !up.ok);
+    if (!up.ok || !up.um2) return up;
+    const err = await debugOnUvmc2(up.um2);
+    return err
+      ? { ok: false, message: err, log: up.log }
+      : { ok: true, message: 'debugging on the cartridge: the game runs, the editor\'s breakpoints stop it there', log: up.log };
+  }, [uploadUvm2]);
+
+  useEffect(() => registerCartridgeDebugger(debugUvm2), [debugUvm2]);
 
   const commandExec = useCallback(async (id: string, payload?: any) => {
     const apiFiles: any = (window as any).files;
@@ -638,6 +972,11 @@ def loop():
         setNewFileType('vmus');
         setShowNewFileDialog(true);
         break; }
+      case 'file.new.vmov': {
+        // Open dialog to ask for filename for a vector movie
+        setNewFileType('vmov');
+        setShowNewFileDialog(true);
+        break; }
       case 'file.new.vsfx': {
         // Open dialog to ask for filename for SFX
         setNewFileType('vsfx');
@@ -653,6 +992,22 @@ def loop():
         break; }
       case 'file.new.venemy': {
         setNewFileType('venemy');
+        setShowNewFileDialog(true);
+        break; }
+      case 'file.new.vmesh': {
+        setNewFileType('vmesh');
+        setShowNewFileDialog(true);
+        break; }
+      case 'file.new.vscene': {
+        setNewFileType('vscene');
+        setShowNewFileDialog(true);
+        break; }
+      case 'file.new.vskel': {
+        setNewFileType('vskel');
+        setShowNewFileDialog(true);
+        break; }
+      case 'file.new.vclip': {
+        setNewFileType('vclip');
         setShowNewFileDialog(true);
         break; }
       case 'file.open': {
@@ -676,7 +1031,9 @@ def loop():
             logger.debug('File', 'Opening file with path:', path, 'normPath:', normPath, 'uri:', uri);
             openDocument({ uri, language: 'vpy', content, dirty: false, diagnostics: [], diskPath: path, mtime, lastSavedContent: content });
             // If already initialized, notify didOpen immediately; else init effect will do first doc.
-            try { if ((window as any)._lspInit) { lspClient.didOpen(uri, 'vpy', content); } } catch {}
+            // Only VPy files go to the VPy server here; C/C++ files are opened against
+            // clangd by MonacoEditorWrapper when their model binds.
+            try { if ((window as any)._lspInit && uri.toLowerCase().endsWith('.vpy')) { lspClient.didOpen(uri, 'vpy', content); } } catch {}
         });
         break; }
       case 'file.save': {
@@ -739,18 +1096,82 @@ def loop():
           clearTimeout(buildDebounceTimerRef.current);
         }
         buildDebounceTimerRef.current = setTimeout(() => {
-          handleBuild(false); // Solo compilar
+          void buildMaybeOnCartridge(false); // Solo compilar (o, en modo SWD debug, a la consola)
+          buildDebounceTimerRef.current = null;
+        }, 0);
+        break;
+      case 'build.buildSim':
+        // Shift+F7: build the simulator without running it. Same fall-back as Shift+F5 —
+        // a project with no simulator gets the target build instead.
+        if (buildDebounceTimerRef.current) clearTimeout(buildDebounceTimerRef.current);
+        buildDebounceTimerRef.current = setTimeout(() => {
+          handleBuild(false, { sim: true });
           buildDebounceTimerRef.current = null;
         }, 0);
         break;
       case 'build.run':
+        // F5 while paused at a breakpoint or after a step continues the program (to the
+        // next breakpoint): building would throw the session away. 'paused' is only a
+        // debug stop; a program merely running is 'running'.
+        // A game being debugged on the cartridge: F5 is Continue, never a rebuild (that would
+        // reset the console under the session).
+        if (useDebugStore.getState().state === 'paused' || cartridgeDebugActive()) {
+          commandExec('debug.continue');
+          break;
+        }
         // Debounce build requests - ignore if one already triggered in last 100ms
         if (buildDebounceTimerRef.current) {
           logger.debug('Build', 'Build&Run request debounced (already queued)');
           clearTimeout(buildDebounceTimerRef.current);
         }
         buildDebounceTimerRef.current = setTimeout(() => {
-          handleBuild(true); // Compilar y ejecutar
+          void buildMaybeOnCartridge(true); // Compilar y ejecutar
+          buildDebounceTimerRef.current = null;
+        }, 0);
+        break;
+      case 'debug.cartridge': {
+        // UVMC2: built with the monitor, uploaded and started (as Upload to Cartridge), then
+        // debugged through the monitor over USB (debug/hwDebug.ts, MonitorTransport)
+        if (buildTarget === 'uvm2') { await debugUvm2(); break; }
+        // Debug on the RP2350 cartridge over SWD (debug/hwDebug.ts): the SD build, uploaded
+        // to the cartridge's PSRAM and launched from its menu, debugged on core 1.
+        const out = await handleBuild(false, { forSd: true, debug: true });
+        if (!out.ok || !out.artifact) { hwSay(`build failed: ${out.detail ?? out.error ?? 'unknown'}`, true); break; }
+        await runOnCartridge(out.artifact);
+        break; }
+      case 'build.uploadUvm2': {
+        const res = await uploadUvm2();
+        hwSay(res.message, !res.ok);
+        break; }
+      case 'debug.cartridgeStop':
+        await stopCartridgeDebug();
+        break;
+      case 'build.sd':
+        // Build a RAM-linked rp2350 game for the cart's SD launcher.
+        if (buildDebounceTimerRef.current) {
+          logger.debug('Build', 'Build-for-SD request debounced (already queued)');
+          clearTimeout(buildDebounceTimerRef.current);
+        }
+        buildDebounceTimerRef.current = setTimeout(() => {
+          handleBuild(false, { forSd: true });
+          buildDebounceTimerRef.current = null;
+        }, 0);
+        break;
+      case 'build.simulate':
+        // Shift+F5 while paused ends the debug session (as in VS Code)
+        if (useDebugStore.getState().state === 'paused') {
+          commandExec('debug.stop');
+          break;
+        }
+        // Shift+F5: build & run the fast WASM simulator. Plain F5 builds the selected
+        // target and runs it on the faithful emulator; a project with no simulator gets
+        // the same thing from both keys.
+        if (buildDebounceTimerRef.current) {
+          logger.debug('Build', 'RP2350-emu request debounced (already queued)');
+          clearTimeout(buildDebounceTimerRef.current);
+        }
+        buildDebounceTimerRef.current = setTimeout(() => {
+          handleBuild(true, { sim: true });
           buildDebounceTimerRef.current = null;
         }, 0);
         break;
@@ -799,12 +1220,13 @@ def loop():
           const args: any = {
             path: filePath,
             autoStart: false,  // No auto-run, queremos control manual
-            compilerBackend, // from useSettings
             target: buildTarget, // from useSettings
             pitrexCopyToSD,
             pitrexSdPath,
             uvm2CopyToSD,
             uvm2SdPath,
+            rp2350FlashMethod,
+            rp2350FirmwareDir,
           };
 
           // Si el documento está sucio, enviarlo para que se guarde antes de compilar
@@ -1026,30 +1448,45 @@ def loop():
       }
       
       case 'project.new': {
-        // Set default location - try from current project, recent projects, or empty
-        const projectState = useProjectStore.getState();
+        // Default location: the default workspace, ~/VectrexStudio/projects (the main
+        // process resolves the home folder and creates it). The dialog lets the user change it.
         let defaultLocation = '';
-        
-        // First try: current open project's parent directory
-        if (projectState.vpyProject?.rootDir) {
-          const parts = projectState.vpyProject.rootDir.replace(/\\/g, '/').split('/');
-          parts.pop(); // Get parent directory
-          defaultLocation = parts.join('/');
-        }
-        // Second try: parent directory of most recent project
-        else if (projectState.recentWorkspaces.length > 0) {
-          const lastProject = projectState.recentWorkspaces.find(w => w.isProject);
-          if (lastProject) {
-            const parts = lastProject.path.replace(/\\/g, '/').split('/');
-            parts.pop(); // Remove project file name
-            parts.pop(); // Get parent of project directory
-            defaultLocation = parts.join('/');
-          }
-        }
-        
+        try {
+          defaultLocation = (await (window as any).project?.defaultLocation?.()) || '';
+        } catch { /* browser-only dev: leave it empty */ }
         setDefaultProjectLocation(defaultLocation);
         // Show the new project dialog
         setShowNewProjectDialog(true);
+        break;
+      }
+      case 'project.importC': {
+        // Import & scaffold an external C/C++ project (.cvproj manifest), then
+        // load it as the active project via the same path used for .vpyproj.
+        const electronAPI: any = (window as any).electronAPI;
+        if (!electronAPI?.importCProject) {
+          logger.error('Project', 'electronAPI.importCProject not available');
+          break;
+        }
+        try {
+          const result = await electronAPI.importCProject();
+          if (result?.canceled) break;
+          if (result?.error) {
+            logger.error('Project', 'Import C/C++ project failed:', result.error);
+            break;
+          }
+          if (result?.ok && result.manifestPath) {
+            // openVpyProject detects config.project.type === 'c-external',
+            // sets isExternal on the store and adds it to recents.
+            const success = await openVpyProject(result.manifestPath);
+            if (success) {
+              logger.info('Project', 'Imported external C/C++ project:', result.manifestPath);
+            } else {
+              logger.error('Project', 'Failed to load imported manifest:', result.manifestPath);
+            }
+          }
+        } catch (e: any) {
+          logger.error('Project', 'Import C/C++ project error:', e?.message || e);
+        }
         break;
       }
       case 'project.open': {
@@ -1238,6 +1675,31 @@ def loop():
         resetLayout();
         break;
       }
+      // Integrated terminal. Tabs are created BEFORE the panel is shown so the panel's
+      // "open one if empty" logic doesn't add a second tab.
+      case 'terminal.toggle': {
+        const focusedInTerminal = !!(document.activeElement as HTMLElement | null)?.closest?.('.vpy-terminal-host');
+        if (!isComponentVisible('terminal')) {
+          ensureComponent('terminal');
+        } else if (focusedInTerminal) {
+          toggleComponent('terminal');
+        } else {
+          focusComponent('terminal');
+          const key = useTerminalStore.getState().activeKey;
+          if (key) setTimeout(() => focusTerminal(key), 20);
+        }
+        break;
+      }
+      case 'terminal.new': {
+        openShellTerminal(`${t('terminal.defaultTitle', 'Terminal')} ${useTerminalStore.getState().tabs.length + 1}`);
+        ensureComponent('terminal');
+        break;
+      }
+      case 'terminal.claude': {
+        openClaudeTerminal(t as any);
+        ensureComponent('terminal');
+        break;
+      }
       case 'project.openPath': {
         // Same shape as openRecent — path arrives in payload.
         const projectPath = payload || '';
@@ -1255,7 +1717,7 @@ def loop():
               const sel = n.getSelectedNode?.();
               if (sel) {
                 const c = typeof sel.getComponent === 'function' ? sel.getComponent() : sel?._attributes?.component;
-                if (['files','emulator','debug','errors','memory','trace','bioscalls','ai-assistant','build-output','compiler-output','playground','psglog'].includes(c)) activeComp = c;
+                if (['files','emulator','debug','errors','memory','trace','bioscalls','callstack','ai-assistant','build-output','compiler-output','playground','psglog','terminal'].includes(c)) activeComp = c;
               }
             }
           });
@@ -1274,7 +1736,7 @@ def loop():
               const sel = n.getSelectedNode?.();
               if (sel) {
                 const c = typeof sel.getComponent === 'function' ? sel.getComponent() : sel?._attributes?.component;
-                if (['files','emulator','debug','errors','memory','trace','bioscalls','ai-assistant','build-output','compiler-output','playground','psglog'].includes(c)) activeComp = c;
+                if (['files','emulator','debug','errors','memory','trace','bioscalls','callstack','ai-assistant','build-output','compiler-output','playground','psglog','terminal'].includes(c)) activeComp = c;
               }
             }
           });
@@ -1300,7 +1762,7 @@ def loop():
         // DockComponent yet, so silently ignore until it is implemented.
         if (id.startsWith('view.toggle.')) {
           const comp = id.slice('view.toggle.'.length);
-          const valid = ['emulator','debug','errors','output','memory','trace','psglog','ai-assistant','build-output','compiler-output','files','playground','bioscalls'];
+          const valid = ['emulator','debug','errors','output','memory','trace','psglog','ai-assistant','build-output','compiler-output','files','playground','bioscalls','callstack','terminal'];
           if (valid.includes(comp)) {
             toggleComponent(comp as any);
           } else if (comp === 'dual-emulator') {
@@ -1313,11 +1775,27 @@ def loop():
         logger.warn('App', 'unknown command:', id);
       }
     }
-  }, [documents, openDocument, activeBinName, openVpyProject, closeVpyProject, handleBuild]);
+  }, [documents, openDocument, activeBinName, openVpyProject, closeVpyProject, handleBuild, buildMaybeOnCartridge, uploadUvm2, debugUvm2, buildTarget]);
 
   // Keyboard shortcuts mapping (similar to VS conventions)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // Ctrl+` toggles the terminal, Ctrl+Shift+` opens a new one (VS Code bindings,
+      // Ctrl on every platform). e.code so it works on non-US layouts too.
+      if (e.ctrlKey && !e.metaKey && !e.altKey && e.code === 'Backquote') {
+        e.preventDefault();
+        commandExec(e.shiftKey ? 'terminal.new' : 'terminal.toggle');
+        return;
+      }
+      // Inside the terminal the shell owns the keyboard (Ctrl+D, Ctrl+L, Ctrl+K... are
+      // shell/TUI keys there). Only Cmd shortcuts on macOS (except the clipboard ones
+      // xterm handles) and F5/F7 (build/run, as VS Code does) still reach the IDE.
+      if ((e.target as HTMLElement | null)?.closest?.('.vpy-terminal-host')) {
+        const mac = (window.terminal?.platform || navigator.platform.toLowerCase()).startsWith('darwin') || navigator.platform.toLowerCase().startsWith('mac');
+        const cmdShortcut = mac && e.metaKey && !['c','v','a','k'].includes(e.key.toLowerCase());
+        const buildKey = (e.key === 'F5' || e.key === 'F7') && !e.ctrlKey && !e.metaKey && !e.altKey;
+        if (!cmdShortcut && !buildKey) return;
+      }
       const ctrl = e.ctrlKey || e.metaKey; // meta for mac future
       // File
       if (ctrl && e.key.toLowerCase() === 's' && !e.shiftKey) { e.preventDefault(); commandExec('file.save'); }
@@ -1326,17 +1804,18 @@ def loop():
       else if (ctrl && e.key.toLowerCase() === 'o' && e.shiftKey) { e.preventDefault(); commandExec('project.open'); }
       else if (ctrl && e.key.toLowerCase() === 'n') { e.preventDefault(); commandExec('file.new.vpy'); }
       // Build / Run (Cmd/Ctrl+F7 and Cmd/Ctrl+F5 for macOS compatibility)
-      else if (ctrl && e.key === 'F7') { e.preventDefault(); commandExec('build.build'); }
-      else if (ctrl && e.key === 'F5' && !e.shiftKey) { 
-        e.preventDefault(); 
-        // Smart Cmd/Ctrl+F5: If in debug session, start debugging. Otherwise, build and run.
-        const debugState = useDebugStore.getState().state;
-        if (debugState !== 'stopped') {
-          commandExec('debug.start');
-        } else {
-          commandExec('build.run');
-        }
-      }
+      // BARE F5 AND F7, and Shift for the simulator half. Ctrl/Cmd is accepted as an
+      // alias so the old habit keeps working, but it must not be REQUIRED: plain F5 was
+      // not bound at all, so it fell through to the host's own F5 — RELOAD THE APP. The
+      // reload boots JSVecx with no cartridge, which runs the BIOS, which is Minestorm.
+      // That is the whole of "only F7 compiles, F5 gives me Minestorm": F5 was never
+      // reaching this handler. preventDefault below is what stops the reload.
+      else if (e.key === 'F7' && !e.shiftKey) { e.preventDefault(); commandExec('build.build'); }
+      else if (e.key === 'F7' && e.shiftKey) { e.preventDefault(); commandExec('build.buildSim'); }
+      // F5 / Shift+F5: the same commands the Electron main process sends for these keys
+      // (it takes them before the page does): build.run / build.simulate, which continue
+      // or end a paused debug session instead of building.
+      else if (e.key === 'F5' && !e.shiftKey) { e.preventDefault(); commandExec('build.run'); }
       // Debug shortcuts
       else if (ctrl && e.key.toLowerCase() === 'd' && !e.shiftKey) { e.preventDefault(); commandExec('debug.start'); }
       else if (e.key === 'F9') { e.preventDefault(); commandExec('debug.toggleBreakpoint'); }
@@ -1344,7 +1823,7 @@ def loop():
       else if (e.key === 'F11' && !e.shiftKey) { e.preventDefault(); commandExec('debug.stepInto'); }
       else if (e.key === 'F11' && e.shiftKey) { e.preventDefault(); commandExec('debug.stepOut'); }
       else if (e.key === 'F12') { e.preventDefault(); commandExec('debug.continue'); }
-      else if (e.key === 'F5' && e.shiftKey) { e.preventDefault(); commandExec('debug.stop'); }
+      else if (e.key === 'F5' && e.shiftKey) { e.preventDefault(); commandExec('build.simulate'); }
       // Git
       else if (ctrl && e.key.toLowerCase() === 'g' && !e.shiftKey) { e.preventDefault(); commandExec('git.checkout'); } // Ctrl+G = Git checkout branch
       else if (ctrl && e.key.toLowerCase() === 'g' && e.shiftKey) { e.preventDefault(); commandExec('git.history'); } // Ctrl+Shift+G = Git history
@@ -1357,6 +1836,28 @@ def loop():
     window.addEventListener('keydown', handler, { capture: true });
     return () => window.removeEventListener('keydown', handler, { capture: true } as any);
   }, [commandExec]);
+
+  // F5 on an external C/C++ project routes here (via EmulatorPanel) → Build & Run
+  // the WASM simulator instead of continuing the 6809 emulator.
+  useEffect(() => {
+    const onMsg = (e: MessageEvent) => {
+      if (e.data?.type === 'vpy-run-external') void buildMaybeOnCartridge(true);
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [buildMaybeOnCartridge]);
+
+  // The MCP bridge's runBuild (tool ide_run) runs EXACTLY what the keys run, but awaits
+  // the outcome: build = F7 (build.build), run = F5 (build.run), simulate = Shift+F5
+  // (build.simulate), build_simulator = Shift+F7 (build.buildSim).
+  useEffect(() => registerBuildRunner((mode: BuildMode) => {
+    switch (mode) {
+      case 'build': return buildMaybeOnCartridge(false);
+      case 'run': return buildMaybeOnCartridge(true);
+      case 'simulate': return handleBuild(true, { sim: true });
+      case 'build_simulator': return handleBuild(false, { sim: true });
+    }
+  }), [handleBuild, buildMaybeOnCartridge]);
 
   // Listen for vpy-command events from WelcomeView and other components
   useEffect(() => {
@@ -1380,12 +1881,13 @@ def loop():
         logger.error('App', '🚨 Hard refresh blocked! This would clear ALL settings and API keys.');
         logger.info('App', '💡 To reload the IDE, close and reopen the window instead.');
         alert('⚠️ Hard Refresh Blocked!\n\nCmd+Shift+R would delete all your settings, API keys, and chat history.\n\nTo reload the IDE properly, close and reopen the window instead.');
-      } else if (id === 'project.openRecent' && payload) {
-        // Handle recent project with payload
-        commandExec(id, payload);
       } else {
-        // Execute any command from native menu
-        commandExec(id);
+        // FORWARD THE PAYLOAD WHENEVER THERE IS ONE. This used to name a single command,
+        // `project.openRecent`, and everything else lost its argument on the way in: the
+        // native menu sends `project.openPath` for a recent project, which then reached
+        // commandExec with no path and logged "No path provided for openPath". A
+        // whitelist of one is a trap for the next command that carries an argument.
+        commandExec(id, payload);
       }
     };
     
@@ -1417,7 +1919,12 @@ def loop():
     if (!(window as any).electronAPI) return; // no backend in web build
     if ((window as any)._lspInit) return;
     if (documents.length === 0) return;
-    const first = documents[0];
+    // Initialize the VPy server against the first .vpy document. C/C++ files are
+    // handled separately by clangd (started lazily in MonacoEditorWrapper), so
+    // never hand one to the VPy server. If only non-VPy files are open yet, wait
+    // until a .vpy document appears (this effect re-runs on documents.length).
+    const first = documents.find(d => d.uri.toLowerCase().endsWith('.vpy'));
+    if (!first) return;
     (async () => {
       try {
         await initLsp(i18n.language || 'en', first.uri, first.content);
@@ -1431,7 +1938,7 @@ def loop():
   const hasNativeMenu = isMacOS && typeof (window as any).electronAPI !== 'undefined';
 
   return (
-    <div style={{display:'flex', flexDirection:'column', height:'100vh', fontFamily:'sans-serif'}}>
+    <div style={{display:'flex', flexDirection:'column', height:'100vh', fontFamily:'var(--vs-ui-font)'}}>
       <header style={{padding:'2px 8px', background:'#222', color:'#eee', display: hasNativeMenu ? 'none' : 'flex', alignItems:'stretch', userSelect:'none'}}
         onMouseLeave={()=>setOpenMenu(null)}>
         <div style={{display:'flex', gap:0}}>
@@ -1444,13 +1951,19 @@ def loop():
               <MenuItem label={`${t('file.new.c', 'C/C++ File')}`} onClick={()=>{ commandExec('file.new.c'); setOpenMenu(null); }} />
               <MenuItem label={`${t('file.new.vec', 'Vector List (.vec)')}`} onClick={()=>{ commandExec('file.new.vec'); setOpenMenu(null); }} />
               <MenuItem label={`${t('file.new.vmus', 'Music File (.vmus)')}`} onClick={()=>{ commandExec('file.new.vmus'); setOpenMenu(null); }} />
+              <MenuItem label={`${t('file.new.vmov', 'Vector Movie (.vmov)')}`} onClick={()=>{ commandExec('file.new.vmov'); setOpenMenu(null); }} />
               <MenuItem label={`${t('file.new.vsfx', 'Sound Effect (.vsfx)')}`} onClick={()=>{ commandExec('file.new.vsfx'); setOpenMenu(null); }} />
               <MenuItem label={`${t('file.new.vanim', 'Animation (.vanim)')}`} onClick={()=>{ commandExec('file.new.vanim'); setOpenMenu(null); }} />
               <MenuItem label={`${t('file.new.vinstr', 'Instrument (.vinstr)')}`} onClick={()=>{ commandExec('file.new.vinstr'); setOpenMenu(null); }} />
               <MenuItem label={`${t('file.new.venemy', 'Enemy (.venemy)')}`} onClick={()=>{ commandExec('file.new.venemy'); setOpenMenu(null); }} />
+              <MenuItem label={`${t('file.new.vmesh', '3D Mesh (.vmesh)')}`} onClick={()=>{ commandExec('file.new.vmesh'); setOpenMenu(null); }} />
+              <MenuItem label={`${t('file.new.vscene', '3D Scene (.vscene)')}`} onClick={()=>{ commandExec('file.new.vscene'); setOpenMenu(null); }} />
+              <MenuItem label={`${t('file.new.vskel', '3D Skeleton (.vskel)')}`} onClick={()=>{ commandExec('file.new.vskel'); setOpenMenu(null); }} />
+              <MenuItem label={`${t('file.new.vclip', '3D Animation (.vclip)')}`} onClick={()=>{ commandExec('file.new.vclip'); setOpenMenu(null); }} />
             </SubMenu>
             <SubMenu label={t('file.open', 'Open')}>
               <MenuItem label={`${t('project.open', 'Project...')}	Ctrl+Shift+O`} onClick={()=>{ commandExec('project.open'); setOpenMenu(null); }} />
+              <MenuItem label={`${t('project.importC', 'Import C/C++ Project…')}`} onClick={()=>{ commandExec('project.importC'); setOpenMenu(null); }} />
               <MenuItem label={`${t('file.openFile', 'File...')}	Ctrl+O`} onClick={()=>{ commandExec('file.open'); setOpenMenu(null); }} />
             </SubMenu>
             <MenuSeparator />
@@ -1490,16 +2003,35 @@ def loop():
           </MenuRoot>
           {/* Build menu */}
           <MenuRoot label={t('menu.build', 'Build')} open={openMenu==='build'} setOpen={()=>setOpenMenu(openMenu==='build'?null:'build')}>
-            <MenuItem label={`${t('build.build', 'Build')}	⌘F7`} onClick={()=>{ commandExec('build.build'); setOpenMenu(null); }} />
-            <MenuItem label={`${t('build.buildAndRun', 'Build && Run')}	F5`} onClick={()=>{ commandExec('build.run'); setOpenMenu(null); }} />
+            {/* THE FOUR SHORTCUTS, IN THE ORDER THEY PAIR UP. Bare = the selected target,
+                Shift = the simulator; F5 runs it, F7 only builds. Same four keys for every
+                project, C or VPy — the TARGET decides, not the language. The labels must
+                match the handler exactly: this menu used to advertise ⌘F7 while the code
+                also wanted Ctrl for F5, so the keys the menu named did not all exist. */}
+            <MenuItem label={`${buildTarget === 'pitrex'
+              ? t('build.buildPitrexKernel', 'Build && Deploy PiTrex kernel (real hardware)')
+              : t('build.buildAndEmulate', `Build && Run on ${buildTarget.toUpperCase()} emulator`)}	F5`} onClick={()=>{ commandExec('build.run'); setOpenMenu(null); }} />
+            <MenuItem label={`${t('build.buildAndSimulate', 'Build && Run on simulator (fast)')}	Shift+F5`} onClick={()=>{ commandExec('build.simulate'); setOpenMenu(null); }} />
+            <MenuSeparator />
+            <MenuItem label={`${t('build.build', `Build for ${buildTarget.toUpperCase()} (no run)`)}	F7`} onClick={()=>{ commandExec('build.build'); setOpenMenu(null); }} />
+            <MenuItem label={`${t('build.buildSim', 'Build simulator (no run)')}	Shift+F7`} onClick={()=>{ commandExec('build.buildSim'); setOpenMenu(null); }} />
+            <MenuSeparator />
+            <MenuItem label={t('build.buildForSd', 'Build for SD (RP2350)')} onClick={()=>{ commandExec('build.sd'); setOpenMenu(null); }} />
+            <MenuItem label={t('build.uploadUvm2', 'Upload to Cartridge (UVMC2, USB)')} disabled={buildTarget !== 'uvm2'} onClick={()=>{ commandExec('build.uploadUvm2'); setOpenMenu(null); }} />
             <MenuItem label={t('build.clean', 'Clean')} onClick={()=>{ commandExec('build.clean'); setOpenMenu(null); }} />
             <MenuSeparator />
             <MenuItem label={`${t('build.targetBinary', 'Target Binary')}: ${activeBinName}`} disabled />
           </MenuRoot>
           {/* Debug menu */}
             <MenuRoot label={t('menu.debug', 'Debug')} open={openMenu==='debug'} setOpen={()=>setOpenMenu(openMenu==='debug'?null:'debug')}>
-              <MenuItem label={`${t('debug.start', 'Start Debugging')}	Ctrl+F5`} onClick={()=>{ commandExec('debug.start'); setOpenMenu(null); }} />
-              <MenuItem label={`${t('debug.stop', 'Stop Debugging')}	Shift+F5`} onClick={()=>{ commandExec('debug.stop'); setOpenMenu(null); }} />
+              {/* Ctrl+D is what the handler actually binds. The label said Ctrl+F5, which
+                  is not a shortcut this IDE has: F5 only reaches the debugger when a
+                  session is already PAUSED, and then it resumes rather than starts. */}
+              <MenuItem label={`${t('debug.start', 'Start Debugging')}	Ctrl+D`} onClick={()=>{ commandExec('debug.start'); setOpenMenu(null); }} />
+              <MenuItem label={`${t('debug.stop', 'Stop Debugging')}	Shift+F5 (while paused)`} onClick={()=>{ commandExec('debug.stop'); setOpenMenu(null); }} />
+              <MenuSeparator />
+              <MenuItem label={buildTarget === 'uvm2' ? t('debug.cartridgeUvm2', 'Debug on Cartridge (UVMC2, USB)') : t('debug.cartridge', 'Debug on Cartridge (RP2350, SWD)')} onClick={()=>{ commandExec('debug.cartridge'); setOpenMenu(null); }} />
+              <MenuItem label={t('debug.cartridgeStop', 'Stop Debugging on Cartridge')} onClick={()=>{ commandExec('debug.cartridgeStop'); setOpenMenu(null); }} />
               <MenuSeparator />
               <MenuItem label={`${t('debug.stepOver', 'Step Over')}	F10`} onClick={()=>{ commandExec('debug.stepOver'); setOpenMenu(null); }} />
               <MenuItem label={`${t('debug.stepInto', 'Step Into')}	F11`} onClick={()=>{ commandExec('debug.stepInto'); setOpenMenu(null); }} />
@@ -1517,6 +2049,9 @@ def loop():
                 onClick={()=>toggleFromView(it.key)} />
             ))}
             <MenuSeparator />
+            <MenuItem label={`${t('terminal.new', 'New Terminal')}\tCtrl+Shift+\``} onClick={()=>{ commandExec('terminal.new'); setOpenMenu(null); }} />
+            <MenuItem label={t('terminal.claudeMenu', 'Claude Code in Terminal')} onClick={()=>{ commandExec('terminal.claude'); setOpenMenu(null); }} />
+            <MenuSeparator />
             <MenuItem label={t('panel.hideActive', 'Hide Active Panel')} onClick={()=>{
               // Determine active panel by scanning selected tab that matches our panels
               const mdl: any = (window as any).__vpyDockModel; let activeComp: string | undefined;
@@ -1527,7 +2062,7 @@ def loop():
                     const selected = n.getSelectedNode?.();
                     if (selected) {
                       const c = typeof selected.getComponent === 'function' ? selected.getComponent() : selected?._attributes?.component;
-                      if (['files','emulator','debug','errors','memory','trace','bioscalls','ai-assistant','build-output','compiler-output'].includes(c)) activeComp = c;
+                      if (['files','emulator','debug','errors','memory','trace','bioscalls','callstack','ai-assistant','build-output','compiler-output','terminal'].includes(c)) activeComp = c;
                     }
                   }
                 });
@@ -1544,7 +2079,7 @@ def loop():
                     const selected = n.getSelectedNode?.();
                     if (selected) {
                       const c = typeof selected.getComponent === 'function' ? selected.getComponent() : selected?._attributes?.component;
-                      if (['files','emulator','debug','errors','memory','trace','bioscalls','ai-assistant','build-output','compiler-output'].includes(c)) activeComp = c;
+                      if (['files','emulator','debug','errors','memory','trace','bioscalls','callstack','ai-assistant','build-output','compiler-output','terminal'].includes(c)) activeComp = c;
                     }
                   }
                 });
@@ -1602,6 +2137,7 @@ def loop():
                   {activeSidebarPanel === 'files' && <FileTreePanel />}
                   {activeSidebarPanel === 'git' && <GitPanel />}
                   {activeSidebarPanel === 'settings' && <SettingsPanel />}
+                  {activeSidebarPanel === 'projectSettings' && <ProjectSettingsPanel />}
                 </div>
                 {/* Resize handle */}
                 <div
@@ -1647,13 +2183,14 @@ def loop():
               location: options.location,
               type: options.type,
               template: options.template,
+              kind: options.kind,
             });
             if (result && 'ok' in result && result.ok) {
               logger.info('Project', `Created project: ${result.name}`);
               // Open the created project
               const success = await openVpyProject(result.projectFile);
               if (success) {
-                const entryPath = useProjectStore.getState().getEntryPath();
+                const entryPath = result.entryFile || useProjectStore.getState().getEntryPath();
                 if (entryPath) {
                   const apiFiles: any = (window as any).files;
                   if (apiFiles?.readFile) {
@@ -1663,7 +2200,7 @@ def loop():
                       const uri = normPath.match(/^[A-Za-z]:\//) ? `file:///${normPath}` : `file://${normPath}`;
                       openDocument({
                         uri,
-                        language: 'vpy',
+                        language: /\.c$/i.test(entryPath) ? 'c' : 'vpy',
                         content: fileResult.content,
                         dirty: false,
                         diagnostics: [],
@@ -1687,9 +2224,9 @@ def loop():
       {/* New File Dialog */}
       <InputDialog
         isOpen={showNewFileDialog}
-        title={newFileType === 'vec' ? 'New Vector List' : newFileType === 'vmus' ? 'New Music File' : newFileType === 'vsfx' ? 'New Sound Effect' : newFileType === 'vanim' ? 'New Animation' : newFileType === 'vinstr' ? 'New Instrument' : newFileType === 'venemy' ? 'New Enemy Type' : 'New File'}
-        message={newFileType === 'vec' ? 'Enter a name for the vector list (without extension):' : newFileType === 'vmus' ? 'Enter a name for the music file (without extension):' : newFileType === 'vsfx' ? 'Enter a name for the sound effect (without extension):' : newFileType === 'vanim' ? 'Enter a name for the animation (without extension):' : newFileType === 'vinstr' ? 'Enter a name for the instrument (without extension):' : newFileType === 'venemy' ? 'Enter a name for the enemy type (without extension):' : 'Enter filename:'}
-        placeholder={newFileType === 'vec' ? 'my_sprite' : newFileType === 'vmus' ? 'my_music' : newFileType === 'vsfx' ? 'laser' : newFileType === 'vanim' ? 'player_walk' : newFileType === 'vinstr' ? 'pluck' : newFileType === 'venemy' ? 'snowbrother' : 'filename'}
+        title={newFileType === 'vec' ? 'New Vector List' : newFileType === 'vmus' ? 'New Music File' : newFileType === 'vmov' ? 'New Vector Movie' : newFileType === 'vsfx' ? 'New Sound Effect' : newFileType === 'vanim' ? 'New Animation' : newFileType === 'vinstr' ? 'New Instrument' : newFileType === 'venemy' ? 'New Enemy Type' : newFileType === 'vmesh' ? 'New 3D Mesh' : newFileType === 'vscene' ? t('file.newScene.title', 'New 3D Scene') : newFileType === 'vskel' ? t('file.newSkel.title', 'New 3D Skeleton') : newFileType === 'vclip' ? t('file.newClip.title', 'New 3D Animation') : 'New File'}
+        message={newFileType === 'vec' ? 'Enter a name for the vector list (without extension):' : newFileType === 'vmus' ? 'Enter a name for the music file (without extension):' : newFileType === 'vmov' ? 'Enter a name for the vector movie (without extension):' : newFileType === 'vsfx' ? 'Enter a name for the sound effect (without extension):' : newFileType === 'vanim' ? 'Enter a name for the animation (without extension):' : newFileType === 'vinstr' ? 'Enter a name for the instrument (without extension):' : newFileType === 'venemy' ? 'Enter a name for the enemy type (without extension):' : newFileType === 'vmesh' ? 'Enter a name for the mesh (without extension):' : newFileType === 'vscene' ? t('file.newScene.message', 'Enter a name for the scene (without extension):') : newFileType === 'vskel' ? t('file.newSkel.message', 'Enter a name for the skeleton (without extension):') : newFileType === 'vclip' ? t('file.newClip.message', 'Enter a name for the animation library (without extension):') : 'Enter filename:'}
+        placeholder={newFileType === 'vec' ? 'my_sprite' : newFileType === 'vmus' ? 'my_music' : newFileType === 'vmov' ? 'my_movie' : newFileType === 'vsfx' ? 'laser' : newFileType === 'vanim' ? 'player_walk' : newFileType === 'vinstr' ? 'pluck' : newFileType === 'venemy' ? 'snowbrother' : newFileType === 'vmesh' ? 'ship' : newFileType === 'vscene' ? 'tunnel' : newFileType === 'vskel' ? 'hero' : newFileType === 'vclip' ? 'hero_moves' : 'filename'}
         defaultValue=""
         validateFn={(value) => {
           if (!value.trim()) return 'Name is required';
@@ -1801,6 +2338,37 @@ def loop():
             
             // Fallback: create in-memory
             const uri = `inmemory://${name}.vmus`;
+            openDocument({ uri, language: 'json', content, dirty: true, diagnostics: [] });
+          } else if (newFileType === 'vmov') {
+            // Vector movie manifest: empty tracks — import video/audio from the editor.
+            const content = JSON.stringify({
+              version: "1.0",
+              name: name,
+              fps: 15,
+              vrec: "",
+              vsmp: ""
+            }, null, 2);
+
+            if (vpyProject?.rootDir && apiFiles?.saveFile) {
+              const filePath = `${vpyProject.rootDir}/assets/movies/${name}.vmov`.replace(/\\/g, '/');
+              try {
+                const result = await apiFiles.saveFile({ path: filePath, content });
+                if (result && !result.error) {
+                  const normPath = filePath.replace(/\\/g, '/');
+                  const uri = normPath.match(/^[A-Za-z]:\//) ? `file:///${normPath}` : `file://${normPath}`;
+                  openDocument({
+                    uri, language: 'json', content, dirty: false, diagnostics: [],
+                    diskPath: filePath, mtime: result.mtime, lastSavedContent: content
+                  });
+                  useProjectStore.getState().refreshWorkspace();
+                  logger.info('File', `Created ${filePath}`);
+                  return;
+                }
+              } catch (e) {
+                logger.warn('File', 'Failed to save to project folder, creating in-memory');
+              }
+            }
+            const uri = `inmemory://${name}.vmov`;
             openDocument({ uri, language: 'json', content, dirty: true, diagnostics: [] });
           } else if (newFileType === 'vsfx') {
             // SFX default content
@@ -1928,6 +2496,134 @@ def loop():
 
             // Fallback: create in-memory
             const uri = `inmemory://${name}.vinstr`;
+            openDocument({ uri, language: 'json', content, dirty: true, diagnostics: [] });
+          } else if (newFileType === 'vmesh') {
+            // 3D surface mesh for vpy3d (C projects): start from a cube, edited in the Mesh Editor.
+            const h = 500;
+            const content = JSON.stringify({
+              name,
+              hard: 45,
+              vertices: [
+                { x: -h, y: -h, z: -h }, { x: h, y: -h, z: -h }, { x: h, y: h, z: -h }, { x: -h, y: h, z: -h },
+                { x: -h, y: -h, z: h }, { x: h, y: -h, z: h }, { x: h, y: h, z: h }, { x: -h, y: h, z: h },
+              ],
+              faces: [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [2, 3, 7, 6], [1, 2, 6, 5], [0, 4, 7, 3]],
+            }, null, 2);
+
+            if (vpyProject?.rootDir && apiFiles?.saveFile) {
+              const filePath = `${vpyProject.rootDir}/assets/meshes/${name}.vmesh`.replace(/\\/g, '/');
+              try {
+                const result = await apiFiles.saveFile({ path: filePath, content });
+                if (result && !result.error) {
+                  const normPath = filePath.replace(/\\/g, '/');
+                  const uri = normPath.match(/^[A-Za-z]:\//) ? `file:///${normPath}` : `file://${normPath}`;
+                  openDocument({
+                    uri, language: 'json', content, dirty: false, diagnostics: [],
+                    diskPath: filePath, mtime: result.mtime, lastSavedContent: content
+                  });
+                  useProjectStore.getState().refreshWorkspace();
+                  logger.info('File', `Created ${filePath}`);
+                  return;
+                }
+              } catch (e) {
+                logger.warn('File', 'Failed to save to project folder, creating in-memory');
+              }
+            }
+            const uri = `inmemory://${name}.vmesh`;
+            openDocument({ uri, language: 'json', content, dirty: true, diagnostics: [] });
+          } else if (newFileType === 'vscene') {
+            // 3D scene for vpy3d (C projects): places the project's .vmesh pieces, edited in the
+            // Scene Editor. It starts with one piece: the first mesh in assets/meshes (or its folders).
+            let firstMesh = '';
+            if (vpyProject?.rootDir && apiFiles?.readDirectory) {
+              try {
+                const r = await apiFiles.readDirectory(`${vpyProject.rootDir}/assets/meshes`.replace(/\\/g, '/'));
+                // meshes may sit in folders inside assets/meshes; a scene names them only
+                const names: string[] = [];
+                const walk = (es: any[]) => { for (const f of es || []) { if (f.isDir) walk(f.children); else if (/\.vmesh$/i.test(f.name)) names.push(f.name.replace(/\.vmesh$/i, '')); } };
+                walk(r?.files);
+                names.sort();
+                firstMesh = names[0] || '';
+              } catch { /* no meshes folder */ }
+            }
+            if (!firstMesh) {
+              window.alert(t('file.newScene.needMesh', 'A scene places .vmesh pieces from assets/meshes: create a 3D mesh first (File > New > 3D Mesh).'));
+              return;
+            }
+            const content = JSON.stringify({ name, items: [{ name: 'piece', mesh: firstMesh, at: { z: 2000 } }] }, null, 2);
+
+            if (vpyProject?.rootDir && apiFiles?.saveFile) {
+              const filePath = `${vpyProject.rootDir}/assets/scenes/${name}.vscene`.replace(/\\/g, '/');
+              try {
+                const result = await apiFiles.saveFile({ path: filePath, content });
+                if (result && !result.error) {
+                  const normPath = filePath.replace(/\\/g, '/');
+                  const uri = normPath.match(/^[A-Za-z]:\//) ? `file:///${normPath}` : `file://${normPath}`;
+                  openDocument({
+                    uri, language: 'json', content, dirty: false, diagnostics: [],
+                    diskPath: filePath, mtime: result.mtime, lastSavedContent: content
+                  });
+                  useProjectStore.getState().refreshWorkspace();
+                  logger.info('File', `Created ${filePath}`);
+                  return;
+                }
+              } catch (e) {
+                logger.warn('File', 'Failed to save to project folder, creating in-memory');
+              }
+            }
+            const uri = `inmemory://${name}.vscene`;
+            openDocument({ uri, language: 'json', content, dirty: true, diagnostics: [] });
+          } else if (newFileType === 'vskel' || newFileType === 'vclip') {
+            // 3D animation (docs/ASSETS.md): a skeleton in assets/skeletons, or a library of poses
+            // and clips in assets/clips that poses one (the first skeleton found; its rest pose)
+            const ext = newFileType;
+            let content: string;
+            if (ext === 'vskel') {
+              content = JSON.stringify({ version: 1, angle_unit: 4096, joints: [], bones: [{ name: 'root', parent: null, offset: [0, 0, 0], mesh: null, rotate: [] }], variants: {} }, null, 2);
+            } else {
+              let skel = '', joints: string[] = [];
+              if (vpyProject?.rootDir && apiFiles?.readDirectory) {
+                try {
+                  const r = await apiFiles.readDirectory(`${vpyProject.rootDir}/assets/skeletons`.replace(/\\/g, '/'));
+                  const dir = `${vpyProject.rootDir}/assets/skeletons`.replace(/\\/g, '/');
+                  const found: { name: string; rel: string }[] = [];
+                  const walk = (es: any[], pre: string) => { for (const f of es || []) { const rel = pre ? `${pre}/${f.name}` : f.name; if (f.isDir) walk(f.children, rel); else if (/\.vskel$/i.test(f.name)) found.push({ name: f.name.replace(/\.vskel$/i, ''), rel }); } };
+                  walk(r?.files, '');
+                  found.sort((a, b) => a.name.localeCompare(b.name));
+                  if (found[0]) {
+                    skel = found[0].name;
+                    const f: any = await apiFiles.readFile?.(`${dir}/${found[0].rel}`);
+                    try { joints = (JSON.parse(f?.content ?? '{}').joints ?? []).map((j: any) => j.name).filter((n: unknown) => typeof n === 'string'); } catch { /* read in the editor */ }
+                  }
+                } catch { /* no skeletons folder */ }
+              }
+              if (!skel) {
+                window.alert(t('file.newClip.needSkel', 'An animation library poses a skeleton from assets/skeletons: create a 3D skeleton first (File > New > 3D Skeleton).'));
+                return;
+              }
+              content = JSON.stringify({ version: 1, skeleton: skel, poses: { rest: Object.fromEntries(joints.map((j) => [j, 0])) }, clips: {}, sets: {} }, null, 2);
+            }
+            const folder = ext === 'vskel' ? 'skeletons' : 'clips';
+            if (vpyProject?.rootDir && apiFiles?.saveFile) {
+              const filePath = `${vpyProject.rootDir}/assets/${folder}/${name}.${ext}`.replace(/\\/g, '/');
+              try {
+                const result = await apiFiles.saveFile({ path: filePath, content });
+                if (result && !result.error) {
+                  const normPath = filePath.replace(/\\/g, '/');
+                  const uri = normPath.match(/^[A-Za-z]:\//) ? `file:///${normPath}` : `file://${normPath}`;
+                  openDocument({
+                    uri, language: 'json', content, dirty: false, diagnostics: [],
+                    diskPath: filePath, mtime: result.mtime, lastSavedContent: content
+                  });
+                  useProjectStore.getState().refreshWorkspace();
+                  logger.info('File', `Created ${filePath}`);
+                  return;
+                }
+              } catch (e) {
+                logger.warn('File', 'Failed to save to project folder, creating in-memory');
+              }
+            }
+            const uri = `inmemory://${name}.${ext}`;
             openDocument({ uri, language: 'json', content, dirty: true, diagnostics: [] });
           } else if (newFileType === 'venemy') {
             const content = JSON.stringify({

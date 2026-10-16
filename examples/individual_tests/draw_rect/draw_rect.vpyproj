@@ -10,3 +10,6 @@ debug_symbols = true
 
 [sources]
 vpy = ["src/**/*.vpy"]
+
+[sdk]
+version = "v1.3.2"

@@ -1,13 +1,13 @@
-Show the current status of all 9 VPy compiler phases.
+Show the current status of the 9 VPy compiler phases (`buildtools/`, the only compiler).
 
-Read `buildtools/README.md` to get the latest status, then run `cargo test --all` in the `buildtools/` directory to get live test counts per crate.
+Read `buildtools/README.md` and `docs/COMPILER_STATUS.md` (the Known issues section), then run `cargo test --all` in `buildtools/` to get live test counts per crate.
 
-Output a status table like:
+Output a table like:
 
-| Phase | Crate              | Status      | Tests |
-|-------|--------------------|-------------|-------|
-| 1     | vpy_loader         | ✅ Complete | 5/5   |
-| 2     | vpy_parser         | ✅ Complete | 52/52 |
-| ...   | ...                | ...         | ...   |
+| Phase | Crate              | Status | Tests (passed/total) |
+|-------|--------------------|--------|----------------------|
+| 1     | vpy_loader         | ...    | ...                  |
+| 2     | vpy_parser         | ...    | ...                  |
+| ...   | ...                | ...    | ...                  |
 
-Highlight any phases that are in-progress or have failing tests. Note what work remains for incomplete phases.
+Include the support crates as extra rows: vpy_cli, vpy_disasm, vpy_lsp. Base the status on the test run, not on the README's claims. Highlight crates with failing tests and the open items listed under Known issues. If the README disagrees with what the tests or the code show, point it out.

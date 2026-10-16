@@ -6,13 +6,13 @@
 //! IMPORTANT: Joystick mux must be initialized ONCE in START/MAIN before use.
 //! These builtins assume mux is already configured.
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 /// Emit joystick runtime helpers
 /// Only emits helpers that are actually used in the code (tree shaking)
 /// 
 /// COPIED EXACTLY from core/src/backend/m6809/emission.rs lines 77-102
-pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
+pub fn emit_runtime_helpers(out: &mut String, needed: &BTreeSet<String>) {
     // J{1,2}{X,Y}_BUILTIN — cheap cached-RAM reads. The actual BIOS Joy_Analog
     // poll happens ONCE per frame, auto-injected at the top of LOOP_BODY (see
     // m6809/functions.rs `has_joystick_analog_calls`). Joy_Analog populates all

@@ -1,8 +1,9 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { useProjectStore } from '../state/projectStore';
 import './ActivityBar.css';
 
-export type ActivityBarItem = 'files' | 'git' | 'playground' | 'eprom' | 'settings' | null;
+export type ActivityBarItem = 'files' | 'git' | 'playground' | 'eprom' | 'settings' | 'projectSettings' | null;
 
 interface ActivityBarProps {
   activeItem: ActivityBarItem;
@@ -11,6 +12,8 @@ interface ActivityBarProps {
 
 export const ActivityBar: React.FC<ActivityBarProps> = ({ activeItem, onItemClick }) => {
   const { t } = useTranslation(['common']);
+  // Project settings only make sense with a project (.vpyproj / .cvproj) open.
+  const hasProject = useProjectStore(s => !!s.vpyProject?.projectFile);
   const handleClick = (item: ActivityBarItem) => {
     // Toggle: if clicking active item, collapse (set to null)
     onItemClick(activeItem === item ? null : item);
@@ -57,6 +60,27 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({ activeItem, onItemClic
       </div>
 
       <div className="activity-bar-bottom">
+        {hasProject && (
+          <button
+            className={`activity-bar-item ${activeItem === 'projectSettings' ? 'active' : ''}`}
+            onClick={() => handleClick('projectSettings')}
+            title={t('panel.projectSettings', 'Project Settings')}
+          >
+            {/* Sliders: project-level settings, distinct from the global gear. */}
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="4" y1="21" x2="4" y2="14"/>
+              <line x1="4" y1="10" x2="4" y2="3"/>
+              <line x1="12" y1="21" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12" y2="3"/>
+              <line x1="20" y1="21" x2="20" y2="16"/>
+              <line x1="20" y1="12" x2="20" y2="3"/>
+              <line x1="1" y1="14" x2="7" y2="14"/>
+              <line x1="9" y1="8" x2="15" y2="8"/>
+              <line x1="17" y1="16" x2="23" y2="16"/>
+            </svg>
+          </button>
+        )}
+
         <button
           className={`activity-bar-item ${activeItem === 'eprom' ? 'active' : ''}`}
           onClick={() => handleClick('eprom')}

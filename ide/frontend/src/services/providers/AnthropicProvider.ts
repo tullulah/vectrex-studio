@@ -15,7 +15,7 @@ export class AnthropicProvider extends BaseAiProvider {
 
   public async sendRequest(request: AiRequest): Promise<AiResponse> {
     if (!this.isConfigured()) {
-      throw new Error('Anthropic API key no configurada');
+      throw new Error('Anthropic API key not configured');
     }
 
     try {

@@ -223,11 +223,6 @@
               "z": 0
             },
             {
-              "x": 1,
-              "y": 1,
-              "z": 0
-            },
-            {
               "x": 3,
               "y": 1,
               "z": 0
@@ -257,42 +252,6 @@
             {
               "x": 4,
               "y": 3,
-              "z": 0
-            }
-          ]
-        },
-        {
-          "name": "path_1778275212093",
-          "intensity": 85,
-          "closed": false,
-          "points": [
-            {
-              "x": 5,
-              "y": -3,
-              "z": 0
-            }
-          ]
-        },
-        {
-          "name": "path_titchi_w2_foot1",
-          "intensity": 85,
-          "closed": false,
-          "points": [
-            {
-              "x": -5,
-              "y": -7,
-              "z": 0
-            }
-          ]
-        },
-        {
-          "name": "path_titchi_w2_foot2",
-          "intensity": 85,
-          "closed": false,
-          "points": [
-            {
-              "x": 1,
-              "y": -7,
               "z": 0
             }
           ]

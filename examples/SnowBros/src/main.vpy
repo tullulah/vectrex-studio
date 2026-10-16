@@ -5,25 +5,26 @@ META ROM_TOTAL_SIZE = 131072
 META ROM_BANK_SIZE = 16384
 
 # ── Debug ────────────────────────────────────────────────────────────────────
-const INVINCIBLE = 1   # 1 = no muere por enemigos ni por tiempo
-const START_FLOOR = 0 # piso inicial (0=normal floor 1, 2=floor 2, etc.)
+const INVINCIBLE        = 1   # 1 = no muere por enemigos ni por tiempo
+const START_FLOOR       = 0 # piso inicial (0=normal floor 1, 2=floor 2, etc.)
 
 # ── States ──────────────────────────────────────────────────────────────────
-const STATE_TITLE = 0        # título + "press a button"
-const STATE_GAME_START = 1   # "ROUND N" antes de empezar
-const STATE_PLAYING = 2      # gameplay activo
+const STATE_TITLE       = 0  # título + "press a button"
+
+const STATE_GAME_START  = 1  # "ROUND N" antes de empezar
+const STATE_PLAYING     = 2  # gameplay activo
 const STATE_PLAYER_DEAD = 3  # animación de muerte + delay
 const STATE_LEVEL_CLEAR = 4  # todos los enemigos derrotados
-const STATE_BOSS_INTRO = 5   # pantalla de aviso boss (niveles múltiplos de 10)
-const STATE_BOSS = 6         # combate boss
-const STATE_GAME_OVER = 7    # game over
-const STATE_ALL_CLEAR = 8    # completados los 50 niveles
+const STATE_BOSS_INTRO  = 5  # pantalla de aviso boss (niveles múltiplos de 10)
+const STATE_BOSS        = 6  # combate boss
+const STATE_GAME_OVER   = 7    # game over
+const STATE_ALL_CLEAR   = 8    # completados los 50 niveles
 
 # ── Enemy SM state indices (must match titchi.venemy state order) ─────────
 const TITCHI_STATE_NORMAL = 0
-const TITCHI_STATE_SNOW1 = 1
-const TITCHI_STATE_SNOW2 = 2
-const TITCHI_STATE_BALL = 3
+const TITCHI_STATE_SNOW1  = 1
+const TITCHI_STATE_SNOW2  = 2
+const TITCHI_STATE_BALL   = 3
 
 # ── Frog SM state indices ─────────────────────────────────────────────────
 const FROG_STATE_NORMAL    = 0
@@ -34,11 +35,11 @@ const FROG_STATE_FIRE_SIDE = 4
 const FROG_STATE_FIRE_DOWN = 5
 
 # ── Frog bullet physics ───────────────────────────────────────────────────
-const FROG_FIRE_INTERVAL    = 120   # frames between shots (~2s)
-const FROG_BULLET_SPEED     = 3
+const FROG_FIRE_INTERVAL     = 120   # frames between shots (~2s)
+const FROG_BULLET_SPEED      = 3
 const FROG_BULLET_DOWN_SPEED = 3
-const FROG_BULLET_HW        = 4
-const FROG_BULLET_HH        = 4
+const FROG_BULLET_HW         = 4
+const FROG_BULLET_HH         = 4
 
 # ── Thaw timers (one per enemy slot, managed in VPy) ─────────────────────
 const THAW_TICKS_SNOW = 180   # snow1/snow2: ~3s at 60fps
@@ -49,16 +50,16 @@ thaw_timers = [0, 0, 0, 0, 0, 0, 0, 0]
 frog_fire_timer = [0, 0, 0, 0, 0, 0, 0, 0]   # per-slot shoot countdown
 frog_fire_decay = [0, 0, 0, 0, 0, 0, 0, 0]   # frames until fire anim ends → back to normal
 frog_bullet_active: i16 = 0
-frog_bullet_x: i16 = 0
-frog_bullet_y: i16 = 0
-frog_bullet_vx: i16 = 0
-frog_bullet_vy: i16 = 0
-frog_bullet_dir: i16 = 0      # 0 = side, 1 = down
+frog_bullet_x: i16      = 0
+frog_bullet_y: i16      = 0
+frog_bullet_vx: i16     = 0
+frog_bullet_vy: i16     = 0
+frog_bullet_dir: i16    = 0      # 0 = side, 1 = down
 frog_bullet_mirror: i16 = 0   # 0 = right, 1 = left (side shots only)
 
 # ── Ball-rolling system ───────────────────────────────────────────────────
-const BALL_SPEED = 4
-const BALL_GRAVITY = 1
+const BALL_SPEED    = 4
+const BALL_GRAVITY  = 1
 const BALL_MAX_FALL = 8
 
 ball_rolling  = [0, 0, 0, 0, 0, 0, 0, 0]   # 1 = bola en movimiento
@@ -167,26 +168,27 @@ def main():
 
 def loop():
     if game_state == STATE_TITLE:
-        state_title()
+        run_state_title()
     elif game_state == STATE_GAME_START:
-        state_game_start()
+        run_state_game_start()
     elif game_state == STATE_PLAYING:
-        state_playing()
+        run_state_playing()
     elif game_state == STATE_PLAYER_DEAD:
-        state_player_dead()
+        run_state_player_dead()
     elif game_state == STATE_LEVEL_CLEAR:
-        state_level_clear()
+        run_state_level_clear()
     elif game_state == STATE_BOSS_INTRO:
-        state_boss_intro()
+        run_state_boss_intro()
     elif game_state == STATE_BOSS:
-        state_boss()
+        run_state_boss()
     elif game_state == STATE_GAME_OVER:
-        state_game_over()
+        run_state_game_over()
     elif game_state == STATE_ALL_CLEAR:
-        state_all_clear()
+        run_state_all_clear()
 
 # ── Estado: título ───────────────────────────────────────────────────────────
-def state_title():
+def run_state_title():
+    SET_INTENSITY(85)
     DRAW_VECTOR("init_screen", 0, 40)
     PRINT_TEXT(-70, -40, "PRESS A BUTTON")
     if J1_BUTTON_1():
@@ -199,10 +201,10 @@ def state_title():
         enter_game_start()
 
 # ── Estado: pantalla "ROUND N" ───────────────────────────────────────────────
-def state_game_start():
-    # NOTA: aquí NO se llama a state_playing(). En este estado los enemigos
+def run_state_game_start():
+    # NOTA: aquí NO se llama a run_state_playing(). En este estado los enemigos
     # aún no están spawneados (LOAD_LEVEL+SPAWN_ENEMIES corre cuando frame_timer
-    # llega a 0). Si se llamara state_playing() ahora, count_active_enemies()
+    # llega a 0). Si se llamara run_state_playing() ahora, count_active_enemies()
     # devolvería 0 → enter_level_clear() → salto inmediato al siguiente nivel.
     SHOW_LEVEL()
     PRINT_TEXT(-30, 20, "ROUND")
@@ -213,7 +215,7 @@ def state_game_start():
         game_state = STATE_PLAYING
 
 # ── Estado: gameplay ─────────────────────────────────────────────────────────
-def state_playing():
+def run_state_playing():
     # time_left = time_left - 1
     if time_left <= 0:
         if INVINCIBLE == 0:
@@ -252,7 +254,7 @@ def state_playing():
 
 
 # ── Estado: muerte del jugador ───────────────────────────────────────────────
-def state_player_dead():
+def run_state_player_dead():
     SHOW_LEVEL()
     draw_hud()
     draw_player_death()
@@ -267,7 +269,7 @@ def state_player_dead():
 
 def draw_player_death():
     SET_INTENSITY(65)
-    stop_music()
+    STOP_MUSIC()
     elapsed = DEATH_DELAY - frame_timer
     if elapsed < 12:
         DRAW_VECTOR("player_die1", player_x, player_y - camera_y, player_facing)
@@ -281,7 +283,7 @@ def draw_player_death():
                 DRAW_VECTOR("player_die4", player_x, player_y - camera_y, player_facing)
 
 # ── Estado: nivel completado ─────────────────────────────────────────────────
-def state_level_clear():
+def run_state_level_clear():
     if camera_y < scroll_target:
         camera_y = camera_y + 3
         if camera_y > scroll_target:
@@ -305,7 +307,7 @@ def state_level_clear():
                 enter_game_start()
 
 # ── Estado: aviso de boss ────────────────────────────────────────────────────
-def state_boss_intro():
+def run_state_boss_intro():
     PRINT_TEXT(-30, 20, "WARNING!")
     PRINT_TEXT(-50, 0, "BOSS INCOMING")
     frame_timer = frame_timer - 1
@@ -315,7 +317,7 @@ def state_boss_intro():
         game_state = STATE_BOSS
 
 # ── Estado: boss (placeholder) ───────────────────────────────────────────────
-def state_boss():
+def run_state_boss():
     # TODO: lógica IA boss
     # TODO: patrones de ataque por nivel boss
     # TODO: detección de derrota del boss → enter_level_clear()
@@ -331,7 +333,7 @@ def state_boss():
     draw_hud()
 
 # ── Estado: game over ────────────────────────────────────────────────────────
-def state_game_over():
+def run_state_game_over():
     PRINT_TEXT(-30, 20, "GAME OVER")
     PRINT_TEXT(-30, 0, "SCORE")
     PRINT_NUMBER(30, 0, score)
@@ -341,7 +343,7 @@ def state_game_over():
         game_state = STATE_TITLE
 
 # ── Estado: all clear ────────────────────────────────────────────────────────
-def state_all_clear():
+def run_state_all_clear():
     PRINT_TEXT(-55, 30, "CONGRATULATIONS!")
     PRINT_TEXT(-30, 5, "ALL CLEAR!")
     PRINT_TEXT(-25, -20, "SCORE")
@@ -770,13 +772,19 @@ def update_balls():
                 floor = LEVEL_COLLISION_Y(bx, prev_by, ENEMY_HH)
                 screen_bottom = camera_y - 127
                 if floor < screen_bottom:
-                    floor = camera_y - 86
+                    # El suelo de pantalla NO es un mesh de colisión (es
+                    # GET_LEVEL_FLOOR_Y), así que la bola cae al fallback: usa el
+                    # mismo suelo caminable que el jugador (antes camera_y-86 lo
+                    # dejaba ~19u por encima del suelo → la bola flotaba).
+                    floor = GET_LEVEL_FLOOR_Y() + ENEMY_HH
                 if by <= floor:
                     by = floor
                     ball_vy_arr[i] = 0
-            # Fallback: fondo del mundo
-            if by < WORLD_Y_MIN:
-                by = WORLD_Y_MIN
+            # Fallback: fondo del mundo. WORLD_Y_MIN (-2403) queda ~6u por encima
+            # del suelo caminable real, así que usa GET_LEVEL_FLOOR_Y (mismo suelo
+            # que el jugador) para que la bola descanse EN el suelo, no flotando.
+            if by < GET_LEVEL_FLOOR_Y() + ENEMY_HH:
+                by = GET_LEVEL_FLOOR_Y() + ENEMY_HH
                 ball_vy_arr[i] = 0
             # Rebote en paredes
             if bx < WORLD_X_MIN:

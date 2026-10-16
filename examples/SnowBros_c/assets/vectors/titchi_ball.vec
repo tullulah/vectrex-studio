@@ -1,0 +1,198 @@
+{
+  "version": "1.0",
+  "name": "titchi_ball",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "snowball_outline",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            {
+              "x": -3,
+              "y": -3,
+              "z": 0
+            },
+            {
+              "x": -4,
+              "y": -1,
+              "z": 0
+            },
+            {
+              "x": -4,
+              "y": 1,
+              "z": 0
+            },
+            {
+              "x": -2,
+              "y": 3,
+              "z": 0
+            },
+            {
+              "x": 1,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": 4,
+              "y": 3,
+              "z": 0
+            },
+            {
+              "x": 6,
+              "y": 1,
+              "z": 0
+            },
+            {
+              "x": 6,
+              "y": -1,
+              "z": 0
+            },
+            {
+              "x": 4,
+              "y": -3,
+              "z": 0
+            },
+            {
+              "x": 1,
+              "y": -4,
+              "z": 0
+            },
+            {
+              "x": -3,
+              "y": -3,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "snow_texture_arc",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            {
+              "x": -2,
+              "y": -2,
+              "z": 0
+            },
+            {
+              "x": -3,
+              "y": 0,
+              "z": 0
+            },
+            {
+              "x": -2,
+              "y": 2,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "snow_texture_mid",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            {
+              "x": 0,
+              "y": -1,
+              "z": 0
+            },
+            {
+              "x": 0,
+              "y": 1,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "eye_hint",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            {
+              "x": 2,
+              "y": 0,
+              "z": 0
+            },
+            {
+              "x": 3,
+              "y": -1,
+              "z": 0
+            },
+            {
+              "x": 2,
+              "y": -1,
+              "z": 0
+            },
+            {
+              "x": 2,
+              "y": 0,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "speed_line_top",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            {
+              "x": -6,
+              "y": -1,
+              "z": 0
+            },
+            {
+              "x": -5,
+              "y": 0,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "speed_line_mid",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            {
+              "x": -6,
+              "y": 0,
+              "z": 0
+            },
+            {
+              "x": -5,
+              "y": 1,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "speed_line_bot",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            {
+              "x": -6,
+              "y": 1,
+              "z": 0
+            },
+            {
+              "x": -5,
+              "y": 2,
+              "z": 0
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 0,
+  "center_y": 0
+}

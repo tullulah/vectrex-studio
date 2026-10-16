@@ -1,0 +1,165 @@
+{
+  "version": "1.0",
+  "name": "Imported MIDI",
+  "author": "",
+  "tempo": 120,
+  "ticksPerBeat": 24,
+  "totalTicks": 384,
+  "notes": [
+    {
+      "id": "wkiw9zidi",
+      "note": 83,
+      "start": 0,
+      "duration": 16,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "j2bggzaod",
+      "note": 80,
+      "start": 0,
+      "duration": 16,
+      "velocity": 13,
+      "channel": 1
+    },
+    {
+      "id": "0ki3nbdxl",
+      "note": 78,
+      "start": 0,
+      "duration": 16,
+      "velocity": 13,
+      "channel": 2
+    },
+    {
+      "id": "74sk3m5r7",
+      "note": 71,
+      "start": 19,
+      "duration": 8,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "opxbqzieb",
+      "note": 84,
+      "start": 29,
+      "duration": 7,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "u3lil1gji",
+      "note": 80,
+      "start": 29,
+      "duration": 36,
+      "velocity": 13,
+      "channel": 1
+    },
+    {
+      "id": "84y3gj4wl",
+      "note": 77,
+      "start": 29,
+      "duration": 36,
+      "velocity": 13,
+      "channel": 2
+    },
+    {
+      "id": "79h2kr517",
+      "note": 82,
+      "start": 39,
+      "duration": 7,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "u7cbrs4qz",
+      "note": 80,
+      "start": 49,
+      "duration": 7,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "sdsfewfyf",
+      "note": 77,
+      "start": 58,
+      "duration": 7,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "7wmpom29h",
+      "note": 80,
+      "start": 78,
+      "duration": 7,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "16d7q2ll4",
+      "note": 74,
+      "start": 78,
+      "duration": 7,
+      "velocity": 13,
+      "channel": 1
+    },
+    {
+      "id": "hledpv7ni",
+      "note": 73,
+      "start": 78,
+      "duration": 7,
+      "velocity": 13,
+      "channel": 2
+    },
+    {
+      "id": "laqtqzwoi",
+      "note": 80,
+      "start": 88,
+      "duration": 16,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "ocofis687",
+      "note": 74,
+      "start": 88,
+      "duration": 16,
+      "velocity": 13,
+      "channel": 1
+    },
+    {
+      "id": "hsjp5r3r7",
+      "note": 73,
+      "start": 88,
+      "duration": 16,
+      "velocity": 13,
+      "channel": 2
+    },
+    {
+      "id": "wbyvg5a8g",
+      "note": 80,
+      "start": 117,
+      "duration": 36,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "kq17pds2n",
+      "note": 72,
+      "start": 117,
+      "duration": 36,
+      "velocity": 13,
+      "channel": 1
+    },
+    {
+      "id": "8hsjfzzx5",
+      "note": 63,
+      "start": 117,
+      "duration": 36,
+      "velocity": 13,
+      "channel": 2
+    }
+  ],
+  "noise": [],
+  "loopStart": 0,
+  "loopEnd": 384
+}

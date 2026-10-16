@@ -9,3 +9,6 @@ output = "build/instrument_demo.bin"
 
 [[source]]
 path = "src/main.vpy"
+
+[sdk]
+version = "v1.3.2"

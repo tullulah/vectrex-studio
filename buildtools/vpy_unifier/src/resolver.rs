@@ -31,7 +31,7 @@ impl SymbolResolver {
             "".to_string()
         } else {
             // Other modules: UPPERCASE prefix
-            let prefix = module_name.to_uppercase();
+            let prefix = vpy_parser::symbols::module_prefix(module_name);
             self.module_prefixes
                 .insert(module_name.to_string(), prefix.clone());
             prefix
@@ -46,7 +46,7 @@ impl SymbolResolver {
             self.module_prefixes
                 .get(module_name)
                 .cloned()
-                .unwrap_or_else(|| module_name.to_uppercase())
+                .unwrap_or_else(|| vpy_parser::symbols::module_prefix(module_name))
         }
     }
 
@@ -59,13 +59,13 @@ impl SymbolResolver {
     /// # Returns
     /// The unified symbol name (with module prefix if applicable)
     pub fn resolve_symbol(&self, symbol: &str, module: &str) -> String {
-        let prefix = self.get_module_prefix(module);
-        if prefix.is_empty() {
+        if self.get_module_prefix(module).is_empty() {
             // No prefix for main module - keep original case
             symbol.to_string()
         } else {
-            // With prefix - uppercase prefix, original-case symbol (e.g., INPUT_get_input)
-            format!("{}_{}", prefix, symbol)
+            // With prefix - uppercase prefix, original-case symbol (e.g., INPUT_get_input).
+            // The one mangling function every phase uses.
+            vpy_parser::symbols::mangle(module, symbol)
         }
     }
 

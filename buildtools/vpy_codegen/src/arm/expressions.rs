@@ -5,8 +5,37 @@
 
 use vpy_parser::{Expr, BinOp, CmpOp, LogicOp, CallInfo};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::cell::RefCell;
+use std::collections::HashMap;
 
 static COND_LABEL_CTR: AtomicUsize = AtomicUsize::new(0);
+
+thread_local! {
+    /// Scalar integer constants (VPy `const NAME = N`) known at codegen time.
+    /// Reads of these idents fold directly to immediates instead of a RAM load,
+    /// so no RAM slot or startup initialisation is emitted for them.
+    /// Keyed by UPPERCASE name. Populated by functions::allocate_globals().
+    static SCALAR_CONSTS: RefCell<HashMap<String, i32>> = RefCell::new(HashMap::new());
+}
+
+/// Reset and populate the scalar-const fold table for a fresh compile.
+pub fn set_scalar_consts(consts: HashMap<String, i32>) {
+    SCALAR_CONSTS.with(|c| *c.borrow_mut() = consts);
+}
+
+/// Look up a scalar const value by UPPERCASE name.
+fn scalar_const(name_up: &str) -> Option<i32> {
+    SCALAR_CONSTS.with(|c| c.borrow().get(name_up).copied())
+}
+
+/// Emit code loading an integer literal into r0 (same rule as Expr::Number).
+fn emit_imm_r0(n: i32) -> String {
+    if (0..=65535).contains(&n) {
+        format!("    mov     r0, #{n}\n")
+    } else {
+        format!("    ldr     r0, ={n}\n")
+    }
+}
 
 /// Emit code that sets r0=1 if condition is true, r0=0 otherwise.
 /// `branch_if_false` is the branch mnemonic taken when the condition is FALSE
@@ -42,14 +71,26 @@ pub fn emit_expr(
 
         Expr::Ident(info) => {
             let name_up = info.name.to_uppercase();
-            if let Some(&addr) = var_addrs.get(&name_up) {
-                Ok(format!(
-                    "    ldr     r1, =0x{addr:08X}    @ {}\n    ldr     r0, [r1]\n",
-                    info.name
-                ))
-            } else {
-                Err(format!("Unknown variable: {}", info.name))
+            // Scalar consts fold to an immediate — no RAM round-trip — unless a
+            // parameter of the same name shadows the const.
+            if super::frame::slot(&name_up).is_none() {
+                if let Some(n) = scalar_const(&name_up) {
+                    return Ok(emit_imm_r0(n));
+                }
             }
+            // A function's name as a value: its address (Thumb bit set), for a
+            // call through a variable (`f = draw_tie` … `f(a, b)`).
+            if super::frame::slot(&name_up).is_none() && !var_addrs.contains_key(&name_up)
+                && crate::known_functions::is_defined(&info.name)
+            {
+                if name_up == "MAIN" || name_up == "LOOP" {
+                    return Err(format!("line {}: `{}` cannot be used as a value", info.source_line, info.name));
+                }
+                return Ok(format!("    ldr     r0, ={}    @ address of function {}\n", info.name, info.name));
+            }
+            // A parameter or local of the function being emitted (its stack
+            // frame), else a global at its fixed address.
+            super::frame::load_r0(&info.name, var_addrs)
         }
 
         Expr::Binary { op, left, right } => {
@@ -103,26 +144,30 @@ pub fn emit_expr(
         Expr::Logic { op, left, right } => {
             let mut s = String::new();
             match op {
+                // Labels of their own: numeric `1f`/`2f` would be caught by an `and`/`or`
+                // nested in the right operand (`a or (b and c)` was false when a was true).
                 LogicOp::And => {
                     // Short-circuit: if left is 0, result is 0
+                    let id = COND_LABEL_CTR.fetch_add(1, Ordering::Relaxed);
                     s.push_str(&emit_expr(left, var_addrs)?);
                     s.push_str("    cmp     r0, #0\n");
-                    s.push_str("    beq     1f\n");
+                    s.push_str(&format!("    beq     .Llg{id}\n"));
                     s.push_str(&emit_expr(right, var_addrs)?);
                     s.push_str("    cmp     r0, #0\n");
                     s.push_str(&bool_from_flags("beq"));
-                    s.push_str("    b       2f\n");
-                    s.push_str("1:  mov     r0, #0\n");
-                    s.push_str("2:\n");
+                    s.push_str(&format!("    b       .Llg{id}e\n"));
+                    s.push_str(&format!(".Llg{id}:\n    mov     r0, #0\n"));
+                    s.push_str(&format!(".Llg{id}e:\n"));
                 }
                 LogicOp::Or => {
+                    let id = COND_LABEL_CTR.fetch_add(1, Ordering::Relaxed);
                     s.push_str(&emit_expr(left, var_addrs)?);
                     s.push_str("    cmp     r0, #0\n");
-                    s.push_str("    bne     1f\n");
+                    s.push_str(&format!("    bne     .Llg{id}\n"));
                     s.push_str(&emit_expr(right, var_addrs)?);
-                    s.push_str("    b       2f\n");
-                    s.push_str("1:  mov     r0, #1\n");
-                    s.push_str("2:\n");
+                    s.push_str(&format!("    b       .Llg{id}e\n"));
+                    s.push_str(&format!(".Llg{id}:\n    mov     r0, #1\n"));
+                    s.push_str(&format!(".Llg{id}e:\n"));
                 }
             }
             Ok(s)
@@ -144,15 +189,16 @@ pub fn emit_expr(
         Expr::Call(info) => emit_call(info, var_addrs),
 
         Expr::Index { target, index } => {
+            let elem = super::arrays::of(target);
             let mut s = String::new();
             s.push_str(&emit_expr(target, var_addrs)?);
             s.push_str("    push    {r0}\n");
             s.push_str(&emit_expr(index, var_addrs)?);
             s.push_str("    mov     r1, r0\n");
             s.push_str("    pop     {r0}           @ base ptr\n");
-            s.push_str("    lsl     r1, r1, #1     @ index * 2 (i16 stride)\n");
+            s.push_str(&super::arrays::scale("r1", elem));
             s.push_str("    add     r0, r0, r1\n");
-            s.push_str("    ldrsh   r0, [r0]       @ sign-extend 16-bit load\n");
+            s.push_str(&format!("    {}   r0, [r0]       @ load {} element\n", super::arrays::load(elem), elem.type_name()));
             Ok(s)
         }
 
@@ -213,7 +259,7 @@ pub fn emit_expr(
 
 /// Builtins whose first argument is an asset name (string literal → ROM symbol address).
 const ASSET_BUILTINS: &[&str] = &[
-    "DRAW_VECTOR", "DRAW_VECTOR_EX", "DRAW_VECTOR_3D", "PLAY_MUSIC", "PLAY_SFX",
+    "DRAW_VECTOR", "DRAW_VECTOR_EX", "DRAW_VECTOR_3D", "DRAW_VECTOR_ROT", "PLAY_MUSIC", "PLAY_SFX",
     "LOAD_LEVEL", "SHOW_LEVEL", "PLAY_NOTE",
 ];
 
@@ -226,15 +272,40 @@ pub fn emit_call(
     info: &CallInfo,
     var_addrs: &std::collections::HashMap<String, u32>,
 ) -> Result<String, String> {
-    // Special case: len(arr) — resolved at compile time via ARRAY_NAME_LEN equate.
-    // Only works for simple variable-name arguments (the common case).
-    if (info.name == "len" || info.name == "LEN") && info.args.len() == 1 {
-        if let Some(vpy_parser::Expr::Ident(id)) = info.args.first() {
-            let varname = id.name.to_uppercase();
-            // Emit the compile-time constant directly — the assembler resolves it.
-            return Ok(format!("    ldr     r0, =ARRAY_{varname}_LEN\n"));
+    // len(arr) — the compile-time ARRAY_<NAME>_LEN equate. `validate::check_len_calls`
+    // has already rejected every other argument (with its line), as on m6809.
+    if info.name.eq_ignore_ascii_case("len") {
+        return match info.args.as_slice() {
+            [vpy_parser::Expr::Ident(id)] => {
+                Ok(format!("    ldr     r0, =ARRAY_{}_LEN\n", id.name.to_uppercase()))
+            }
+            _ => Err(format!("line {}: len() needs the name of a global array", info.source_line)),
+        };
+    }
+
+    // MUL_SHR(a, b, s): (a * b) >> s with a 64-bit product (`smull`), for Q14 maths
+    // whose product would overflow 32 bits. s in 0..31; the result is the low word.
+    if info.name.eq_ignore_ascii_case("MUL_SHR") {
+        if info.args.len() != 3 {
+            return Err(format!("line {}: MUL_SHR(a, b, shift) takes 3 arguments, got {}", info.source_line, info.args.len()));
         }
-        // Fallthrough for non-Var args → returns 0 via vpy_len
+        let mut s = String::new();
+        for a in &info.args {
+            s.push_str(&emit_expr(a, var_addrs)?);
+            s.push_str("    push    {r0}\n");
+        }
+        s.push_str("    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
+        s.push_str("    smull   r3, r12, r0, r1    @ r12:r3 = a * b\n");
+        s.push_str("    lsr     r3, r3, r2\n");
+        s.push_str("    rsb     r2, r2, #32\n");
+        s.push_str("    lsl     r12, r12, r2       @ (a shift of 32 gives 0)\n");
+        s.push_str("    orr     r0, r3, r12        @ MUL_SHR\n");
+        return Ok(s);
+    }
+
+    // 3D builtins (vpy3d, uvm2): calls into the C bridge.
+    if let Some(code) = super::three_d::emit_call(info, var_addrs) {
+        return code;
     }
 
     // Enemy system builtins — implemented on rp2350 via vpy_spawn/update/draw_enemies.
@@ -259,6 +330,21 @@ pub fn emit_call(
         }
     }
 
+    // SET_INTENSITY(v): record a per-frame brightness override (read by
+    // DRAW_VECTOR / DRAW_VECTOR_3D so brightness animates, mirroring PiTrex) AND
+    // write the DAC. The override is written ONLY here — never inside the draw
+    // routines — so per-path .vec intensities remain intact when SET_INTENSITY
+    // is not used. Reset to 0 once per frame in functions.rs.
+    if info.name == "SET_INTENSITY" && info.args.len() == 1 {
+        let mut s = String::new();
+        s.push_str(&emit_expr(&info.args[0], var_addrs)?); // r0 = intensity
+        s.push_str("    and     r0, r0, #0x7F\n");
+        s.push_str("    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE\n");
+        s.push_str("    strb    r0, [r1]            @ record override for DRAW_VECTOR*\n");
+        s.push_str("    bl      vpy_set_intensity   @ writes the DAC (r0 preserved)\n");
+        return Ok(s);
+    }
+
     let fn_name = match info.name.as_str() {
         "WAIT_RECAL"      => "vpy_wait_recal",
         "SET_INTENSITY"   => "vpy_set_intensity",
@@ -275,6 +361,7 @@ pub fn emit_call(
         "DRAW_VECTOR"     => "vpy_draw_vector",
         "DRAW_VECTOR_EX"  => "vpy_draw_vector_ex",
         "DRAW_VECTOR_3D"  => "vpy_draw_vector_3d",
+        "DRAW_RECORDING"  => "vpy_draw_recording",
         "PRINT_TEXT"      => "vpy_print_text",
         "PRINT_NUMBER"    => "vpy_print_number",
         "PLAY_MUSIC"      => "vpy_play_music",
@@ -283,6 +370,7 @@ pub fn emit_call(
         "PLAY_NOTE"       => "vpy_play_note",
         "LOAD_LEVEL"      => "vpy_load_level",
         "SHOW_LEVEL"      => "vpy_show_level",
+        "SAMPLE_POS"      => "vpy_sample_pos",
         "J1_X"            => "vpy_j1_x",
         "J1_Y"            => "vpy_j1_y",
         "J1_BTN1" | "J1_BUTTON_1" => "vpy_j1_btn1",
@@ -323,19 +411,24 @@ pub fn emit_call(
         "GET_SCROLL_LIMIT_BOTTOM"=> "vpy_get_scroll_limit_bottom",
         "GET_LEVEL_FLOOR_Y"      => "vpy_get_level_floor_y",
         "GET_FRAME_US"           => "vpy_get_frame_us",
+        // SD card game list (BIOS serves the data; VPy owns presentation)
+        "SD_FILE_COUNT"          => "vpy_sd_count",
+        "SD_FILE_NAME"           => "vpy_sd_name",
+        "DRAW_SD_PREVIEW"        => "vpy_draw_sd_preview",
+        "LAUNCH_GAME"            => "vpy_launch_game",
+        "CALIBRATE"              => "vpy_calibrate",
         // Message system
         "MSG_DEF"         => "vpy_msg_def",
         "PRINT_MSG"       => "vpy_print_msg",
         // Text/display extras
         "SET_TEXT_SIZE"   => "vpy_set_text_size",
-        "SET_TEXT_COLOR"  => "vpy_set_text_color",
+        // SET_TEXT_COLOR removed — YAGNI on a monochrome console; use SET_INTENSITY.
         "UPDATE_LEVEL"    => "vpy_update_level",
         // Misc
         "beep" | "BEEP"   => "vpy_beep",
         "wait" | "WAIT"   => "vpy_wait",
         "peek" | "PEEK"   => "vpy_peek",
         "poke" | "POKE"   => "vpy_poke",
-        "len" | "LEN"     => "vpy_len",
         // Animation
         "DRAW_ANIM"       => "vpy_draw_anim",
         // Enemy pool operations — ARM implementations
@@ -487,6 +580,39 @@ pub fn emit_call(
         }
     }
 
+    // Special case: DRAW_VECTOR_ROT("name", x, y, angle [, mirror [, intensity]])
+    // ABI: r0=_NAME_VECTORS, r1=x, r2=y, r3=angle, [sp]=mirror, [sp+4]=intensity.
+    // Without an intensity argument the SET_INTENSITY override of the frame is
+    // passed (0 = each path's own), as plain DRAW_VECTOR does.
+    if info.name == "DRAW_VECTOR_ROT" {
+        if let Some(Expr::StringLit(asset_name)) = args.first() {
+            let sym_base = asset_name.to_uppercase().replace('-', "_").replace(' ', "_");
+            let symbol = format!("_{sym_base}_VECTORS");
+            if let Some(intensity) = args.get(5) {
+                s.push_str(&emit_arg(intensity, var_addrs)?);
+            } else {
+                s.push_str("    ldr     r0, =VPY_BRIGHTNESS_OVERRIDE\n    ldrb    r0, [r0]\n");
+            }
+            s.push_str("    push    {r0}\n");
+            if let Some(mirror) = args.get(4) {
+                s.push_str(&emit_arg(mirror, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+            s.push_str(&format!("    ldr     r0, ={symbol}    @ asset '{asset_name}'\n"));
+            s.push_str("    push    {r0}\n");
+            for a in &args[1..4] {
+                s.push_str(&emit_arg(a, var_addrs)?);
+                s.push_str("    push    {r0}\n");
+            }
+            s.push_str("    pop     {r3}\n    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
+            s.push_str("    bl      vpy_draw_vector_rot\n");
+            s.push_str("    add     sp, sp, #8          @ discard mirror, intensity\n");
+            return Ok(s);
+        }
+    }
+
     // Special case: DRAW_VECTOR_EX(asset, ox, oy, mirror, intensity)
     // ABI: r0=asset_ptr, r1=ox, r2=oy, r3=mirror, [sp+0]=intensity
     // intensity MUST be on the stack BEFORE the call (and cleaned up after).
@@ -531,6 +657,70 @@ pub fn emit_call(
             s.push_str("    pop     {r3}\n    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
             s.push_str("    bl      vpy_draw_vector_ex\n");
             s.push_str("    add     sp, sp, #4\n"); // discard intensity from stack
+            return Ok(s);
+        }
+    }
+
+    // Special case: DRAW_RECORDING("name", x, y, scale, frame) — .vrec playback.
+    // ABI: r0=_NAME_VREC, r1=x, r2=y, r3=scale (0-128, 128=100%), [sp+0]=frame.
+    // frame is a free-running counter — vpy_draw_recording takes frame %
+    // frame_count internally. Same stack-arg pattern as DRAW_VECTOR_EX.
+    if info.name == "DRAW_RECORDING" {
+        if let Some(Expr::StringLit(rec_name)) = args.first() {
+            let sym_base = rec_name.to_uppercase().replace('-', "_").replace(' ', "_");
+            let symbol = format!("_{sym_base}_VREC");
+            let runtime: Vec<&Expr> = args.iter().skip(1).collect();
+            // Push frame first so it sits at [sp] when the routine reads [sp+32]
+            // (after its push of 8 regs = 32 bytes).
+            if let Some(frame) = runtime.get(3) {
+                s.push_str(&emit_arg(frame, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+            // r0 = recording ptr
+            s.push_str(&format!("    ldr     r0, ={symbol}    @ recording '{rec_name}'\n"));
+            s.push_str("    push    {r0}\n");
+            // r1 = x
+            if let Some(x) = runtime.first() {
+                s.push_str(&emit_arg(x, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+            // r2 = y
+            if let Some(y) = runtime.get(1) {
+                s.push_str(&emit_arg(y, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+            // r3 = scale (default 128 = 100%)
+            if let Some(scale) = runtime.get(2) {
+                s.push_str(&emit_arg(scale, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #128\n");
+            }
+            s.push_str("    push    {r0}\n");
+            // pop r3=scale, r2=y, r1=x, r0=recording ptr; frame stays at [sp]
+            s.push_str("    pop     {r3}\n    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
+            s.push_str("    bl      vpy_draw_recording\n");
+            s.push_str("    add     sp, sp, #4\n"); // discard frame from stack
+            return Ok(s);
+        }
+    }
+
+    // Special case: PLAY_SAMPLE("name") — .vsmp audio-sample playback.
+    // ABI: r0 = _NAME_SMP (ROM table ptr). vpy_play_sample is an SVC trap that
+    // hands the sample off to the core1 audio streamer. Resolves the
+    // string-literal name to the `_<NAME>_SMP` symbol, same as DRAW_RECORDING.
+    if info.name == "PLAY_SAMPLE" {
+        if let Some(Expr::StringLit(smp_name)) = args.first() {
+            let sym_base = smp_name.to_uppercase().replace('-', "_").replace(' ', "_");
+            let symbol = format!("_{sym_base}_SMP");
+            let mut s = String::new();
+            s.push_str(&format!("    ldr     r0, ={symbol}    @ sample '{smp_name}'\n"));
+            s.push_str("    bl      vpy_play_sample\n");
             return Ok(s);
         }
     }
@@ -651,7 +841,19 @@ pub fn emit_call(
         })
         .collect();
 
-    // Emit asset name as first register (r0 = address of asset data in ROM)
+    let n_asset = if is_asset_builtin { 1 } else { 0 };
+    let total_reg_args = runtime_args.len() + n_asset;
+    let n_extra = total_reg_args.saturating_sub(4);
+    let n_skip = (4usize).saturating_sub(n_asset);
+
+    // Extra args right-to-left
+    for (_, arg) in runtime_args.iter().skip(n_skip).rev() {
+        s.push_str(&emit_arg(arg, var_addrs)?);
+        s.push_str("    push    {r0}\n");
+    }
+    // The register args: the asset name first (r0 = address of asset data in ROM), then
+    // the first runtime args
+    let mut reg_codes: Vec<String> = Vec::new();
     if is_asset_builtin {
         if let Some(Expr::StringLit(asset_name)) = args.first() {
             let sym_base = asset_name.to_uppercase().replace('-', "_").replace(' ', "_");
@@ -664,32 +866,42 @@ pub fn emit_call(
                 _                          => "VECTORS",
             };
             let symbol = format!("_{sym_base}_{suffix}");
-            s.push_str(&format!("    ldr     r0, ={symbol}    @ asset '{asset_name}'\n"));
-            s.push_str("    push    {r0}\n");
+            reg_codes.push(format!("    ldr     r0, ={symbol}    @ asset '{asset_name}'\n"));
+        }
+    }
+    for (_, arg) in runtime_args.iter().take(n_skip) {
+        reg_codes.push(emit_arg(arg, var_addrs)?);
+    }
+    s.push_str(&emit_reg_args(&reg_codes));
+
+    // A variable (parameter, local or global) holding a function's address: call
+    // what it holds. The arguments are already in r0-r3 (and on the stack).
+    if fn_name == info.name.as_str() && !crate::known_functions::is_defined(&info.name) {
+        let up = info.name.to_uppercase();
+        let target = if let Some(off) = super::frame::slot(&up) {
+            Some(format!("    ldr     r12, [{}, #{off}]    @ {}\n", super::frame::FP, info.name))
+        } else {
+            var_addrs.get(&up).map(|addr| format!("    ldr     r12, =0x{addr:08X}    @ {}\n    ldr     r12, [r12]\n", info.name))
+        };
+        if let Some(load) = target {
+            s.push_str(&load);
+            s.push_str("    orr     r12, r12, #1    @ Thumb\n");
+            s.push_str("    blx     r12\n");
+            if n_extra > 0 {
+                s.push_str(&format!("    add     sp, sp, #{}\n", n_extra * 4));
+            }
+            return Ok(s);
         }
     }
 
-    let n_asset = if is_asset_builtin { 1 } else { 0 };
-    let total_reg_args = runtime_args.len() + n_asset;
-    let n_extra = total_reg_args.saturating_sub(4);
-    let n_skip = (4usize).saturating_sub(n_asset);
-
-    // Extra args right-to-left
-    for (_, arg) in runtime_args.iter().skip(n_skip).rev() {
-        s.push_str(&emit_arg(arg, var_addrs)?);
-        s.push_str("    push    {r0}\n");
+    // An unmapped name must be a user function; anything else would only fail
+    // at link time ("undefined reference") without a source line.
+    if fn_name == info.name.as_str() {
+        if !crate::known_functions::is_defined(&info.name) {
+            return Err(crate::known_functions::unknown_call_error(&info.name, info.source_line));
+        }
+        crate::known_functions::check_arity(&info.name, args.len(), info.source_line)?;
     }
-    // First register args
-    for (_, arg) in runtime_args.iter().take(n_skip) {
-        s.push_str(&emit_arg(arg, var_addrs)?);
-        s.push_str("    push    {r0}\n");
-    }
-
-    let nreg = total_reg_args.min(4);
-    for i in (0..nreg).rev() {
-        s.push_str(&format!("    pop     {{r{i}}}\n"));
-    }
-
     s.push_str(&format!("    bl      {fn_name}\n"));
 
     let nextra = n_extra;
@@ -700,9 +912,64 @@ pub fn emit_call(
     Ok(s)
 }
 
+/// A leaf argument's code -- a constant, a frame slot (parameter or local), or (globals_ok)
+/// a global -- loaded straight into `r{reg}` instead of r0; None when it is anything more.
+pub(crate) fn leaf_into(code: &str, reg: usize, globals_ok: bool) -> Option<String> {
+    let lines: Vec<String> = code
+        .lines()
+        .map(|l| l.split('@').next().unwrap_or("").split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|l| !l.is_empty())
+        .collect();
+    match lines.as_slice() {
+        [one] => {
+            if let Some(v) = one.strip_prefix("mov r0, #") {
+                return Some(format!("    mov     r{reg}, #{v}\n"));
+            }
+            if let Some(v) = one.strip_prefix("ldr r0, =") {
+                return Some(format!("    ldr     r{reg}, ={v}\n"));
+            }
+            let slot = one.strip_prefix("ldr r0, [r7, #")?;
+            Some(format!("    ldr     r{reg}, [r7, #{slot}\n"))
+        }
+        [a, b] if globals_ok && b == "ldr r0, [r1]" => {
+            let addr = a.strip_prefix("ldr r1, =")?;
+            Some(format!("    ldr     r{reg}, ={addr}\n    ldr     r{reg}, [r{reg}]\n"))
+        }
+        _ => None,
+    }
+}
+
+/// The register arguments of a call (each code leaves its value in r0) into r0-r3: the
+/// others evaluated and pushed in order and popped into their registers, then the leaves
+/// loaded straight in -- not a push and a pop each. A global is a leaf only when no other
+/// argument makes a call (which could change it: Python reads it first).
+pub(crate) fn emit_reg_args(codes: &[String]) -> String {
+    let codes = &codes[..codes.len().min(4)];
+    // (any `bl…` at all counts: a call, or a branch that may hide one -- erring towards loading
+    // the global in order)
+    let calls = codes.iter().any(|c| leaf_into(c, 0, false).is_none() && c.contains("bl"));
+    let leaves: Vec<Option<String>> = codes.iter().enumerate().map(|(i, c)| leaf_into(c, i, !calls)).collect();
+    let mut s = String::new();
+    for (c, leaf) in codes.iter().zip(&leaves) {
+        if leaf.is_none() {
+            s.push_str(c);
+            s.push_str("    push    {r0}\n");
+        }
+    }
+    for i in (0..codes.len()).rev() {
+        if leaves[i].is_none() {
+            s.push_str(&format!("    pop     {{r{i}}}\n"));
+        }
+    }
+    for leaf in leaves.iter().flatten() {
+        s.push_str(leaf);
+    }
+    s
+}
+
 /// Emit one function argument into r0.
 /// Handles string literals as inline PC-relative data (branch-over trick).
-fn emit_arg(
+pub(crate) fn emit_arg(
     expr: &Expr,
     var_addrs: &std::collections::HashMap<String, u32>,
 ) -> Result<String, String> {
@@ -710,14 +977,22 @@ fn emit_arg(
         static STR_CTR: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let id = STR_CTR.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let label = format!("_arg_str_{id}");
-        // Branch over the string data, load its address into r0
+        // Branch over the string data, load its address into r0.
+        //
+        // The `.ltorg` MUST sit between the branch and the string data — i.e. in
+        // the region the branch skips — NOT at `{label}_end`. If it were at
+        // `{label}_end` (the branch target), any pending literal-pool constants
+        // would be emitted as data exactly where execution lands, and the CPU
+        // would execute them as instructions → HardFault. Flushing the pool here
+        // (skipped by the branch) keeps the function's pool in range while the
+        // landing site stays pure code.
         let s = format!(
             "    b       {label}_end\n\
+             .ltorg\n\
              {label}:\n\
              .asciz  \"{text}\"\n\
              .align  2\n\
              {label}_end:\n\
-             .ltorg\n\
              ldr     r0, ={label}\n"
         );
         Ok(s)
@@ -744,6 +1019,41 @@ mod tests {
             col: 0,
             args: vec![vpy_parser::Expr::Number(arg)],
         }
+    }
+
+    /// SD game-list builtins must lower to the vpy_sd_* SVC stubs, and a
+    /// SD_FILE_NAME(i) result must thread into PRINT_TEXT's str_ptr register (r2).
+    #[test]
+    fn test_arm_sd_builtins() {
+        let var_addrs = std::collections::HashMap::new();
+
+        let count = emit_call(&make_call("SD_FILE_COUNT"), &var_addrs).unwrap();
+        assert!(count.contains("bl      vpy_sd_count"),
+            "SD_FILE_COUNT must emit `bl vpy_sd_count` (got: {count:?})");
+
+        let name = emit_call(&make_call_with_arg("SD_FILE_NAME", 0), &var_addrs).unwrap();
+        assert!(name.contains("bl      vpy_sd_name"),
+            "SD_FILE_NAME must emit `bl vpy_sd_name` (got: {name:?})");
+
+        // PRINT_TEXT(x, y, SD_FILE_NAME(i)) — the name pointer (3rd arg) must be
+        // evaluated via vpy_sd_name and land in r2 before vpy_print_text.
+        let pt = CallInfo {
+            name: "PRINT_TEXT".to_string(),
+            source_line: 0,
+            col: 0,
+            args: vec![
+                vpy_parser::Expr::Number(-50),
+                vpy_parser::Expr::Number(40),
+                vpy_parser::Expr::Call(make_call_with_arg("SD_FILE_NAME", 0)),
+            ],
+        };
+        let asm = emit_call(&pt, &var_addrs).unwrap();
+        assert!(asm.contains("bl      vpy_sd_name"),
+            "PRINT_TEXT with SD_FILE_NAME must evaluate the name pointer (got: {asm:?})");
+        let name_pos = asm.find("bl      vpy_sd_name").unwrap();
+        let print_pos = asm.find("bl      vpy_print_text").unwrap();
+        assert!(name_pos < print_pos,
+            "name pointer must be resolved before the print_text call (got: {asm:?})");
     }
 
     /// Regression test for Bug 1: M6809-only enemy builtins must be no-ops on
@@ -793,6 +1103,32 @@ mod tests {
         // SPAWN_ENEMIES with no level arg is a no-op.
         let sa_asm = emit_call(&make_call("SPAWN_ENEMIES"), &var_addrs).unwrap();
         assert!(sa_asm.contains("no-op"), "SPAWN_ENEMIES (no arg) should be no-op");
+    }
+
+    /// DRAW_RECORDING("name", x, y, scale, frame) — .vrec playback call site.
+    /// r0=_NAME_VREC, r1=x, r2=y, r3=scale, [sp]=frame (cleaned up after call).
+    #[test]
+    fn test_arm_draw_recording_call() {
+        let var_addrs = std::collections::HashMap::new();
+        let info = CallInfo {
+            name: "DRAW_RECORDING".to_string(),
+            source_line: 0,
+            col: 0,
+            args: vec![
+                vpy_parser::Expr::StringLit("snow-bros preview".to_string()),
+                vpy_parser::Expr::Number(0),
+                vpy_parser::Expr::Number(10),
+                vpy_parser::Expr::Number(45),
+                vpy_parser::Expr::Number(7),
+            ],
+        };
+        let asm = emit_call(&info, &var_addrs).unwrap();
+        assert!(asm.contains("ldr     r0, =_SNOW_BROS_PREVIEW_VREC"),
+            "must resolve recording name to _NAME_VREC symbol (got: {asm:?})");
+        assert!(asm.contains("bl      vpy_draw_recording"),
+            "must call vpy_draw_recording (got: {asm:?})");
+        assert!(asm.contains("add     sp, sp, #4"),
+            "must clean up the frame stack arg (got: {asm:?})");
     }
 
     /// SPAWN_ENEMIES / UPDATE_ENEMIES / DRAW_ENEMIES were already no-ops before

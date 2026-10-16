@@ -7,6 +7,10 @@ interface VecPath {
   name: string;
   points: { x: number; y: number }[];
   intensity: number;
+  /** Una intensidad por SEGMENTO (len(points)-1), cuando el .vec la trae. Es como se
+   *  escriben los escenarios fusionados: un solo camino que cruza la pantalla con los
+   *  huecos entre figuras a 0. Sin esto el campo existia en el fichero y aqui no. */
+  intensities?: number[];
   closed: boolean;
 }
 
@@ -132,7 +136,15 @@ export function PlaygroundPanel() {
   const [draggingLevelTransitionEndpoint, setDraggingLevelTransitionEndpoint] = useState<
     { transIdx: number; endpoint: 'from' | 'to' } | null
   >(null);
-  const [screenBackgrounds, setScreenBackgrounds] = useState<{ screenIndex: number; imagePath: string; offsetY?: number }[]>([]);
+  const [screenBackgrounds, setScreenBackgrounds] = useState<{ screenIndex: number; imagePath: string; offsetY?: number; keepAspect?: boolean }[]>([]);
+  /* EL MARCADOR DE UNIDADES SE CONSERVA, y esto no es cosmetico.
+   *
+   * El guardado reconstruye la escena entera desde cero, asi que cualquier campo que este
+   * panel no conozca DESAPARECE al guardar. `units: "beam"` dice que las piezas estan en
+   * unidades de haz, y sin el `dk_vplay.py` se niega a componer. Abriendo y guardando un
+   * .vplay migrado se perdia el marcador y con el la migracion entera — 40 puntos de
+   * 25m-vigas.vec y los desplazamientos de los 18 objetos, revertidos en silencio. */
+  const [units, setUnits] = useState<string | undefined>(undefined);
   const [availableImages, setAvailableImages] = useState<string[]>([]);
   // Level-wide walkable areas + transitions. Enemies whose own `walkable_areas`
   // is `undefined` inherit these at codegen time (and at preview time via the
@@ -354,13 +366,16 @@ export function PlaygroundPanel() {
           return;
         }
 
-        // Get vectors from project config
-        const vectorResources = vpyProject.config.resources?.vectors;
+        // Get vectors from project config. VPy projects (.vpyproj) list them under
+        // [resources] vectors; C-external projects (.cvproj) have no such config, so
+        // fall back to the conventional assets/vectors/ dir — the .vec files are
+        // physically there regardless of project type (the glob logic below scans it).
+        let vectorResources = vpyProject.config?.resources?.vectors;
         console.log('[Playground] Vector resources:', vectorResources);
-        
+
         if (!vectorResources || vectorResources.length === 0) {
-          console.log('[Playground] No vectors in project');
-          return;
+          console.log('[Playground] No vectors in project config — scanning assets/vectors/');
+          vectorResources = ['assets/vectors/*.vec'];
         }
 
         const projectPath = vpyProject.rootDir;
@@ -1030,6 +1045,7 @@ export function PlaygroundPanel() {
         ...(Object.keys(scrollLimits).some(k => (scrollLimits as any)[k] !== undefined)
           ? { scrollLimits }
           : {}),
+        ...(units ? { units } : {}),
         _editorMeta: {
           ...(screenBackgrounds.length > 0 ? { screenBackgrounds } : {}),
           groundBottomOffset,
@@ -1117,6 +1133,7 @@ export function PlaygroundPanel() {
       setHotspots(sceneData.hotspots || []);
       setScrollLimits(sceneData.scrollLimits || {});
       setScreenBackgrounds((sceneData._editorMeta?.screenBackgrounds) || []);
+      setUnits((sceneData as any).units);
       // Level-wide walkable areas / transitions (Phase 2 inheritance source).
       setLevelWalkableAreas((sceneData as any).walkable_areas ?? []);
       setLevelTransitions((sceneData as any).transitions ?? []);
@@ -1801,6 +1818,12 @@ export function PlaygroundPanel() {
   };
 
   // Render a vector sprite from loaded .vec data
+  /* UNA UNIDAD DE JUEGO NO ES UNA UNIDAD DE HAZ. Con `units: "game"` las piezas estan en
+   * la rejilla de la recreativa —que es donde vive el escenario del arcade, y la unica en
+   * la que un paso de peldano de 4 es entero— y hay que pintarlas a 110/127 para que en
+   * este panel midan lo mismo que en la consola. Ver el campo `units` de VectorEditor. */
+  const escalaPieza = units === 'game' ? 110 / 127 : 1;
+
   const renderVector = (obj: SceneObject) => {
     // Enemy objects: try to render their sprite vector, fall back to diamond marker
     if (obj.type === 'enemy') {
@@ -1820,7 +1843,7 @@ export function PlaygroundPanel() {
         return (
           <g
             key={obj.id}
-            transform={`translate(${svgPos.x}, ${svgPos.y}) scale(${scaleX}, ${obj.scale}) rotate(${obj.rotation})`}
+            transform={`translate(${svgPos.x}, ${svgPos.y}) scale(${scaleX * escalaPieza}, ${obj.scale * escalaPieza}) rotate(${obj.rotation})`}
             onMouseDown={(e) => handleObjectMouseDown(e, obj.id)}
             style={{ cursor: draggingObjectId === obj.id ? 'grabbing' : 'grab' }}
           >
@@ -1892,7 +1915,7 @@ export function PlaygroundPanel() {
     return (
       <g
         key={obj.id}
-        transform={`translate(${svgPos.x}, ${svgPos.y}) scale(${obj.scale}) rotate(${obj.rotation})`}
+        transform={`translate(${svgPos.x}, ${svgPos.y}) scale(${obj.scale * escalaPieza}) rotate(${obj.rotation})`}
         onMouseDown={(e) => handleObjectMouseDown(e, obj.id)}
         style={{ cursor: draggingObjectId === obj.id ? 'grabbing' : 'grab' }}
       >
@@ -1901,8 +1924,11 @@ export function PlaygroundPanel() {
           
           return layer.paths.map((path, pathIdx) => {
             const points = path.points.map(p => `${p.x},${-p.y}`).join(' ');
-            // Map intensity to opacity with a minimum floor so dim vecs stay visible
-            const opacity = 0.5 + (path.intensity / 255) * 0.5;
+            // INTENSITY IS 0..127, NOT 0..255. This used to divide by 255 on top of a
+            // 0.5 floor, which squeezed every path into opacity 0.50..0.75 — a blanked
+            // path at intensity 0 came out at 0.50 and a full-brightness one at 0.75, so
+            // the whole scene looked flat and the dark hops looked like real lines.
+            const dim = (i: number) => Math.max(0, Math.min(1, i / 127));
             // Color coding: green=selected, blue=collidable, cyan=non-collidable
             let color = '#00ffff'; // default cyan (non-collidable)
             if (isSelected) {
@@ -1910,7 +1936,46 @@ export function PlaygroundPanel() {
             } else if (obj.collidable === true) {
               color = '#6699ff'; // blue for collidable
             }
+            // ONE SCREEN PIXEL, whatever the zoom. The viewBox is 192 units wide, so a
+            // strokeWidth of 1.5 was ~6px on a normal panel: thick enough to hide which
+            // side of a girder a ladder lands on, which is exactly what this view is for.
+            const trazo = { strokeWidth: 1, vectorEffect: 'non-scaling-stroke' as const };
 
+            // PER-SEGMENT INTENSITY. A fused piece is ONE path that crosses the whole
+            // screen with the gaps between shapes carried as intensity-0 segments (see
+            // tools/dk_fusiona_paths.py). Drawing the path with a single opacity paints
+            // those dark hops as if they were lines. Each segment gets its own.
+            // LA MISMA REGLA QUE EL COMPILADOR, no una parecida. Esto exigia que la lista
+            // midiese EXACTAMENTE points-1 y seis caminos del 100m traen dos entradas de
+            // mas: se caian al camino de una sola opacidad y sus saltos a oscuras salian
+            // solidos, que es justo donde la intensidad por segmento importaba. La cadena
+            // de compilacion siempre fue tolerante — recorta a los tramos que hay y
+            // rellena lo que falte con la intensidad del camino. Dos implementaciones del
+            // mismo modelo que no coinciden son dos modelos, y aqui el dibujo del editor
+            // mentia sobre lo que la consola iba a hacer.
+            if (path.intensities && path.intensities.length > 0) {
+              const seg = path.points.length - 1;
+              const ints = path.intensities.slice(0, seg);
+              while (ints.length < seg) ints.push(path.intensity ?? 127);
+              return path.points.slice(0, -1).map((p, i) => {
+                const q = path.points[i + 1];
+                const v = dim(ints[i]);
+                return (
+                  <line
+                    key={`${layerIdx}-${pathIdx}-${i}`}
+                    x1={p.x} y1={-p.y} x2={q.x} y2={-q.y}
+                    stroke={color}
+                    {...trazo}
+                    // un tramo apagado se recorre pero no se dibuja: se ve, para saber
+                    // por donde va el haz, pero no se puede confundir con un trazo
+                    strokeDasharray={v === 0 ? '2 3' : undefined}
+                    opacity={v === 0 ? 0.15 : 0.35 + v * 0.65}
+                  />
+                );
+              });
+            }
+
+            const opacity = 0.35 + dim(path.intensity ?? 127) * 0.65;
             if (path.closed) {
               // Closed polygon
               return (
@@ -1919,7 +1984,7 @@ export function PlaygroundPanel() {
                   points={points}
                   fill="none"
                   stroke={color}
-                  strokeWidth="1.5"
+                  {...trazo}
                   opacity={opacity}
                 />
               );
@@ -1931,7 +1996,7 @@ export function PlaygroundPanel() {
                   points={points}
                   fill="none"
                   stroke={color}
-                  strokeWidth="1.5"
+                  {...trazo}
                   opacity={opacity}
                 />
               );
@@ -2556,15 +2621,31 @@ export function PlaygroundPanel() {
               const svgScreenIdx = heightScreens - 1 - sb.screenIndex;
               const offsetY = sb.offsetY ?? 0;
               return (
+                /* EL FONDO VA DONDE EL JUEGO LO VA A PONER, NO A LLENAR LA PANTALLA.
+                 *
+                 * Estirado a 192x256 la imagen llena el rectangulo de PANTALLA, y con las
+                 * piezas en unidades de haz eso no cuadra: una captura de arcade mide
+                 * 224x256 unidades DE JUEGO y el puerto la lleva al haz multiplicando por
+                 * 110/127 en los dos ejes — 194x222 de haz. O sea que el dibujo del juego
+                 * no llena la pantalla del Vectrex: llena el ancho y se queda en el 87%
+                 * del alto.
+                 *
+                 * Con el fondo estirado y las piezas en haz, el mismo .vec que en el
+                 * editor de vectores cuadra clavado aqui salia ESTIRADO. Es el mismo
+                 * encaje 'playfield' que usa VectorEditor; aqui hay que repetirlo porque
+                 * este panel dibuja el fondo por su cuenta.
+                 *
+                 * Solo para escenas en unidades de haz: las de antes siguen estirandose. */
                 <image
                   key={`sbg_${sb.screenIndex}`}
                   href={dataUrl}
-                  x={0}
-                  y={svgScreenIdx * 256 + offsetY}
-                  width={192 * widthScreens}
-                  height={256}
+                  x={units === 'beam' || units === 'game' ? (192 - 224 * 110 / 127) / 2 : 0}
+                  y={svgScreenIdx * 256 + offsetY
+                     + (units === 'beam' || units === 'game' ? (256 - 256 * 110 / 127) / 2 : 0)}
+                  width={units === 'beam' || units === 'game' ? 224 * 110 / 127 : 192 * widthScreens}
+                  height={units === 'beam' || units === 'game' ? 256 * 110 / 127 : 256}
                   opacity={0.25}
-                  preserveAspectRatio="none"
+                  preserveAspectRatio={sb.keepAspect ? 'xMidYMid meet' : 'none'}
                   clipPath={`url(#sbgclip_${sb.screenIndex})`}
                   style={{ pointerEvents: 'none' }}
                 />
@@ -4103,6 +4184,23 @@ export function PlaygroundPanel() {
                               title="Reset offset"
                               style={{ background: 'none', border: 'none', color: '#446644', cursor: 'pointer', fontSize: '10px', padding: '0 2px' }}
                             >↺</button>
+                            <label
+                              title="Keep image aspect ratio (don't stretch to fill the screen)"
+                              style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '9px', color: '#556655', cursor: 'pointer', flexShrink: 0 }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={sb.keepAspect ?? false}
+                                onChange={e => {
+                                  const checked = e.target.checked;
+                                  setScreenBackgrounds(prev => prev.map(s =>
+                                    s.screenIndex === i ? { ...s, keepAspect: checked } : s
+                                  ));
+                                }}
+                                style={{ accentColor: '#446644', width: '10px', height: '10px' }}
+                              />
+                              aspect
+                            </label>
                           </div>
                         )}
                       </div>

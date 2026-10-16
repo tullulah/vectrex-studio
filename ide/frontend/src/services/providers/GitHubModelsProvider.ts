@@ -15,14 +15,14 @@ export class GitHubModelsProvider extends BaseAiProvider {
 
   public async sendRequest(request: AiRequest): Promise<AiResponse> {
     if (!this.isConfigured()) {
-      throw new Error('GitHub Models API key no configurada');
+      throw new Error('GitHub Models API key not configured');
     }
 
     try {
       const systemPrompt = this.buildSystemPrompt(request.concise ?? false);
       const userPrompt = this.buildUserPrompt(request);
 
-      // GitHub Models API endpoint correcto
+      // Correct GitHub Models API endpoint
       const apiUrl = `${this.baseUrl}/models/chat/completions`;
       
       const response = await fetch(apiUrl, {
@@ -35,7 +35,7 @@ export class GitHubModelsProvider extends BaseAiProvider {
           'User-Agent': 'PyPilot-VPy-IDE/1.0'
         },
         body: JSON.stringify({
-          model: this.config.model || 'gpt-4o', // Modelos disponibles: gpt-4o, gpt-4o-mini, etc.
+          model: this.config.model || 'gpt-4o', // Available models: gpt-4o, gpt-4o-mini, etc.
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt }
@@ -51,27 +51,27 @@ export class GitHubModelsProvider extends BaseAiProvider {
         let errorMessage = `GitHub Models API error: ${response.status} ${response.statusText}`;
         
         if (response.status === 401) {
-          errorMessage = `🔑 Error de autenticación (401): 
-• Verifica que tu API key sea correcta (debe empezar con 'ghp_' o 'ghs_')
-• Asegúrate de tener acceso a GitHub Models en tu cuenta
-• El token debe tener permisos de 'repo' y acceso a Models
-• GitHub Models puede estar en beta limitada en tu región
+          errorMessage = `🔑 Authentication error (401): 
+• Check that your API key is correct (it must start with 'ghp_' or 'ghs_')
+• Make sure your account has access to GitHub Models
+• The token needs 'repo' permissions and access to Models
+• GitHub Models may be in a limited beta in your region
 
-Detalles técnicos: ${errorText}`;
+Technical details: ${errorText}`;
         } else if (response.status === 403) {
-          errorMessage = `🚫 Acceso denegado (403):
-• GitHub Models puede no estar disponible en tu cuenta
-• Necesitas una suscripción de GitHub Copilot o acceso enterprise
-• Verifica los permisos del token de acceso
+          errorMessage = `🚫 Access denied (403):
+• GitHub Models may not be available for your account
+• You need a GitHub Copilot subscription or enterprise access
+• Check the access token's permissions
 
-Detalles: ${errorText}`;
+Details: ${errorText}`;
         } else if (response.status === 404) {
-          errorMessage = `❓ Endpoint no encontrado (404):
-• GitHub Models puede no estar disponible aún
-• Verifica que tengas acceso a la beta de Models
-• Intenta con otro proveedor mientras tanto
+          errorMessage = `❓ Endpoint not found (404):
+• GitHub Models may not be available yet
+• Check that you have access to the Models beta
+• Try another provider in the meantime
 
-Detalles: ${errorText}`;
+Details: ${errorText}`;
         } else {
           errorMessage += ` - ${errorText}`;
         }
@@ -98,7 +98,7 @@ Detalles: ${errorText}`;
 
   public async getModels(): Promise<string[]> {
     if (!this.isConfigured()) {
-      // Modelos de fallback si no hay API key configurada
+      // Fallback models when no API key is configured
       return [
         'gpt-4o',
         'gpt-4o-mini', 
@@ -108,7 +108,7 @@ Detalles: ${errorText}`;
     }
 
     try {
-      // Intentar consultar modelos disponibles via API
+      // Try to query the available models through the API
       const response = await fetch(`${this.baseUrl}/models`, {
         method: 'GET',
         headers: {
@@ -121,7 +121,7 @@ Detalles: ${errorText}`;
 
       if (response.ok) {
         const data = await response.json();
-        // GitHub Models API devuelve formato: { "data": [{ "id": "model-name", ... }] }
+        // The GitHub Models API returns this format: { "data": [{ "id": "model-name", ... }] }
         if (data.data && Array.isArray(data.data)) {
           return data.data.map((model: any) => model.id).sort();
         }
@@ -132,17 +132,17 @@ Detalles: ${errorText}`;
       console.warn('Failed to fetch models from GitHub API, using fallback list:', error);
     }
 
-    // Lista expandida de modelos conocidos como fallback (actualizada oct 2024)
+    // Expanded list of known models as a fallback (updated Oct 2024)
     return [
       'gpt-4o',
       'gpt-4o-mini',
       'gpt-4-turbo',
       'gpt-3.5-turbo',
-      'gpt-5', // Si está disponible en tu cuenta
+      'gpt-5', // If available on your account
       'claude-3-5-sonnet',
       'claude-3-5-haiku', 
       'claude-3-opus',
-      'claude-4-sonnet', // Claude Sonnet 4 como mencionas
+      'claude-4-sonnet', // Claude Sonnet 4
       'llama-3.1-405b-instruct',
       'llama-3.1-70b-instruct',
       'llama-3.1-8b-instruct',
@@ -176,7 +176,7 @@ Detalles: ${errorText}`;
           'User-Agent': 'PyPilot-VPy-IDE/1.0'
         },
         body: JSON.stringify({
-          model: 'gpt-4o-mini', // Usar modelo más barato para test
+          model: 'gpt-4o-mini', // Use the cheapest model for the test
           messages: [
             { role: 'user', content: 'Hello' }
           ],

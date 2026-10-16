@@ -11,11 +11,12 @@ members = [
     "vpy_binary_writer",
     "vpy_debug_gen",
     "vpy_cli", "vpy_disasm",
+    "vpy_lsp",
 ]
 
 [workspace.package]
 edition = "2021"
-version = "0.1.0"
+version = "0.4.0"
 authors = ["Vectrex Dev"]
 
 [workspace.lints.rust]

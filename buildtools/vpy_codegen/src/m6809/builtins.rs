@@ -6,7 +6,7 @@
 //! - WAIT_RECAL: Wait for screen refresh
 //! - SET_INTENSITY: Set drawing intensity
 
-use vpy_parser::{Expr, Module};
+use vpy_parser::{Expr, Item, Module};
 use super::expressions;
 use super::math;
 use super::debug;
@@ -17,7 +17,7 @@ use super::utilities;
 use super::assets;
 use crate::{AssetInfo, AssetType};
 use crate::vecres::VecResource;
-use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// A single entry from MSG_DEF(id, x, y, "text")
 #[derive(Debug, Clone)]
@@ -31,32 +31,37 @@ pub struct MsgEntry {
 /// Unique label counter for builtin function labels
 static LABEL_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-/// Flag indicating if we're generating code for multibank ROM
-/// When true, asset references use banked access (DRAW_VECTOR_BANKED, PLAY_MUSIC_BANKED)
-static IS_MULTIBANK: AtomicBool = AtomicBool::new(false);
-
-/// Flag indicating if assets are distributed across banks (requires bank switching)
-/// This is separate from IS_MULTIBANK because small assets stay in Bank #0 even in multibank mode
-static USE_BANKED_ASSETS: AtomicBool = AtomicBool::new(false);
+// Per-build mode flags. Thread-local like the rest of the m6809 codegen state
+// (context.rs): a process-wide flag let one build's multibank mode leak into another
+// running on a different thread (seen in the test suite: a single-bank build emitting
+// `JSR DRAW_VECTOR_BANKED`).
+thread_local! {
+    /// Generating code for a multibank ROM.
+    static IS_MULTIBANK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Assets are distributed across banks and need bank switching (DRAW_VECTOR_BANKED,
+    /// PLAY_MUSIC_BANKED). Separate from IS_MULTIBANK: small assets stay in bank #0 even
+    /// in multibank mode.
+    static USE_BANKED_ASSETS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
 
 /// Set multibank mode for code generation
 pub fn set_multibank_mode(multibank: bool) {
-    IS_MULTIBANK.store(multibank, Ordering::SeqCst);
+    IS_MULTIBANK.with(|f| f.set(multibank));
 }
 
 /// Set banked assets mode (called when assets are actually distributed)
 pub fn set_banked_assets_mode(banked: bool) {
-    USE_BANKED_ASSETS.store(banked, Ordering::SeqCst);
+    USE_BANKED_ASSETS.with(|f| f.set(banked));
 }
 
 /// Check if we're in multibank mode
 pub fn is_multibank() -> bool {
-    IS_MULTIBANK.load(Ordering::SeqCst)
+    IS_MULTIBANK.with(|f| f.get())
 }
 
 /// Check if assets require bank switching (distributed across banks)
 pub fn use_banked_assets() -> bool {
-    USE_BANKED_ASSETS.load(Ordering::SeqCst)
+    USE_BANKED_ASSETS.with(|f| f.get())
 }
 
 /// Builtin function arities (COPIED FROM core/src/codegen.rs)
@@ -77,6 +82,7 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     ("DRAW_VECTOR", 3),     // name, x, y
     ("DRAW_VECTOR_EX", 5),  // name, x, y, mirror, intensity
     ("DRAW_VECTOR_3D", 6),  // name, ax, ay, az, x, y
+    ("DRAW_VECTOR_ROT", 4), // name, x, y, angle [, mirror [, intensity]]
     
     // Audio functions
     ("PLAY_MUSIC", 1),      // name
@@ -85,6 +91,10 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     ("AUDIO_UPDATE", 0),    // no args
     ("MUSIC_UPDATE", 0),    // no args (deprecated)
     
+    // SD game list (simulated on m6809/emulator; real SD on rp2350)
+    ("SD_FILE_COUNT", 0),   // no args -> count
+    ("SD_FILE_NAME", 1),    // index -> ptr to name string
+
     // Joystick input
     ("J1_X", 0),            // no args
     ("J1_Y", 0),            // no args
@@ -122,6 +132,9 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
 
     // Animation
     ("DRAW_ANIM", 1),     // animation_name → draws current frame, advances counter
+
+    // Vector-movie playback (.vrec) — single-bank, video-only
+    ("DRAW_RECORDING", 5),// name, x, y, scale, frame
 
     // Pitched instrument
     ("PLAY_NOTE", 3),     // instrument_name, channel, midi_note
@@ -193,6 +206,12 @@ fn validate_builtin_arity(name: &str, arg_count: usize) -> Result<(), String> {
             }
             return Ok(());
         }
+        "DRAW_VECTOR_ROT" => {
+            if !(4..=6).contains(&arg_count) {
+                return Err(format!("DRAW_VECTOR_ROT requires 4 to 6 arguments (name, x, y, angle / +mirror / +intensity), got {}", arg_count));
+            }
+            return Ok(());
+        }
         _ => {}
     }
     
@@ -220,10 +239,29 @@ pub fn emit_builtin(
     assets: &[AssetInfo],
 ) -> bool {
     let up = name.to_ascii_uppercase();
-    
+
+    // Digitised samples (.vsmp) are ARM-only. On the Vectrex the 6809 is also the
+    // vector engine: a 4-bit sample at 8 kHz needs a PSG volume write every ~190
+    // cycles, and the PSG is reached through VIA port A, the same port that feeds
+    // the beam DAC while a vector is drawn. There is no free timer either (T1
+    // times strokes, T2 the frame), so playback could only run with the screen
+    // stopped. See docs/COMPILER_STATUS.md.
+    if up == "PLAY_SAMPLE" || up == "SAMPLE_POS" {
+        super::diagnostics::error(format!(
+            "{up} is not supported on m6809: digitised samples need a CPU that is not drawing \
+             (build for rp2350 or pitrex; on uvm2 it builds but plays nothing)"
+        ));
+        out.push_str("    LDD #0\n");
+        return true;
+    }
+
     // CRITICAL: Validate arity BEFORE emitting any code
     if let Err(error) = validate_builtin_arity(name, args.len()) {
-        panic!("Builtin arity error: {}", error);
+        // A compile error with the source line, not a panic: the emitters below
+        // index their arguments, so nothing is emitted for a malformed call.
+        super::diagnostics::error(error);
+        out.push_str("    LDD #0\n");
+        return true;
     }
     
     match up.as_str() {
@@ -268,6 +306,26 @@ pub fn emit_builtin(
             true
         }
         
+        // ===== SD game list (simulated on m6809 — see sim_sd_files) =====
+        "SD_FILE_COUNT" => {
+            let n = sim_sd_files().len();
+            out.push_str(&format!("    LDD #{}          ; SD_FILE_COUNT (sim: {} file(s))\n", n, n));
+            out.push_str("    STD RESULT\n");
+            true
+        }
+        "SD_FILE_NAME" => {
+            // args[0] = index → D = pointer to simulated name[i].
+            // Use LDX #label + LEAX D,X (same #label form that PRINT_TEXT strings
+            // resolve with) — an immediate ADDD #label does not resolve here.
+            expressions::emit_simple_expr(&args[0], out, assets); // D = i
+            out.push_str("    ASLB\n    ROLA            ; D = i*2 (16-bit ptr stride)\n");
+            out.push_str("    LDX #SD_NAME_TABLE\n");
+            out.push_str("    LEAX D,X        ; X = &SD_NAME_TABLE[i]\n");
+            out.push_str("    LDD ,X          ; D = ptr to name[i]\n");
+            out.push_str("    STD RESULT\n");
+            true
+        }
+
         // ===== Joystick Input =====
         "J1_X" => {
             out.push_str("    JSR J1X_BUILTIN\n");
@@ -621,6 +679,10 @@ pub fn emit_builtin(
             emit_draw_vector_3d(args, out, assets);
             true
         }
+        "DRAW_VECTOR_ROT" => {
+            emit_draw_vector_rot(args, out, assets);
+            true
+        }
         
         
         // ===== Math Functions =====
@@ -863,13 +925,6 @@ pub fn emit_builtin(
             true
         }
 
-        "OLD_LEN" => {
-            out.push_str("    ; LEN: Get array/string length\n");
-            expressions::emit_simple_expr(&args[0], out, assets);
-            out.push_str("    ; TODO: LEN implementation\n");
-            out.push_str("    STD RESULT\n");
-            true
-        }
         
         // ===== Animation =====
         // DRAW_ANIM("name")                          — draw at DRAW_VEC_X/Y (caller must set)
@@ -930,6 +985,12 @@ pub fn emit_builtin(
             } else {
                 out.push_str("    ; ERROR: DRAW_ANIM requires a string literal name\n");
             }
+            true
+        }
+
+        // ===== Vector-movie playback (.vrec) =====
+        "DRAW_RECORDING" => {
+            emit_draw_recording(args, out, assets);
             true
         }
 
@@ -1248,6 +1309,49 @@ fn emit_draw_line(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     out.push_str("    STD RESULT\n");
 }
 
+/// DRAW_RECORDING("name", x, y, scale, frame) — play one frame of a .vrec
+/// vector recording. SINGLE-BANK, VIDEO-ONLY. Resolves "name" → _<NAME>_VREC,
+/// stores x/y/scale/frame into DRAW_REC_* RAM, and JSRs DRAW_RECORDING_RUNTIME.
+/// `frame` is a plain VPy variable the game increments each loop (no audio clock).
+fn emit_draw_recording(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
+    // Arity (5) already validated by emit_builtin.
+    match &args[0] {
+        Expr::StringLit(rec_name) => {
+            let symbol = format!("_{}_VREC", rec_name.to_uppercase().replace('-', "_").replace(' ', "_"));
+            out.push_str(&format!("    ; DRAW_RECORDING(\"{}\", x, y, scale, frame)\n", rec_name));
+
+            // x center (arg 1) → DRAW_REC_X (i8, low byte)
+            expressions::emit_simple_expr(&args[1], out, assets);
+            out.push_str("    TFR B,A          ; X center (low byte)\n");
+            out.push_str("    STA >DRAW_REC_X\n");
+
+            // y center (arg 2) → DRAW_REC_Y
+            expressions::emit_simple_expr(&args[2], out, assets);
+            out.push_str("    TFR B,A          ; Y center (low byte)\n");
+            out.push_str("    STA >DRAW_REC_Y\n");
+
+            // scale (arg 3) → DRAW_REC_SCALE (0-128, 128=100%)
+            expressions::emit_simple_expr(&args[3], out, assets);
+            out.push_str("    TFR B,A          ; scale (low byte)\n");
+            out.push_str("    STA >DRAW_REC_SCALE\n");
+
+            // frame counter (arg 4) → DRAW_REC_FRAME (16-bit; runtime does frame % frame_count)
+            expressions::emit_simple_expr(&args[4], out, assets);
+            out.push_str("    STD >DRAW_REC_FRAME\n");
+
+            // Runtime honors SET_INTENSITY override (DRAW_VEC_INTENSITY); recorded
+            // per-segment intensity is used when the override is 0.
+            out.push_str(&format!("    LDX #{}      ; recording header\n", symbol));
+            out.push_str("    JSR DRAW_RECORDING_RUNTIME\n");
+            out.push_str("    LDD #0\n    STD RESULT\n");
+        }
+        _ => {
+            out.push_str("    ; ERROR: DRAW_RECORDING first argument must be a string literal\n");
+            out.push_str("    LDD #0\n    STD RESULT\n");
+        }
+    }
+}
+
 fn emit_draw_vector(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     // Arity already validated by emit_builtin
     out.push_str("    ; DRAW_VECTOR: Draw vector asset at position\n");
@@ -1274,11 +1378,10 @@ fn emit_draw_vector(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
             // Find path count
             let path_count = if let Some(asset) = assets.iter().find(|a| a.name == *asset_name && matches!(a.asset_type, AssetType::Vector)) {
                  if let Ok(resource) = VecResource::load(std::path::Path::new(&asset.path)) {
-                    // Must match the filter in vecres.rs compile_to_asm — degenerate
-                    // paths (< 2 points) are dropped from the data table, so the
-                    // unrolled DRAW_VECTOR loop here has to drop them too or it
-                    // references _NAME_PATHN labels that were never emitted.
-                    resource.visible_paths().iter().filter(|p| p.points.len() >= 2).count()
+                    // Same list compile_to_asm emits _NAME_PATHn from (reorder,
+                    // degenerate-path filter AND contiguous-path fusion), or the
+                    // unrolled loop names labels that were never emitted.
+                    resource.m6809_emitted_paths().len()
                  } else {
                     1
                  }
@@ -1375,11 +1478,10 @@ fn emit_draw_vector_ex(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
              // Find path count
             let path_count = if let Some(asset) = assets.iter().find(|a| a.name == *asset_name && matches!(a.asset_type, AssetType::Vector)) {
                  if let Ok(resource) = VecResource::load(std::path::Path::new(&asset.path)) {
-                    // Must match the filter in vecres.rs compile_to_asm — degenerate
-                    // paths (< 2 points) are dropped from the data table, so the
-                    // unrolled DRAW_VECTOR loop here has to drop them too or it
-                    // references _NAME_PATHN labels that were never emitted.
-                    resource.visible_paths().iter().filter(|p| p.points.len() >= 2).count()
+                    // Same list compile_to_asm emits _NAME_PATHn from (reorder,
+                    // degenerate-path filter AND contiguous-path fusion), or the
+                    // unrolled loop names labels that were never emitted.
+                    resource.m6809_emitted_paths().len()
                  } else {
                     1
                  }
@@ -1509,6 +1611,79 @@ fn emit_draw_vector_3d(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     }
 }
 
+/// DRAW_VECTOR_ROT("name", x, y, angle [, mirror [, intensity]]): the `.vec` sprite
+/// turned by `angle` about its origin (0-127 = one full turn, counter-clockwise: the
+/// unit of SIN/COS/DRAW_VECTOR_3D). Parks the arguments in RAM and calls
+/// DRAW_VEC_ROT_RUNTIME (helpers), which looks sin/cos up ONCE per call and turns
+/// every point of the asset's ordinary `_NAME_VECTORS` paths — no extra ROM per asset.
+fn emit_draw_vector_rot(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
+    // Arity already validated by emit_builtin (4..=6).
+    out.push_str("    ; DRAW_VECTOR_ROT: vector asset rotated about its origin\n");
+    let asset_name = match &args[0] {
+        Expr::StringLit(name) => name,
+        _ => {
+            super::diagnostics::error(
+                "DRAW_VECTOR_ROT: the first argument must be the asset name as a string literal",
+            );
+            out.push_str("    LDD #0\n    STD RESULT\n");
+            return;
+        }
+    };
+    if !assets.iter().any(|a| a.name == *asset_name && matches!(a.asset_type, AssetType::Vector)) {
+        super::diagnostics::error(format!(
+            "DRAW_VECTOR_ROT: unknown vector asset \"{asset_name}\" (no assets/vectors/{asset_name}.vec in the project)"
+        ));
+        out.push_str("    LDD #0\n    STD RESULT\n");
+        return;
+    }
+    // Same index VECTOR_ADDR_TABLE uses (see emit_draw_vector).
+    let anim_vec_refs = assets::collect_anim_vec_refs(assets);
+    let mut vector_assets: Vec<_> = assets.iter()
+        .filter(|a| matches!(a.asset_type, AssetType::Vector) && !anim_vec_refs.contains(&a.name))
+        .collect();
+    vector_assets.sort_by(|a, b| a.name.cmp(&b.name));
+    let asset_index = vector_assets.iter().position(|a| a.name == *asset_name).unwrap_or(0);
+    let symbol = format!("_{}", asset_name.to_uppercase().replace("-", "_").replace(" ", "_"));
+
+    let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
+    let skip_label = format!("DRVROT_SKIP_{}", label_id);
+    out.push_str(&format!("    ; Asset: {} (index={})\n", asset_name, asset_index));
+
+    // x: cull when the 16-bit screen x is outside the signed 8-bit range (as DRAW_VECTOR).
+    expressions::emit_simple_expr(&args[1], out, assets);
+    out.push_str("    STA TMPPTR2      ; high byte of 16-bit screen_x\n");
+    out.push_str("    TFR B,A\n");
+    out.push_str("    SEX              ; A = sign of B\n");
+    out.push_str("    CMPA TMPPTR2\n");
+    out.push_str(&format!("    LBNE {}          ; out of 8-bit range — skip draw\n", skip_label));
+    out.push_str("    STB >DRAW_VEC_X\n");
+    expressions::emit_simple_expr(&args[2], out, assets);
+    out.push_str("    STB >DRAW_VEC_Y\n");
+    expressions::emit_simple_expr(&args[3], out, assets);
+    out.push_str("    STB >ROT2D_ANGLE    ; 0-127 = full turn (masked in the runtime)\n");
+    if let Some(mirror) = args.get(4) {
+        expressions::emit_simple_expr(mirror, out, assets);
+        out.push_str("    STB >ROT2D_MIRROR\n");
+    } else {
+        out.push_str("    CLR >ROT2D_MIRROR\n");
+    }
+    if let Some(intensity) = args.get(5) {
+        expressions::emit_simple_expr(intensity, out, assets);
+        out.push_str("    STB >DRAW_VEC_INTENSITY  ; override (0 = per-path .vec intensity)\n");
+    } else {
+        out.push_str("    CLR >DRAW_VEC_INTENSITY  ; use .vec intensities\n");
+    }
+    if use_banked_assets() {
+        out.push_str(&format!("    LDX #{}        ; asset index for lookup\n", asset_index));
+        out.push_str("    JSR DRAW_VEC_ROT_BANKED\n");
+    } else {
+        out.push_str(&format!("    LDX #{}_VECTORS  ; path table\n", symbol));
+        out.push_str("    JSR DRAW_VEC_ROT_RUNTIME\n");
+    }
+    out.push_str(&format!("{}:\n", skip_label));
+    out.push_str("    LDD #0\n    STD RESULT\n");
+}
+
 /// Generate helper function implementations
 pub fn generate_helper_functions() -> String {
     let mut asm = String::new();
@@ -1521,120 +1696,30 @@ pub fn generate_helper_functions() -> String {
     
     asm
 }
-/// Collect all PRINT_TEXT string literals from the module
-/// Returns a map of hash -> string
+/// Collect every string literal the generated code can reference as
+/// `PRINT_TEXT_STR_<hash>` (PRINT_TEXT text, string arguments, scalar string
+/// `GlobalLet`s initialized at startup). Returns a map of hash -> string.
+///
+/// String-ARRAY literals are skipped: they get their own `ARRAY_<NAME>_DATA_STR_<i>`
+/// labels in `variables::emit_array_data`.
 pub fn collect_print_text_strings(module: &Module) -> std::collections::BTreeMap<u64, String> {
+    use super::ast_walk::{self, ExprFn};
     let mut strings = std::collections::BTreeMap::new();
-    
-    // Visit statements and collect PRINT_TEXT strings
+    let mut visitor = ExprFn(|e: &Expr| {
+        if let Expr::StringLit(s) = e {
+            strings.insert(hash_string(s), s.clone());
+        }
+    });
+    ast_walk::walk_code(module, &mut visitor);
     for item in &module.items {
-        if let vpy_parser::Item::Function(func) = item {
-            for stmt in &func.body {
-                collect_strings_from_stmt(stmt, &mut strings);
+        // Only GlobalLet scalars are evaluated by MAIN's startup code.
+        if let Item::GlobalLet { value, .. } = item {
+            if !matches!(value, Expr::List(_)) {
+                ast_walk::walk_expr(value, &mut visitor);
             }
         }
     }
-    
     strings
-}
-
-fn collect_strings_from_stmt(stmt: &vpy_parser::Stmt, strings: &mut std::collections::BTreeMap<u64, String>) {
-    match stmt {
-        vpy_parser::Stmt::Expr(expr, _) => collect_strings_from_expr(expr, strings),
-        vpy_parser::Stmt::Assign { value, .. } => collect_strings_from_expr(value, strings),
-        vpy_parser::Stmt::Let { value, .. } => collect_strings_from_expr(value, strings),
-        vpy_parser::Stmt::For { start, end, step, body, .. } => {
-            collect_strings_from_expr(start, strings);
-            collect_strings_from_expr(end, strings);
-            if let Some(s) = step {
-                collect_strings_from_expr(s, strings);
-            }
-            for s in body {
-                collect_strings_from_stmt(s, strings);
-            }
-        }
-        vpy_parser::Stmt::ForIn { iterable, body, .. } => {
-            collect_strings_from_expr(iterable, strings);
-            for s in body {
-                collect_strings_from_stmt(s, strings);
-            }
-        }
-        vpy_parser::Stmt::While { cond, body, .. } => {
-            collect_strings_from_expr(cond, strings);
-            for s in body {
-                collect_strings_from_stmt(s, strings);
-            }
-        }
-        vpy_parser::Stmt::If { cond, body, elifs, else_body, .. } => {
-            collect_strings_from_expr(cond, strings);
-            for s in body {
-                collect_strings_from_stmt(s, strings);
-            }
-            for (e, b) in elifs {
-                collect_strings_from_expr(e, strings);
-                for s in b {
-                    collect_strings_from_stmt(s, strings);
-                }
-            }
-            if let Some(else_stmts) = else_body {
-                for s in else_stmts {
-                    collect_strings_from_stmt(s, strings);
-                }
-            }
-        }
-        vpy_parser::Stmt::CompoundAssign { value, .. } => collect_strings_from_expr(value, strings),
-        _ => {}
-    }
-}
-
-fn collect_strings_from_expr(expr: &Expr, strings: &mut std::collections::BTreeMap<u64, String>) {
-    match expr {
-        Expr::StringLit(s) => {
-            let hash = hash_string(s);
-            strings.insert(hash, s.clone());
-        }
-        Expr::Call(call) => {
-            // Check for PRINT_TEXT 3rd arg (redundant now but harmless)
-            if call.name.to_uppercase() == "PRINT_TEXT" && call.args.len() >= 3 {
-                if let Expr::StringLit(s) = &call.args[2] {
-                    let hash = hash_string(s);
-                    strings.insert(hash, s.clone());
-                }
-            }
-            for arg in &call.args {
-                collect_strings_from_expr(arg, strings);
-            }
-        }
-        Expr::Binary { left, right, .. } => {
-            collect_strings_from_expr(left, strings);
-            collect_strings_from_expr(right, strings);
-        }
-        Expr::Compare { left, right, .. } => {
-            collect_strings_from_expr(left, strings);
-            collect_strings_from_expr(right, strings);
-        }
-        Expr::Logic { left, right, .. } => {
-            collect_strings_from_expr(left, strings);
-            collect_strings_from_expr(right, strings);
-        }
-        Expr::Not(expr) | Expr::BitNot(expr) => collect_strings_from_expr(expr, strings),
-        Expr::Index { target, index } => {
-            collect_strings_from_expr(target, strings);
-            collect_strings_from_expr(index, strings);
-        }
-        Expr::FieldAccess { target, .. } => collect_strings_from_expr(target, strings),
-        Expr::MethodCall(call) => {
-            for arg in &call.args {
-                collect_strings_from_expr(arg, strings);
-            }
-        }
-        Expr::List(items) => {
-            for item in items {
-                collect_strings_from_expr(item, strings);
-            }
-        }
-        _ => {}
-    }
 }
 
 /// DRAW_CIRCLE with full variable support
@@ -1651,7 +1736,7 @@ fn emit_draw_circle_full(args: &[Expr], out: &mut String, assets: &[AssetInfo]) 
         return;
     }
 
-    out.push_str("    ; DRAW_CIRCLE: Draw circle at (xc, yc) with diameter\n");
+    out.push_str("    ; DRAW_CIRCLE: Draw circle at (xc, yc) with radius\n");
     
     // Evaluate xc and store in DRAW_CIRCLE_XC
     expressions::emit_simple_expr(&args[0], out, assets);
@@ -1739,47 +1824,90 @@ pub fn emit_print_text_strings(strings: &std::collections::BTreeMap<u64, String>
     }
 }
 
-/// Collect all MSG_DEF(id, x, y, "text") calls from the module
-pub fn collect_msg_entries(module: &Module) -> Vec<MsgEntry> {
-    let mut entries = Vec::new();
-    for item in &module.items {
-        if let vpy_parser::Item::Function(func) = item {
-            for stmt in &func.body {
-                collect_msg_entries_from_stmt(stmt, &mut entries);
-            }
-        }
-    }
-    entries.sort_by_key(|e| e.id);
-    entries
+// ── Simulated SD game list (m6809 emulator preview) ───────────────────────
+// The RP2350 target reads a real SD card via SYS_SD_* syscalls. The m6809
+// build has no SD hardware, so the IDE preview simulates one from a folder in
+// the user's home (`~/VectrexStudio/sd`, created if missing). Drop `.bin`
+// files there and they appear in the menu. Scanned once, baked into ROM.
+
+/// Absolute path of the simulated-SD folder, created if missing.
+pub fn sim_sd_dir() -> std::path::PathBuf {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_default();
+    std::path::Path::new(&home).join("VectrexStudio").join("sd")
 }
 
-fn collect_msg_entries_from_stmt(stmt: &vpy_parser::Stmt, entries: &mut Vec<MsgEntry>) {
-    match stmt {
-        vpy_parser::Stmt::Expr(expr, _) => {
-            if let Expr::Call(call) = expr {
-                if call.name.to_uppercase() == "MSG_DEF" && call.args.len() == 4 {
-                    let id = extract_int_lit(&call.args[0]).unwrap_or(0) as u8;
-                    let x  = extract_int_lit(&call.args[1]).unwrap_or(0) as i8;
-                    let y  = extract_int_lit(&call.args[2]).unwrap_or(0) as i8;
-                    if let Expr::StringLit(s) = &call.args[3] {
-                        entries.push(MsgEntry { id, x, y, text: s.clone() });
-                    }
+/// The simulated game list: uppercase stems of `*.bin` in the sim-SD folder.
+/// Scanned once per process (each IDE build is a fresh vpy_cli invocation).
+fn sim_sd_files() -> &'static Vec<String> {
+    static FILES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    FILES.get_or_init(|| {
+        let mut out: Vec<String> = Vec::new();
+        let dir = sim_sd_dir();
+        let _ = std::fs::create_dir_all(&dir); // create if missing
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for e in entries.flatten() {
+                let p = e.path();
+                let is_bin = p.extension()
+                    .and_then(|s| s.to_str())
+                    .map(|s| s.eq_ignore_ascii_case("bin"))
+                    .unwrap_or(false);
+                if !is_bin { continue; }
+                if let Some(stem) = p.file_stem().and_then(|s| s.to_str()) {
+                    if stem.starts_with('.') { continue; } // hidden / macOS ._ junk
+                    let mut name = stem.to_ascii_uppercase();
+                    name.truncate(12); // 8.3-ish cap for the vector display
+                    out.push(name);
                 }
             }
         }
-        vpy_parser::Stmt::If { body, elifs, else_body, .. } => {
-            for s in body { collect_msg_entries_from_stmt(s, entries); }
-            for (_, b) in elifs { for s in b { collect_msg_entries_from_stmt(s, entries); } }
-            if let Some(eb) = else_body { for s in eb { collect_msg_entries_from_stmt(s, entries); } }
+        out.sort();
+        out.truncate(24); // cap the list
+        out
+    })
+}
+
+/// True if the module calls SD_FILE_COUNT / SD_FILE_NAME (so we emit the table).
+pub fn module_uses_sd(module: &Module) -> bool {
+    super::ast_walk::calls_any(module, &["SD_FILE_COUNT", "SD_FILE_NAME"])
+}
+
+/// Emit the simulated SD name table + strings (helpers bank).
+pub fn emit_sd_tables(out: &mut String) {
+    let files = sim_sd_files();
+    out.push_str(";**** Simulated SD game list (m6809 preview; ~/VectrexStudio/sd) ****\n");
+    out.push_str("SD_NAME_TABLE:\n");
+    if files.is_empty() {
+        out.push_str("    FDB 0            ; no .bin files in the sim-SD folder\n");
+    } else {
+        for i in 0..files.len() {
+            out.push_str(&format!("    FDB SD_NAME_{}\n", i));
         }
-        vpy_parser::Stmt::While { body, .. } => {
-            for s in body { collect_msg_entries_from_stmt(s, entries); }
-        }
-        vpy_parser::Stmt::For { body, .. } => {
-            for s in body { collect_msg_entries_from_stmt(s, entries); }
-        }
-        _ => {}
     }
+    for (i, name) in files.iter().enumerate() {
+        out.push_str(&format!("SD_NAME_{}:\n", i));
+        out.push_str(&format!("    FCC \"{}\"\n", escape_string(name)));
+        out.push_str("    FCB $80          ; Vectrex string terminator\n");
+    }
+    out.push('\n');
+}
+
+/// Collect all MSG_DEF(id, x, y, "text") calls from the module
+pub fn collect_msg_entries(module: &Module) -> Vec<MsgEntry> {
+    let mut entries = Vec::new();
+    super::ast_walk::for_each_call(module, |call| {
+        if call.name.to_uppercase() == "MSG_DEF" && call.args.len() == 4 {
+            let id = extract_int_lit(&call.args[0]).unwrap_or(0) as u8;
+            let x  = extract_int_lit(&call.args[1]).unwrap_or(0) as i8;
+            let y  = extract_int_lit(&call.args[2]).unwrap_or(0) as i8;
+            if let Expr::StringLit(s) = &call.args[3] {
+                entries.push(MsgEntry { id, x, y, text: s.clone() });
+            }
+        }
+    });
+    entries.sort_by_key(|e| e.id);
+    entries
 }
 
 fn extract_int_lit(expr: &Expr) -> Option<i32> {
@@ -1842,4 +1970,30 @@ pub fn emit_msg_table(entries: &[MsgEntry], out: &mut String) {
         }
     }
     out.push_str("\n");
+}
+
+#[cfg(test)]
+mod draw_recording_tests {
+    use super::*;
+
+    /// DRAW_RECORDING("clip", 0, 0, 128, frame) must resolve the recording symbol
+    /// (_CLIP_VREC) and JSR the runtime, passing x/y/scale/frame through the
+    /// DRAW_REC_* RAM args.
+    #[test]
+    fn draw_recording_emits_runtime_call_and_symbol() {
+        let args = vec![
+            Expr::StringLit("clip".to_string()),
+            Expr::Number(0),
+            Expr::Number(0),
+            Expr::Number(128),
+            Expr::Number(0), // frame counter (a plain VPy var at runtime; const here for the test)
+        ];
+        let mut out = String::new();
+        let handled = emit_builtin("DRAW_RECORDING", &args, &mut out, &[]);
+        assert!(handled, "DRAW_RECORDING must be handled as a builtin");
+        assert!(out.contains("LDX #_CLIP_VREC"), "must resolve recording symbol:\n{out}");
+        assert!(out.contains("JSR DRAW_RECORDING_RUNTIME"), "must call runtime:\n{out}");
+        assert!(out.contains("STD >DRAW_REC_FRAME"), "must pass frame arg:\n{out}");
+        assert!(out.contains("STA >DRAW_REC_SCALE"), "must pass scale arg:\n{out}");
+    }
 }

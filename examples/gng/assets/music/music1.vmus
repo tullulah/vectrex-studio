@@ -1,0 +1,12 @@
+{
+  "version": "1.0",
+  "name": "music1",
+  "author": "",
+  "tempo": 120,
+  "ticksPerBeat": 24,
+  "totalTicks": 384,
+  "notes": [],
+  "noise": [],
+  "loopStart": 0,
+  "loopEnd": 384
+}

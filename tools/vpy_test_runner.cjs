@@ -118,8 +118,7 @@ if (!actualNoCompile) {
   console.log(`[COMPILE] ${path.relative(WORKSPACE_ROOT, vpyproj)}`);
 
   // Use the buildtools vpy_cli to compile
-  const buildtoolsDir  = path.join(WORKSPACE_ROOT, 'buildtools');
-  const compilerBin    = path.join(WORKSPACE_ROOT, 'target', 'debug', 'vectrexc');
+  const compilerBin    = path.join(WORKSPACE_ROOT, 'target', 'debug', process.platform === 'win32' ? 'vpy_cli.exe' : 'vpy_cli');
   const projFile       = vpyproj;
   const srcDir         = path.join(projectPath, 'src');
 
@@ -143,16 +142,18 @@ if (!actualNoCompile) {
   }
 
   try {
-    // Build vectrexc first if needed
+    // Build vpy_cli first if needed
     if (!fs.existsSync(compilerBin)) {
-      console.log('[COMPILE] Building vectrexc compiler...');
-      cp.execSync('cargo build --bin vectrexc 2>&1', {
+      console.log('[COMPILE] Building vpy_cli compiler...');
+      cp.execSync('cargo build --bin vpy_cli 2>&1', {
         cwd: WORKSPACE_ROOT,
         stdio: 'inherit',
       });
     }
 
-    const result = cp.spawnSync(compilerBin, ['build', mainVpy, '--bin'], {
+    const outBin = path.join(projectPath, 'build', path.basename(mainVpy).replace(/\.vpy$/, '.bin'));
+    fs.mkdirSync(path.dirname(outBin), { recursive: true });
+    const result = cp.spawnSync(compilerBin, ['build', mainVpy, '--output', outBin], {
       cwd: projectPath,
       encoding: 'utf8',
     });
@@ -165,13 +166,14 @@ if (!actualNoCompile) {
     }
     if (verbose && result.stdout) process.stdout.write(result.stdout);
     console.log('[COMPILE] OK');
+    binPath = outBin;
   } catch (e) {
     console.error(`[COMPILE] Error: ${e.message}`);
     process.exit(1);
   }
 }
 
-binPath = findBin(projectPath);
+if (!binPath) binPath = findBin(projectPath);
 if (!binPath) {
   // If skipCompile was requested but no binary found, skip the test
   if (skipCompile) {

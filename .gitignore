@@ -17,6 +17,18 @@ examples/**/src/*.bin
 examples/test_arm.bin
 # RP2350 generated ASM (intermediate, not needed alongside the 6809 .asm)
 examples/**/*_rp2350.asm
+# Debug symbols, disk images, generated linker scripts, superseded listings: every build
+# remakes them, and they made up hundreds of files in a single review.
+examples/**/*.pdb
+examples/**/*.img
+examples/**/build*/*.ld
+examples/**/*_old.asm
+__pycache__/
+*.pyc
+# Local logs and backups
+/logs.txt
+*-bak
+*.bak
 
 # Generated assembly outputs (use redirection to keep if needed)
 /*.asm
@@ -80,4 +92,40 @@ VRelease_2017_04_29/
 # WIP projects (local only, not ready for version control)
 examples/clockmakers_crypt/
 examples/clockmakers_crypt_web/
-hardware/
+# CON BARRA DELANTE: solo el hardware/ DE LA RAIZ. Sin anclar, esta regla se comia
+# cualquier directorio llamado hardware a cualquier profundidad — y el emulador tiene uno
+# (ide/frontend/src/emulator/hardware). Los ficheros que ya estaban versionados seguian
+# apareciendo, asi que el problema era invisible: solo los NUEVOS se ignoraban, en
+# silencio. Ramp.ts se quedo fuera de su propio commit y solo se noto porque git avisa al
+# hacer `add` explicito.
+/hardware/
+
+# Vector-movie SOURCE videos (dev-only, copyrighted — NOT part of the distributed
+# IDE and never committed). Regenerate/download with tools/fetch/url2vmov.sh.
+examples/tdcm.mp4
+examples/badapple.mov
+examples/*.mp4
+examples/*.mov
+
+# Python bytecode cache (dev tools)
+tools/**/__pycache__/
+
+# Instaladores construidos: 100 MB que GitHub rechaza, y no son fuente
+*.dmg
+*.AppImage
+*.exe
+
+# Cargo tree of the cartridge bus: 522 MB of intermediate objects.
+
+examples/**/build/uvm2/
+
+# THE ARCADE ROM DOES NOT GO IN HERE. This repository is PUBLIC
+# (github.com/tullulah/vectrex-studio, checked with `gh repo view`), and the project's
+# standard is that the romset lives OUTSIDE the image and the game reads it from the SD,
+# MAME model. `sb_rom.h` is the same ROM in a C header: same material, different wrapper.
+examples/*/rom/*.zip
+examples/*/src/sb_rom.h
+examples/*/rom/palette_table.bin
+
+# Claude Code worktrees (local only)
+.claude/worktrees/

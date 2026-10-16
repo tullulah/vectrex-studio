@@ -1,0 +1,24 @@
+{
+  "version": "1.0",
+  "name": "test2",
+  "fps": 15,
+  "vrec": "recordings/tdcm.vrec",
+  "vsmp": "",
+  "trace": {
+    "mode": "silhouette",
+    "threshold": 219,
+    "dark": 29,
+    "light": 241,
+    "cannyLo": 138,
+    "cannyHi": 164,
+    "epsilon": 1,
+    "budget": 200,
+    "minArea": 25,
+    "invert": true,
+    "crop": 0,
+    "borderMargin": 1,
+    "start": 111.5,
+    "duration": 60.5
+  },
+  "source": "/Users/daniel/projects/vectrex-pseudo-python/examples/tdcm.mp4"
+}

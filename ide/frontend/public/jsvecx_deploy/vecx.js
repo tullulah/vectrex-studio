@@ -52,6 +52,10 @@ function VecX()
     this.via_t1ll = 0;
     this.via_t1lh = 0;
     this.via_t1pb7 = 0;
+    /* LA COLA DE LA RAMPA, medida en consola (2026-09-15, banco rampasojo): la rampa sigue
+     * ~2,5 ciclos despues de expirar T1. Globals.RAMP_TAIL_CYCLES (0 = como siempre). */
+    this.via_ramp_tail = 0;
+    this.via_ramp_tail_acc = 0;   /* la fraccion de la cola, acumulada entre rampas */
     this.via_t2on = 0;
     this.via_t2int = 0;
     this.via_t2c = 0;
@@ -685,8 +689,9 @@ function VecX()
                 }
             }
             
-            // Debug: Check step over/into/out
-            if (this.stepMode === 'over' && currentPC === this.stepTargetAddress) {
+            // Debug: Check step over/into/out (a step over a set of statements only
+            // stops AFTER an instruction: it starts on one of them)
+            if (this.stepMode === 'over' && !this.stepTargets && currentPC === this.stepTargetAddress) {
                 this.pauseDebugger('step', currentPC);
                 this.stepMode = null;
                 this.stepTargetAddress = null;
@@ -758,8 +763,12 @@ function VecX()
                 return; // Stop execution immediately
             }
             
-            // CRITICAL: Check step target AFTER instruction execution (PC may have changed)
-            if (this.stepMode === 'over' && newPC === this.stepTargetAddress) {
+            // CRITICAL: Check step target AFTER instruction execution (PC may have changed).
+            // With stepTargets: the next statement start (any file) that is not deeper in
+            // the stack than where the step began (S grows down: a call pushes).
+            if (this.stepMode === 'over' && (this.stepTargets
+                    ? this.stepTargets.has(newPC) && (e6809.reg_s.value & 0xFFFF) >= this.stepMinS
+                    : newPC === this.stepTargetAddress)) {
                 console.log('[JSVecx Debug] ✅ Step Over reached target: 0x' + newPC.toString(16).toUpperCase());
                 this.pauseDebugger('step', newPC);
                 this.stepMode = null;
@@ -822,6 +831,13 @@ function VecX()
                                 }
                                 this.via_t1pb7 = 0x80;
                                 this.via_t1int = 0;
+                                {   /* La cola medida es 2,5 ciclos. Un ciclo a medias partiria cada trazo en dos
+                                     * segmentos, asi que la fraccion se ACUMULA: una rampa de 2 y otra de 3. */
+                                    var tc = (Globals.RAMP_TAIL_CYCLES || 0);
+                                    this.via_ramp_tail_acc += tc - Math.floor(tc);
+                                    this.via_ramp_tail = Math.floor(tc);
+                                    if( this.via_ramp_tail_acc >= 1 ) { this.via_ramp_tail += 1; this.via_ramp_tail_acc -= 1; }
+                                }
                             }
                         }
                     }
@@ -945,6 +961,11 @@ function VecX()
                     if( this.via_acr & 0x80 )
                     {
                         sig_ramp = this.via_t1pb7;
+                        if( sig_ramp && this.via_ramp_tail > 0 )
+                        {
+                            sig_ramp = 0;                       /* la cola: sigue integrando */
+                            this.via_ramp_tail -= 1;
+                        }
                     }
                     else
                     {
@@ -1048,6 +1069,7 @@ function VecX()
     this.extraTime = 0;
     this.fpsTimer = null;
     this.running = false;
+    this.pendingStart = null; // the start() that reset() schedules, until it fires
     this.vecx_emuloop = function()
     {
         if( this.running ) return;
@@ -1145,6 +1167,13 @@ function VecX()
     }
     this.stop = function()
     {
+        // An explicit stop cancels the start that reset() schedules: without this,
+        // stop() inside those 200 ms was undone and the machine came back on its own.
+        if( this.pendingStart != null )
+        {
+            clearTimeout( this.pendingStart );
+            this.pendingStart = null;
+        }
         if( this.running )
         {
             if( this.fpsTimer != null )
@@ -1153,8 +1182,11 @@ function VecX()
                 this.fpsTimer = null;
             }
             this.running = false;
-            this.e8910.stop();
         }
+        // Silence the PSG even when the loop was already halted: the debugger's pause
+        // clears `running` without it, and the audio callback then keeps playing the
+        // last register state (a stuck note) until something calls start() again.
+        this.e8910.stop();
     }
     this.start = function()
     {
@@ -1191,7 +1223,8 @@ function VecX()
         this.vecx_reset();
         this.osint.osint_clearscreen();
         var vecx = this;
-        setTimeout( function() { vecx.start(); }, 200 );
+        // Kept so stop() can cancel it (see stop()).
+        this.pendingStart = setTimeout( function() { vecx.pendingStart = null; vecx.start(); }, 200 );
     }
     this.toggleSoundEnabled = function()
     {
@@ -1402,6 +1435,7 @@ function VecX()
             // DON'T set running=true here - vecx_emuloop() checks this and returns early if already true
             // Let vecx_emuloop() set running=true itself (line 983)
             this.skipNextBreakpoint = true; // Skip breakpoint at current position
+            this.e8910.start(); // stop() may have silenced the PSG while paused
             console.log('[JSVecx Debug] Continuing execution (stepMode cleared, skipNextBreakpoint=true, running will be set by vecx_emuloop)');
             // Continue the emulation loop
             this.vecx_emuloop();
@@ -1447,9 +1481,19 @@ function VecX()
     }
     
     // Step Over (F10) - ejecutar instrucción por instrucción hasta la siguiente línea
-    this.debugStepOver = function(targetAddress) {
+    // targetAddress: one address (run until PC reaches it), or a Set of statement
+    // addresses with minS: run until PC reaches one of them with S >= minS (the
+    // statement after this one, in this function or the one it returns to).
+    this.debugStepOver = function(targetAddress, minS) {
         if (typeof targetAddress === 'string') {
             targetAddress = parseInt(targetAddress, 16);
+        }
+        if (targetAddress instanceof Set) {
+            this.stepTargets = targetAddress;
+            this.stepMinS = minS & 0xFFFF;
+            targetAddress = -1;
+        } else {
+            this.stepTargets = null;
         }
         // Clamp any stale high bits on reg_pc from prior unmasked execution.
         if (this.e6809) this.e6809.reg_pc = this.e6809.reg_pc & 0xFFFF;
@@ -1621,6 +1665,8 @@ function VecX()
         console.log('[JSVecx Debug] Listeners setup complete');
     }
     
-    // Auto-setup de listeners al crear el emulador
-    this.setupDebugListeners();
+    // No auto-setup: the IDE's Emulator panel handles every debug-* message (and
+    // only while the 6809 owns the panel). With this listener too, each command ran
+    // twice — a Step Into also stepped one instruction here, Continue resumed twice.
+    // A page without the IDE can still call this.setupDebugListeners() itself.
 }

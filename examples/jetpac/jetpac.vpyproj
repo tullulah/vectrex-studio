@@ -1,0 +1,21 @@
+[project]
+name = "jetpac"
+version = "0.1.0"
+author = ""
+description = ""
+entry = "src/main.vpy"
+
+[build]
+output = "build/jetpac.bin"
+target = "vectrex"
+optimization = 0
+debug_symbols = true
+
+[sources]
+vpy = ["src/**/*.vpy"]
+
+[resources]
+vectors = ["assets/vectors/**/*.vec"]
+music = ["assets/music/**/*.vmus"]
+sfx = ["assets/sfx/**/*.vmus"]
+

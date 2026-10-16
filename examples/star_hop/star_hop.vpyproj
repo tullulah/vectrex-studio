@@ -19,3 +19,6 @@ enemies    = ["assets/enemies/*.venemy"]
 music      = ["assets/music/*.vmus"]
 sfx        = ["assets/sfx/*.vsfx"]
 playground = ["assets/playground/*.vplay"]
+
+[sdk]
+version = "v1.3.2"

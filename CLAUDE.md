@@ -5,8 +5,8 @@ A complete development environment for the Vectrex retro gaming console: Python-
 ## Project Layout
 
 ```
-buildtools/   — 9-phase modular Rust compiler (ACTIVE)
-core/         — Legacy monolithic compiler (being retired)
+buildtools/   — 9-phase modular Rust compiler (the only compiler; binary `vpy_cli`)
+  vpy_lsp/    — Language server (binary `vpy_lsp`), shares the compiler's parser
 ide/          — Electron IDE with React+Monaco frontend
   electron/   — Main process, IPC, bundled binaries
   frontend/   — React + Vite UI
@@ -47,23 +47,42 @@ cd buildtools && cargo test -p <crate>  # Test one phase
 - **Multibank**: Every bank uses `ORG $0000`. Helpers bank = `(total / bank_size) - 1`.
 - **Tests required per phase**: single-bank case, multibank case, error case.
 
+### M6809 codegen gotchas
+- **Stack balance**: `PSHS`/`PULS` must balance; use `TMPVAL`/`TMPPTR` or a balanced `PSHS D`/`PULS D` for temporaries (see "m6809 Codegen" below).
+- **DP register**: load RAM values before switching DP; with DP=$D0 read RAM with `>` (extended addressing).
+- **Array stride**: 1 byte for u8/i8, 2 bytes for u16/i16.
+
+### ARM backends (rp2350 / uvm2 / pitrex)
+- **Runtime RAM is fixed `.equ` addresses**, not `.bss`: the VPy runtime area starts at `0x2007_F000` and user globals at `USER_RAM_START`. The layout and `RamAllocator` live in `buildtools/vpy_codegen/src/arm/ram_layout.rs` — read the values there, never hard-code them.
+- **AAPCS**: SP must be 8-byte aligned at every `bl`.
+- **Calls / frames**: parameters and locals live in a per-call stack frame addressed from r7 (`arm/frame.rs`, also used by pitrex): the prologue pushes `{r4…r7, lr}`, reserves the slots (keeping sp 8-byte aligned) and sets r7; every `return` branches to the one epilogue (`mov sp, r7`). Never give a parameter or local a global RAM slot, and any runtime routine that writes r7 must save it. Name rules are m6809's (`frames::function_scopes`); recursion is allowed on ARM.
+- **Literal pools**: a function using `ldr rN, =SYMBOL` ends with `.ltorg` — never at a branch-landing site (pending literals would execute as instructions).
+- **VIA port B is shared** by the joystick 4052 mux and the PSG BDIR/BC1: `bus_write($D000, …)` only inside `vpy_wait_recal` / `vpy_update_buttons` (frame start). Joystick axes are read from the SRAM cache.
+
 ## VPy Language
 
-Python-like syntax, compiles to MC6809 assembly. Key builtins: `WAIT_RECAL()`, `SET_INTENSITY()`, `DRAW_LINE()`, `J1_X/Y()`, `PLAY_MUSIC()`. See `docs/COMPILER_STATUS.md` for full reference.
+Python-like syntax, compiles to MC6809 assembly (and ARM for the cartridge targets). Key builtins: `SET_INTENSITY()`, `DRAW_LINE()`, `DRAW_VECTOR()`, `J1_X/Y()`, `PLAY_MUSIC()`. See `docs/COMPILER_STATUS.md` and `docs/MANUAL.md` for the full reference.
+
+Writing VPy games:
+- **Don't write `WAIT_RECAL()`, `AUDIO_UPDATE()`/`MUSIC_UPDATE()` or button reads**: the compiler injects `Wait_Recal` and `Read_Btns` at the start of every `loop()` and the audio update when music/SFX are used.
+- **`main()` and `loop()` are separate scopes**: a variable declared in `main()` is not visible in `loop()`.
+- **Assets are JSON** (`.vec`, `.vmus`, `.vsfx`, `.vanim`): never invent a text format, and check an asset exists before `DRAW_VECTOR("name")` / `PLAY_MUSIC("name")`.
+- **`const` arrays live in ROM**; leave const arrays untyped (u8 const arrays break in complex games).
 
 ## IDE
 
 - Electron + React + Monaco. State managed with Zustand.
-- LSP server: `ide/electron/resources/vpy_lsp` (Rust binary).
+- LSP server: `buildtools/vpy_lsp` (binary `vpy_lsp`, built with `cargo build --bin vpy_lsp`); `run-ide.sh` builds `vpy_cli` + `vpy_lsp` and copies them to `ide/electron/resources/`.
 - Emulator: JSVecX running in renderer process.
-- MCP server on port 9123 (IDE must be running first).
+- Integrated terminal (xterm.js + node-pty, `ide/electron/src/terminal.ts`). `claude` typed there gets the IDE's MCP tools via `--mcp-config` (shell integration in `ide/electron/src/shellIntegration.ts`).
+- MCP: `ide/mcp-server/server.js` (stdio) → authenticated localhost TCP (port 9123+, per-run token) → `ide/electron/src/mcp/`. The IDE must be running. See `ide/mcp-server/README.md`.
 
 ## Important Docs
 
 - `docs/INDEX.md` — navigation guide
-- `docs/COMPILER_STATUS.md` — opcodes, backlog, known issues
-- `docs/SUPER_SUMMARY.md` — emulator architecture (32 sections)
-- `docs/TIMING.md` — deterministic cycle model
+- `docs/COMPILER_STATUS.md` — compiler CLI, phases, known issues, LSP
+- `docs/MANUAL.md` — VPy language reference and builtins
+- `docs/IDE_GUIDE.md` — IDE panels, emulator, debugger, MCP server
 - `buildtools/README.md` — phase-by-phase status
 
 ## Debugging Runtime Issues
@@ -86,103 +105,13 @@ Python-like syntax, compiles to MC6809 assembly. Key builtins: `WAIT_RECAL()`, `
    - Variable updates at end-of-frame: check if writes are actually happening
    - State transitions: verify condition branches and flag preservation
 
-## Phase 5 Codegen Stack Corruption Bug - ✅ FIXED (2026-02-22)
+## m6809 Codegen: Temporaries, Arrays, Calls
 
-**Status:** FIXED - Stack imbalances in vpy_codegen have been corrected.
-
-**Original Problem:**
-- `LOOP_BODY()`: Had **75 PSHS vs 25 PULS** = **+50 UNMATCHED PUSHES** (100 bytes/frame)
-- Game would hang within seconds of entering gameplay due to stack exhaustion
-- Caused by improper use of M6809 stack addressing modes
-
-**Root Cause:**
-The codegen was using addressing mode post-increments (`CMPD ,S++` and `ADDD ,S++`) which only increment stack pointer by 1 byte instead of 2 bytes for 16-bit operations, leaving bytes stranded on the stack.
-
-**The Fix:**
-1. **expressions.rs** - Changed all comparison and binary operations from PSHS/PULS to memory temporaries (TMPVAL):
-   - `emit_compare()`: `PSHS D; CMPD ,S++` → `STD TMPVAL; CMPD TMPVAL`
-   - `emit_binop()`: `PSHS left; ADD ,S++` → `STD TMPVAL; ADD TMPVAL`
-
-2. **functions.rs** - Fixed compound assignments (+=, -=) to use temporaries
-
-3. **stack_validator.rs** - Enhanced to properly validate generated code
-
-4. **helpers.rs** - Added TMPVAL to RAM allocation
-
-**Verification:**
-- ✅ LOOP_BODY now has balanced PSHS/PULS
-- ✅ Pang compiles successfully without workarounds
-- ✅ `update_enemies()` and `draw_enemies()` re-enabled and working
-- ✅ All buildtools tests pass
-
-**Note on validation:**
-Stack validator is currently disabled (lib.rs lines 161-169) because hand-written BIOS helper functions have pre-existing issues unrelated to vpy_codegen. VPy-generated code now has correct stack balance.
-
-## Phase 5 Codegen Bug #2: Const Array Pointers Not Initialized - ✅ FIXED (2026-02-22)
-
-**Status:** FIXED - Const array pointer initialization added to MAIN startup.
-
-**Original Problem:**
-- Const arrays (like `location_names`, `location_x_coords`) were not being initialized
-- VAR_LOCATION_NAMES remained at address $0000 (uninitialized garbage)
-- Array access like `location_names[current_location]` read from cartridge header at $0000
-- Resulted in corrupted text display: "@GCE 2025" instead of actual location names
-
-**Root Cause:**
-In `buildtools/vpy_codegen/src/m6809/functions.rs`, the MAIN startup code only initialized mutable arrays (GlobalLet with `List` values) by copying from ROM to RAM. Const arrays (Item::Const with `List` values) were never initialized - their pointer variables remained uninitialized.
-
-**The Fix:**
-Added initialization loop in functions.rs lines 126-134 that sets pointer variables for all const arrays:
-```rust
-// Initialize const arrays - set pointer variables to ROM data addresses
-for item in &module.items {
-    if let vpy_parser::Item::Const { name, value, .. } = item {
-        if let vpy_parser::Expr::List(_elements) = value {
-            let rom_label = format!("ARRAY_{}_DATA", name.to_uppercase());
-            asm.push_str(&format!("    LDX #{}  ; Const array pointer -> ROM\n", rom_label));
-            asm.push_str(&format!("    STX VAR_{}\n", name.to_uppercase()));
-        }
-    }
-}
-```
-
-**Generated Code:**
-Each const array now gets proper initialization in MAIN:
-```asm
-LDX #ARRAY_LOCATION_NAMES_DATA  ; Const array pointer -> ROM
-STX VAR_LOCATION_NAMES
-LDX #ARRAY_LOCATION_X_COORDS_DATA  ; Const array pointer -> ROM
-STX VAR_LOCATION_X_COORDS
-; ... (same for level_backgrounds, level_enemy_count, level_enemy_speed)
-```
-
-**Verification:**
-- ✅ Pang compiles with all 6 const arrays properly initialized
-- ✅ Map screen displays correct location names instead of "@GCE 2025"
-- ✅ All buildtools tests pass
-- ✅ Array indexing produces correct pointers to ROM data
-
-## Phase 5 Codegen Bug #3: Function Calls (update_enemies/draw_enemies) - INVESTIGATION COMPLETE
-
-**Status:** No bug found - functions are correctly compiled. Previous issues likely caused by Bug #2.
-
-**Investigation Summary:**
-User reported that enabling `update_enemies()` and `draw_enemies()` function calls caused game to crash/hang, while disabling them showed other symptoms (character Y position wrong, etc.).
-
-**Analysis:**
-Examined generated ASM for both functions:
-1. **Stack Balance:** Both functions verified to have 0 PSHS/PULS mismatches - all temporaries use TMPVAL/TMPPTR memory locations
-2. **Function Prologue/Epilogue:** Both functions properly use JSR at call site and RTS at function end
-3. **Array Assignment:** Array write code (`arr[i] = value`) correctly handles element stride and address calculation
-4. **Parameter Passing:** User functions evaluate arguments into VAR_ARG0-4 and call JSR correctly
-
-**Key Insight:**
-The symptoms reported (character Y wrong, disappears on joystick input) suggest the real issue was Bug #2 (uninitialized const arrays). When const arrays weren't initialized:
-- location_x_coords, location_y_coords read from $0000
-- Other array calculations produced garbage
-- Game logic behaved erratically
-
-With Bug #2 fixed, array-dependent game logic (including enemy position updates) should work correctly.
-
-**Conclusion:**
-The function compilation code is sound. No bug in function calls themselves. The reported issues were likely symptoms of the const array initialization bug (Bug #2), which is now fixed.
+- **Temporaries**: `TMPVAL` holds an operand only while the operand evaluated second is a plain name or literal. When it is an expression, the first operand waits on the hardware stack with a balanced `PSHS D` / `PULS D`; builtin arguments that are expressions are computed first into `VAR___HOIST<n>` slots. Never let a nested evaluation reuse a temporary that is still holding a value (a single shared `TMPVAL` made `if a + 0 > b:` compare against 0 — reported by Raúl García, fixed 2026-10-07).
+- **`,S++` pops 2 bytes** (postbyte `$E1`), `,S+` pops 1 (`$E0`); the assembler encodes both correctly and tests pin it.
+- **Arrays**: a global or const array name evaluates to its fixed data address (`#VAR_X_DATA` / `#ARRAY_X_DATA`); there is no pointer variable. Arrays are passed to functions as their base address; an indexed parameter's element size comes from the arrays passed at its call sites (`m6809/array_params.rs`). Element stride follows the declared type (u8/i8 = 1 byte, sign-extended for i8).
+- **Usage scans** ("does the program use X?") all go through one exhaustive AST visitor, `m6809/ast_walk.rs`: a new AST node must be handled there.
+- **Constants** fold at compile time (`m6809/consts.rs`); an unfoldable const is a compile error.
+- **Errors** are collected during generation (`m6809/diagnostics.rs`) and fail the build; unknown calls, modules or members are compile errors with file:line on every target.
+- **Codegen state is per thread** (`thread_local!` in `m6809/context.rs` and the multibank flags in `m6809/builtins.rs`): never add a process-global mode flag.
+- **Calls / frames**: each function's parameters and locals are slots of a static frame (`VAR_<FUNC>__<NAME>` inside `FRAME_POOL`), overlaid by call graph in `m6809/frames.rs` (a frame starts after every caller's frame ends). The caller stores arguments straight into the callee's parameter slots (all computed first, on the stack, when any is not a plain name/literal) and the result returns in D. Recursion, wrong argument counts and undeclared names are compile errors. `VAR_ARG0-2` belong to the runtime helpers only; never pass user arguments through a global slot. Truth tests (`if f():`) must not trust the flags a value leaves: `expressions::emit_truth_value` adds `CMPD #0` when the code does not end in a load/ADDD/SUBD.

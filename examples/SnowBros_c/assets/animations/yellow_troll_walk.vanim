@@ -1,0 +1,32 @@
+{
+  "version": "1.0",
+  "name": "yellow_troll_walk",
+  "loop": true,
+  "base_refs": [],
+  "frames": [
+    {
+      "index": 0,
+      "duration_ticks": 16,
+      "vec_refs": [
+        "yellow_troll_walk1"
+      ],
+      "paths": []
+    },
+    {
+      "index": 1,
+      "duration_ticks": 16,
+      "vec_refs": [
+        "yellow_troll_walk2"
+      ],
+      "paths": []
+    },
+    {
+      "index": 2,
+      "duration_ticks": 16,
+      "vec_refs": [
+        "yellow_troll_walk3"
+      ],
+      "paths": []
+    }
+  ]
+}

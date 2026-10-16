@@ -11,41 +11,41 @@ import { OllamaManagerDialog } from '../dialogs/OllamaManagerDialog';
 import { SessionManager } from '../SessionManager';
 import { usePyPilotSession } from '../../hooks/usePyPilotSession';
 
-// Base de conocimiento de comandos Vectrex
+// Vectrex command knowledge base
 const VECTREX_COMMANDS = [
   {
     name: 'MOVE',
     syntax: 'MOVE(x, y)',
-    description: 'Mueve el haz electrónico a coordenadas absolutas',
-    example: 'MOVE(0, 0)  # Mueve al centro de la pantalla',
+    description: 'Moves the electron beam to absolute coordinates',
+    example: 'MOVE(0, 0)  # Move to the center of the screen',
     category: 'movement'
   },
   {
     name: 'DRAW_LINE',
     syntax: 'DRAW_LINE(dx, dy)',
-    description: 'Dibuja una línea desde la posición actual',
-    example: 'DRAW_LINE(50, 50)  # Línea diagonal',
+    description: 'Draws a line from the current position',
+    example: 'DRAW_LINE(50, 50)  # Diagonal line',
     category: 'drawing'
   },
   {
     name: 'INTENSITY',
     syntax: 'INTENSITY(value)',
-    description: 'Establece la intensidad del haz (0-255)',
-    example: 'INTENSITY(255)  # Máxima intensidad',
+    description: 'Sets the beam intensity (0-255)',
+    example: 'INTENSITY(255)  # Maximum intensity',
     category: 'intensity'
   },
   {
     name: 'PRINT_TEXT',
     syntax: 'PRINT_TEXT(x, y, text)',
-    description: 'Muestra texto en pantalla usando la fuente del Vectrex',
+    description: 'Displays text on screen using the Vectrex font',
     example: 'PRINT_TEXT(-50, 60, "HELLO WORLD")',
     category: 'text'
   },
   {
     name: 'ORIGIN',
     syntax: 'ORIGIN()',
-    description: 'Resetea la posición de referencia al centro (0,0)',
-    example: 'ORIGIN()  # Reset al centro',
+    description: 'Resets the reference position to the center (0,0)',
+    example: 'ORIGIN()  # Reset to the center',
     category: 'control'
   }
 ];
@@ -551,14 +551,14 @@ ${t('ai.help.example4', '`/assets` (to learn about vectors and music)')}`;
         console.log('[PyPilot] Found', toolCalls.length, 'tool calls:', toolCalls);
         
         if (toolCalls.length > 0) {
-          // addMessage('system', `⚙️ Ejecutando ${toolCalls.length} herramienta(s) MCP...`);
+          // addMessage('system', `⚙️ Running ${toolCalls.length} MCP tool(s)...`);
           
           try {
             const results = await mcpTools.executeToolCalls(toolCalls);
             addMessage('system', results);
           } catch (error) {
             logger.error('AI', 'MCP tool execution error:', error);
-            addMessage('system', `❌ Error ejecutando herramientas: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            addMessage('system', `❌ Error running tools: ${error instanceof Error ? error.message : 'Unknown error'}`);
           }
         } else {
           console.log('[PyPilot] No tool calls detected in response');
@@ -571,7 +571,7 @@ ${t('ai.help.example4', '`/assets` (to learn about vectors and music)')}`;
       }
     } catch (error) {
       logger.error('AI', 'AI service error:', error);
-      addMessage('assistant', `❌ Error al comunicar con IA: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+      addMessage('assistant', `❌ Error communicating with the AI: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -628,7 +628,7 @@ ${t('ai.help.example4', '`/assets` (to learn about vectors and music)')}`;
       addMessage('assistant', response.content);
     } catch (error) {
       logger.error('AI', 'Suggest fix error:', error);
-      addMessage('assistant', `❌ Error sugiriendo correcciones: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+      addMessage('assistant', `❌ Error suggesting fixes: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -657,59 +657,59 @@ ${t('ai.help.example4', '`/assets` (to learn about vectors and music)')}`;
       const commands = VECTREX_COMMANDS;
       const commandsList = commands.map((cmd: any) => `• **${cmd.name}** - ${cmd.description}`).join('\n');
       
-      addMessage('assistant', `📚 **Comandos Vectrex disponibles:**
+      addMessage('assistant', `📚 **Available Vectrex commands:**
 
 ${commandsList}
 
-**Uso:** \`/vectrex [comando]\`
-**Ejemplo:** \`/vectrex MOVE\`
+**Usage:** \`/vectrex [command]\`
+**Example:** \`/vectrex MOVE\`
 
-💡 Los comandos Vectrex usan coordenadas de -127 a +127 con (0,0) en el centro.`);
+💡 Vectrex commands use coordinates from -127 to +127 with (0,0) at the center.`);
       return;
     }
 
     const cmdInfo = VECTREX_COMMANDS.find(cmd => cmd.name.toUpperCase() === command.toUpperCase());
     
     if (cmdInfo) {
-      addMessage('assistant', `📚 **Comando Vectrex: ${cmdInfo.name}**
+      addMessage('assistant', `📚 **Vectrex command: ${cmdInfo.name}**
 
-**Sintaxis:** \`${cmdInfo.syntax}\`
+**Syntax:** \`${cmdInfo.syntax}\`
 
-**Descripción:** ${cmdInfo.description}
+**Description:** ${cmdInfo.description}
 
-**Ejemplo:**
+**Example:**
 \`\`\`vpy
 ${cmdInfo.example}
 \`\`\`
 
-**Categoría:** ${cmdInfo.category}
+**Category:** ${cmdInfo.category}
 
-💡 **Tip:** Los comandos de dibujo del Vectrex usan coordenadas relativas al centro de la pantalla (0,0).`);
+💡 **Tip:** Vectrex drawing commands use coordinates relative to the center of the screen (0,0).`);
     } else {
       const commands = VECTREX_COMMANDS;
       const commandNames = commands.map((cmd: any) => cmd.name).join(', ');
       
-      addMessage('assistant', `❓ Comando "${command.toUpperCase()}" no encontrado.
+      addMessage('assistant', `❓ Command "${command.toUpperCase()}" not found.
 
-**Comandos disponibles:**
+**Available commands:**
 ${commandNames}
 
-**Uso:** \`/vectrex [comando]\`
-**Ejemplo:** \`/vectrex MOVE\``);
+**Usage:** \`/vectrex [command]\`
+**Example:** \`/vectrex MOVE\``);
     }
   };
 
   const showCodeExamples = () => {
     addMessage('assistant', `${t('ai.examples.title', '📝 **VPy Code Examples:**')}
 
-**1. Hola Mundo básico:**
+**1. Basic Hello World:**
 \`\`\`vpy
 def main():
     INTENSITY(255)
     PRINT_TEXT(-50, 0, "Hello Vectrex!")
 \`\`\`
 
-**2. Formas básicas:**
+**2. Basic shapes:**
 \`\`\`vpy
 def main():
     INTENSITY(200)
@@ -718,7 +718,7 @@ def main():
     DRAW_CIRCLE(30)
 \`\`\`
 
-**3. Animación simple:**
+**3. Simple animation:**
 \`\`\`vpy
 var x = 0
 
@@ -738,96 +738,96 @@ ${t('ai.examples.wantMore', 'Want to see examples of something specific?')}`);
   const showAssetsHelp = () => {
     addMessage('assistant', `${t('ai.assets.title', '🎨 **Using Assets in VPy**')}
 
-## 📁 Estructura de Proyecto
+## 📁 Project Structure
 
 \`\`\`
-proyecto/
+project/
 ├── src/
-│   └── main.vpy          # Tu código
+│   └── main.vpy          # Your code
 ├── assets/
-│   ├── vectors/          # Gráficos 3D (.vec)
-│   ├── music/            # Música (.vmus)
-│   ├── sfx/              # Efectos de sonido (.vmus)
-│   ├── voices/           # Samples de voz
-│   └── animations/       # Animaciones
-└── build/                # ROMs compiladas
+│   ├── vectors/          # 3D graphics (.vec)
+│   ├── music/            # Music (.vmus)
+│   ├── sfx/              # Sound effects (.vmus)
+│   ├── voices/           # Voice samples
+│   └── animations/       # Animations
+└── build/                # Compiled ROMs
 \`\`\`
 
-## 🎨 Editor de Vectores 3D (.vec)
+## 🎨 3D Vector Editor (.vec)
 
-**Crear gráficos:**
-1. Abre/crea archivo .vec en el IDE
-2. Usa el ViewCube para navegar en 3D (estilo Fusion 360)
-3. Dibuja vectores en el espacio 3D (-127 a +127)
-4. Guarda y referencia en VPy
+**Create graphics:**
+1. Open/create a .vec file in the IDE
+2. Use the ViewCube to navigate in 3D (Fusion 360 style)
+3. Draw vectors in 3D space (-127 to +127)
+4. Save and reference it from VPy
 
-**Usar en código:**
+**Use in code:**
 \`\`\`vpy
 def setup():
-    # Cargar un gráfico vectorial
-    nave = load_vec("assets/vectors/spaceship.vec")
+    # Load a vector graphic
+    ship = load_vec("assets/vectors/spaceship.vec")
 
 def loop():
     INTENSITY(255)
-    # Dibujar el gráfico en posición x=0, y=0
-    draw_vec(nave, 0, 0, scale=1.0)
+    # Draw the graphic at position x=0, y=0
+    draw_vec(ship, 0, 0, scale=1.0)
 \`\`\`
 
-## 🎵 Editor de Música (.vmus)
+## 🎵 Music Editor (.vmus)
 
-**Componer música:**
-1. Crea archivo .vmus en el IDE
-2. Piano roll: 3 canales cuadrados + 1 ruido
-3. Coloca notas con el ratón
-4. Preview en tiempo real con el PSG emulador
-5. Exporta para tu juego
+**Compose music:**
+1. Create a .vmus file in the IDE
+2. Piano roll: 3 square channels + 1 noise
+3. Place notes with the mouse
+4. Real-time preview with the emulated PSG
+5. Export for your game
 
-**Usar en código:**
+**Use in code:**
 \`\`\`vpy
 def setup():
-    # Cargar y reproducir música de fondo
-    tema = load_music("assets/music/theme.vmus")
-    play_music(tema, loop=True)
+    # Load and play background music
+    theme = load_music("assets/music/theme.vmus")
+    play_music(theme, loop=True)
     
-    # Cargar efectos de sonido
+    # Load sound effects
     explosion = load_sfx("assets/sfx/boom.vmus")
 
 def on_collision():
-    # Reproducir efecto
+    # Play the effect
     play_sfx(explosion)
 \`\`\`
 
-## 🎮 Ejemplo Completo
+## 🎮 Complete Example
 
 \`\`\`vpy
-# Cargar assets en setup
+# Load assets in setup
 def setup():
-    nave = load_vec("assets/vectors/player.vec")
-    enemigo = load_vec("assets/vectors/enemy.vec")
-    musica = load_music("assets/music/game.vmus")
-    disparo = load_sfx("assets/sfx/shoot.vmus")
+    ship = load_vec("assets/vectors/player.vec")
+    enemy = load_vec("assets/vectors/enemy.vec")
+    music = load_music("assets/music/game.vmus")
+    shot = load_sfx("assets/sfx/shoot.vmus")
     
-    play_music(musica, loop=True)
+    play_music(music, loop=True)
 
 def loop():
     INTENSITY(255)
     
-    # Dibujar nave del jugador
-    draw_vec(nave, player_x, player_y, scale=1.0)
+    # Draw the player's ship
+    draw_vec(ship, player_x, player_y, scale=1.0)
     
-    # Dibujar enemigos
-    draw_vec(enemigo, enemy_x, enemy_y, scale=0.8)
+    # Draw enemies
+    draw_vec(enemy, enemy_x, enemy_y, scale=0.8)
     
     if button_pressed(1):
-        play_sfx(disparo)
+        play_sfx(shot)
 \`\`\`
 
-**Comandos relacionados:**
-• \`/examples\` - Ver más ejemplos de código
-• \`/vectrex\` - Info sobre hardware Vectrex
-• \`/generate\` - Generar código con assets
+**Related commands:**
+• \`/examples\` - See more code examples
+• \`/vectrex\` - Info about the Vectrex hardware
+• \`/generate\` - Generate code with assets
 
-💡 **Tip:** El editor 3D tiene ViewCube para rotar la cámara - click en caras/bordes para vistas preestablecidas!`);
+💡 **Tip:** The 3D editor has a ViewCube to rotate the camera - click its faces/edges for preset views!`);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

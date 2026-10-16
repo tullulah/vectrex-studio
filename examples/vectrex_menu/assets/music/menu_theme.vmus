@@ -1,0 +1,142 @@
+{
+  "version": "1.0",
+  "name": "Vectrex Menu - Calm Idle",
+  "author": "Vectrex Studio",
+  "tempo": 96,
+  "ticksPerBeat": 24,
+  "totalTicks": 384,
+  "notes": [
+    {
+      "id": "i1",
+      "note": 57,
+      "start": 0,
+      "duration": 18,
+      "velocity": 10,
+      "channel": 0
+    },
+    {
+      "id": "i2",
+      "note": 64,
+      "start": 24,
+      "duration": 18,
+      "velocity": 9,
+      "channel": 0
+    },
+    {
+      "id": "i3",
+      "note": 60,
+      "start": 48,
+      "duration": 42,
+      "velocity": 9,
+      "channel": 0
+    },
+    {
+      "id": "i4",
+      "note": 53,
+      "start": 96,
+      "duration": 18,
+      "velocity": 10,
+      "channel": 0
+    },
+    {
+      "id": "i5",
+      "note": 60,
+      "start": 120,
+      "duration": 18,
+      "velocity": 9,
+      "channel": 0
+    },
+    {
+      "id": "i6",
+      "note": 57,
+      "start": 144,
+      "duration": 42,
+      "velocity": 9,
+      "channel": 0
+    },
+    {
+      "id": "i7",
+      "note": 64,
+      "start": 192,
+      "duration": 18,
+      "velocity": 10,
+      "channel": 0
+    },
+    {
+      "id": "i8",
+      "note": 67,
+      "start": 216,
+      "duration": 18,
+      "velocity": 9,
+      "channel": 0
+    },
+    {
+      "id": "i9",
+      "note": 60,
+      "start": 240,
+      "duration": 42,
+      "velocity": 9,
+      "channel": 0
+    },
+    {
+      "id": "i10",
+      "note": 62,
+      "start": 288,
+      "duration": 18,
+      "velocity": 10,
+      "channel": 0
+    },
+    {
+      "id": "i11",
+      "note": 59,
+      "start": 312,
+      "duration": 18,
+      "velocity": 9,
+      "channel": 0
+    },
+    {
+      "id": "i12",
+      "note": 55,
+      "start": 336,
+      "duration": 36,
+      "velocity": 9,
+      "channel": 0
+    },
+    {
+      "id": "b1",
+      "note": 45,
+      "start": 0,
+      "duration": 94,
+      "velocity": 8,
+      "channel": 1
+    },
+    {
+      "id": "b2",
+      "note": 41,
+      "start": 96,
+      "duration": 94,
+      "velocity": 8,
+      "channel": 1
+    },
+    {
+      "id": "b3",
+      "note": 48,
+      "start": 192,
+      "duration": 94,
+      "velocity": 8,
+      "channel": 1
+    },
+    {
+      "id": "b4",
+      "note": 43,
+      "start": 288,
+      "duration": 88,
+      "velocity": 8,
+      "channel": 1
+    }
+  ],
+  "noise": [],
+  "loopStart": 0,
+  "loopEnd": 384,
+  "loop": true
+}

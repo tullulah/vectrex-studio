@@ -21,6 +21,8 @@
 //!   Full implementation requires successive approximation (ZPULSE + IFR comparator).
 //!   Pending until bus master mode (PCB v2, BUS_MASTER_AVAILABLE=true) is available.
 
+use super::analysis::Usage;
+
 /// Size in bytes of a single ARM-format level object in ROM.
 /// Layout: x(2) + y(2) + scale(1) + intensity(1) + flags(1) + type(1)
 ///         + vector_ptr(4) + half_w(1) + half_h(1) + vel_x(1) + vel_y(1)
@@ -72,65 +74,185 @@ fn collect_from_stmts(stmts: &[vpy_parser::Stmt], out: &mut Vec<MsgEntry>) {
     }
 }
 
-pub fn emit_builtins(msg_entries: &[MsgEntry]) -> String {
+pub fn emit_builtins(msg_entries: &[MsgEntry], usage: &Usage) -> String {
     let mut s = String::new();
     s.push_str("@ ============================================================\n");
     s.push_str("@ VPy Builtins — ARM Thumb2 / RP2350\n");
     s.push_str("@ ============================================================\n\n");
 
     // drawing.rs emits: vpy_draw_vector, vpy_draw_vector_3d, smul_lut,
-    // dv_reset, dv_move_to, dv_draw_delta, _SIN_TABLE
-    s.push_str(&emit_font_data());
+    // dv_reset, dv_move_to, dv_draw_delta, _SIN_TABLE (usage-gated there).
+    // Here, each runtime group is emitted only when the program uses it
+    // (see arm/analysis.rs for the group/dependency table).
+    // The font + glyph renderer now live in the BIOS (firmware text.rs), reached
+    // via SYS_PRINT_TEXT (#16). The game emits no font data — it was ~57% of a
+    // text program's .s and identical in every game.
+    // vpy_wait_recal + vpy_set_intensity: always-emit core (SVC stubs; the
+    // game loop calls wait_recal and every draw routine calls set_intensity).
     s.push_str(&emit_wait_recal());
     s.push_str(&emit_set_intensity());
-    s.push_str(&emit_move());
-    s.push_str(&emit_draw_line());
-    s.push_str(&emit_draw_vector_ex());
-    s.push_str(&emit_draw_shapes());
-    s.push_str(&emit_print_text());
-    s.push_str(&emit_print_number());
-    s.push_str(&emit_joystick());
-    s.push_str(&emit_psg_helpers());
-    s.push_str(&emit_math_builtins());
-    s.push_str(&emit_utility_builtins());
-    s.push_str(&emit_audio_builtins());
-    s.push_str(&emit_note_engine());
-    s.push_str(&emit_state_builtins());
-    s.push_str(&emit_level_builtins());
-    s.push_str(&emit_msg_builtins(msg_entries));
-    s.push_str(&emit_draw_anim());
+    if usage.has("MOVE") {
+        s.push_str(&emit_move());
+    }
+    if usage.has("DRAW_LINE") {
+        s.push_str(&emit_draw_line());
+    }
+    if usage.has("DRAW_VECTOR_EX") {
+        s.push_str(&emit_draw_vector_ex());
+    }
+    // Shapes: each gates its own routine.
+    if usage.has("CIRCLE")      { s.push_str(&emit_draw_circle()); }
+    if usage.has("RECT")        { s.push_str(&emit_draw_rect()); }
+    if usage.has("FILLED_RECT") { s.push_str(&emit_draw_filled_rect()); }
+    if usage.has("POLYGON")     { s.push_str(&emit_draw_polygon()); }
+    if usage.has("ELLIPSE")     { s.push_str(&emit_draw_ellipse()); }
+    if usage.has("ARC")         { s.push_str(&emit_draw_arc()); }
+    if usage.has("BEZIER")      { s.push_str(&emit_draw_bezier_cubic()); }
+    if usage.has("BEZIER_QUAD") { s.push_str(&emit_draw_bezier_quad()); }
+    if usage.has("TEXT") {
+        s.push_str(&emit_print_text());
+    }
+    if usage.has("PRINT_NUMBER") {
+        s.push_str(&emit_print_number());
+    }
+    if usage.has("JOYSTICK") {
+        s.push_str(&emit_joystick());
+        s.push_str(&emit_update_buttons(usage.has("ANALOG")));
+    }
+    if usage.has("PSG") {
+        s.push_str(&emit_psg_helpers());
+    }
+    // Math (each group gated separately).
+    if usage.has("MATH_BASIC") { s.push_str(&emit_math_basic()); }
+    if usage.has("TRIG")       { s.push_str(&emit_trig()); }
+    if usage.has("SQRT")       { s.push_str(&emit_sqrt()); }
+    if usage.has("RAND")       { s.push_str(&emit_rand()); }
+    // Utilities.
+    if usage.has("PEEK_POKE")  { s.push_str(&emit_peek_poke()); }
+    if usage.has("WAIT")       { s.push_str(&emit_wait_builtin()); }
+    if usage.has("BEEP")       { s.push_str(&emit_beep()); }
+    // Audio engines.
+    if usage.has("MUSIC")      { s.push_str(&emit_music_engine()); }
+    if usage.has("SFX")        { s.push_str(&emit_sfx_engine()); }
+    if usage.has("NOTE")       { s.push_str(&emit_note_engine()); }
+    // State accessors.
+    if usage.has("CAMERA")     { s.push_str(&emit_camera_builtins()); }
+    if usage.has("FRAME_US")   { s.push_str(&emit_frame_us()); }
+    if usage.has("TEXT")       { s.push_str(&emit_text_state()); }
+    if usage.has("DEBUG")      { s.push_str(&emit_debug_builtins()); }
+    // Level system.
+    if usage.has("LEVEL")           { s.push_str(&emit_level_builtins()); }
+    if usage.has("LEVEL_COLLISION") { s.push_str(&emit_level_collision()); }
+    if usage.has("MSG") {
+        s.push_str(&emit_msg_builtins(msg_entries));
+    }
+    if usage.has("ANIM") {
+        s.push_str(&emit_draw_anim());
+    }
+    if usage.has("SD") {
+        s.push_str(&emit_sd_builtins());
+    }
+    if usage.has("PLAY_SAMPLE") {
+        s.push_str(&emit_play_sample());
+    }
+    if usage.has("SAMPLE_POS") {
+        s.push_str(&emit_sample_pos());
+    }
+    s
+}
+
+// ─── PLAY_SAMPLE ────────────────────────────────────────────────────────────
+
+fn emit_play_sample() -> String {
+    // BIOS trap — hands the .vsmp ROM table (r0 = _NAME_SMP) to the core1 audio
+    // streamer, which clocks 4-bit samples out to the PSG volume register as a
+    // crude DAC. SYS_PLAY_SAMPLE = 9 (next free syscall after SYS_BUS_WRITE = 8).
+    let mut s = String::new();
+    s.push_str("@ vpy_play_sample(r0=sample_data_ptr) — BIOS trap: SYS_PLAY_SAMPLE\n");
+    s.push_str(".global vpy_play_sample\n.type vpy_play_sample, %function\n.thumb_func\nvpy_play_sample:\n");
+    s.push_str("    svc     #9                      @ SYS_PLAY_SAMPLE\n");
+    s.push_str("    bx      lr\n\n");
+    s
+}
+
+// ─── SD card game list ──────────────────────────────────────────────────────
+
+fn emit_sd_builtins() -> String {
+    // BIOS traps exposing the SD-cached game list. The BIOS parses the FAT root
+    // at boot and serves the data; VPy owns all presentation/navigation.
+    //   SD_FILE_COUNT()  → r0 = number of .BIN games        (SYS_SD_COUNT = 17)
+    //   SD_FILE_NAME(i)  → r0 = ptr to NUL-terminated name  (SYS_SD_NAME  = 18)
+    // The returned pointer is passed straight to PRINT_TEXT (r2 = str_ptr).
+    let mut s = String::new();
+    s.push_str("@ vpy_sd_count() → r0 = number of SD games — BIOS trap: SYS_SD_COUNT\n");
+    s.push_str(".global vpy_sd_count\n.type vpy_sd_count, %function\n.thumb_func\nvpy_sd_count:\n");
+    s.push_str("    svc     #17                     @ SYS_SD_COUNT\n");
+    s.push_str("    bx      lr\n\n");
+    s.push_str("@ vpy_sd_name(r0=index) → r0 = ptr to name — BIOS trap: SYS_SD_NAME\n");
+    s.push_str(".global vpy_sd_name\n.type vpy_sd_name, %function\n.thumb_func\nvpy_sd_name:\n");
+    s.push_str("    svc     #18                     @ SYS_SD_NAME\n");
+    s.push_str("    bx      lr\n\n");
+    // DRAW_SD_PREVIEW(index, x, y, scale): play the SD .vrec preview for game
+    // `index` inside a box at (x,y). IDE-emulator only for now — on real HW the
+    // svc is unhandled (no-op) until precompiled binary previews exist.
+    s.push_str("@ vpy_draw_sd_preview(r0=index, r1=x, r2=y, r3=scale) — BIOS trap: SYS_SD_PREVIEW\n");
+    s.push_str(".global vpy_draw_sd_preview\n.type vpy_draw_sd_preview, %function\n.thumb_func\nvpy_draw_sd_preview:\n");
+    s.push_str("    svc     #19                     @ SYS_SD_PREVIEW\n");
+    s.push_str("    bx      lr\n\n");
+    // LAUNCH_GAME(index): load game[index].BIN from SD and run it. Does NOT
+    // return (the firmware jumps into the game); exit = hold all 4 buttons ~1 s.
+    s.push_str("@ vpy_launch_game(r0=index) — BIOS trap: SYS_LAUNCH (does not return)\n");
+    s.push_str(".global vpy_launch_game\n.type vpy_launch_game, %function\n.thumb_func\nvpy_launch_game:\n");
+    s.push_str("    svc     #20                     @ SYS_LAUNCH\n");
+    s.push_str("    bx      lr\n\n");
+    // CALIBRATE(): svc 30 — not 26, which is RASTER_TEXT in a .um2 (uvm2_svc.c).
+    // The console calibration screen (the SDK's uvm2_wizard), run by
+    // the BIOS until button 4; it saves to config/uvm2.cfg on the SD. Returns 1 if
+    // the settings were saved, 0 if not (no config file, or a card that refused).
+    s.push_str("@ vpy_calibrate() -> r0 = 1 saved — BIOS trap: SYS_CALIBRATE\n");
+    s.push_str(".global vpy_calibrate\n.type vpy_calibrate, %function\n.thumb_func\nvpy_calibrate:\n");
+    s.push_str("    svc     #30                     @ SYS_CALIBRATE\n");
+    s.push_str("    bx      lr\n\n");
+    s
+}
+
+// ─── SAMPLE_POS ─────────────────────────────────────────────────────────────
+
+fn emit_sample_pos() -> String {
+    // SAMPLE_POS(fps): returns the current audio-synced FRAME index for the given
+    // fps = floor(samples_played * fps / sampleRate). Lets video follow the audio
+    // master clock (no drift). r0 = fps in → r0 = frame out. SYS_SAMPLE_POS = 10.
+    let mut s = String::new();
+    s.push_str("@ vpy_sample_pos(r0=fps) → r0=current frame — BIOS trap: SYS_SAMPLE_POS\n");
+    s.push_str(".global vpy_sample_pos\n.type vpy_sample_pos, %function\n.thumb_func\nvpy_sample_pos:\n");
+    s.push_str("    svc     #10                     @ SYS_SAMPLE_POS\n");
+    s.push_str("    bx      lr\n\n");
     s
 }
 
 // ─── WAIT_RECAL ────────────────────────────────────────────────────────────
 
 fn emit_wait_recal() -> String {
+    // BIOS trap — the BIOS paces the frame (absolute 20 ms deadlines from its
+    // hardware timer) and holds the integrator zero during the wait.
     let mut s = String::new();
-    s.push_str("@ vpy_wait_recal() — wait for VIA Timer 1 (frame sync)\n");
+    s.push_str("@ vpy_wait_recal() — BIOS trap: SYS_WAIT_RECAL\n");
     s.push_str(".global vpy_wait_recal\n.type vpy_wait_recal, %function\n.thumb_func\nvpy_wait_recal:\n");
-    s.push_str("    push    {lr}\n");
-    s.push_str("    mov     r0, #0xD006\n    mov     r1, #0x7F\n    bl      bus_write\n"); // T1L_L=$7F
-    s.push_str("    mov     r0, #0xD007\n    mov     r1, #0x00\n    bl      bus_write\n"); // T1L_H=0
-    s.push_str("    mov     r0, #0xD005\n    mov     r1, #0x00\n    bl      bus_write\n"); // T1C_H=0 (start)
-    s.push_str("vpy_wr_poll:\n");
-    s.push_str("    mov     r0, #0xD00D\n    bl      bus_read\n");
-    s.push_str("    tst     r0, #0x40\n    beq     vpy_wr_poll\n");
-    s.push_str("    mov     r0, #0xD004\n    bl      bus_read\n"); // clear T1 flag
-    s.push_str("    pop     {pc}\n    .ltorg\n\n");
+    s.push_str("    svc     #1                      @ SYS_WAIT_RECAL\n");
+    s.push_str("    bx      lr\n\n");
     s
 }
 
 // ─── SET_INTENSITY ─────────────────────────────────────────────────────────
 
 fn emit_set_intensity() -> String {
+    // BIOS trap — the BIOS runs the full Intensity_a sequence (Z mux channel),
+    // not just a DAC write (the old inline body was emulator-only behaviour).
     let mut s = String::new();
-    s.push_str("@ vpy_set_intensity(r0=intensity 0-127)\n");
+    s.push_str("@ vpy_set_intensity(r0=intensity 0-127) — BIOS trap: SYS_SET_INTENSITY\n");
     s.push_str(".global vpy_set_intensity\n.type vpy_set_intensity, %function\n.thumb_func\nvpy_set_intensity:\n");
-    s.push_str("    push    {lr}\n");
-    s.push_str("    and     r1, r0, #0x7F\n");
-    s.push_str("    mov     r0, #0xD001\n");
-    s.push_str("    bl      bus_write\n");
-    s.push_str("    pop     {pc}\n    .ltorg\n\n");
+    s.push_str("    svc     #2                      @ SYS_SET_INTENSITY\n");
+    s.push_str("    bx      lr\n\n");
     s
 }
 
@@ -146,10 +268,10 @@ fn emit_move() -> String {
     s.push_str("    ldr     r0, =VPY_MOVE_X\n");
     s.push_str("    str     r4, [r0]            @ VPY_MOVE_X = x\n");
     s.push_str("    str     r5, [r0, #4]        @ VPY_MOVE_Y = y  (VPY_MOVE_Y = VPY_MOVE_X + 4)\n");
-    s.push_str("    mov     r0, #0xD001\n    mov     r1, r5\n    bl      bus_write\n"); // PORT_A=y
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x00\n    bl      bus_write\n"); // PB=0 (Y mux)
-    s.push_str("    mov     r0, #0xD001\n    mov     r1, r4\n    bl      bus_write\n"); // PORT_A=x
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x01\n    bl      bus_write\n"); // PB=1 (X mux)
+    // Position the beam via the BIOS (SYS_MOVE_ABS). The game keeps no VIA/mux
+    // knowledge — it only records VPY_MOVE_X/Y above for draw_line's offset.
+    s.push_str("    mov     r0, r4\n    mov     r1, r5\n");
+    s.push_str("    svc     #15                     @ SYS_MOVE_ABS (r0=x, r1=y)\n");
     s.push_str("    pop     {r4, r5, pc}\n    .ltorg\n\n");
     s
 }
@@ -181,38 +303,10 @@ fn emit_draw_line() -> String {
     // Compute dx = x1-x0, dy = y1-y0 (end coords are NOT offset by MOVE — they are absolute already)
     // x1 and y1 in DRAW_LINE_ARGS are absolute screen coordinates (same convention as x0,y0)
     // dx = (MOVE_X + x1) - (MOVE_X + x0) = x1 - x0 (MOVE offsets cancel)
-    s.push_str("    sub     r4, r6, r4\n    sub     r5, r7, r5\n"); // r4=dx=x1-x0, r5=dy=y1-y0 (MOVE cancels)
-    // abs(dx) → r6
-    s.push_str("    movs    r6, r4\n");
-    s.push_str("    bpl     vdl_dx_pos\n");
-    s.push_str("    neg     r6, r4\n");       // r6 = |dx|
-    s.push_str("vdl_dx_pos:\n");
-    // abs(dy) → r7
-    s.push_str("    movs    r7, r5\n");
-    s.push_str("    bpl     vdl_dy_pos\n");
-    s.push_str("    neg     r7, r5\n");       // r7 = |dy|
-    s.push_str("vdl_dy_pos:\n");
-    // max_dim = max(|dx|, |dy|) → r7
-    s.push_str("    cmp     r6, r7\n");
-    s.push_str("    it      ge\n");
-    s.push_str("    movge   r7, r6\n");       // if |dx| >= |dy|: r7 = |dx|
-    // if max_dim == 0, nothing to draw
-    s.push_str("    cmp     r7, #0\n    beq     vdl_done\n");
-    // n = ceil(max_dim / 127) = (max_dim + 126) / 127
-    s.push_str("    add     r7, r7, #126\n");
-    s.push_str("    mov     r6, #127\n");
-    s.push_str("    sdiv    r8, r7, r6\n");   // r8 = steps (n)
-    // r4=remaining_dx, r5=remaining_dy, r8=steps_left
-    s.push_str("vdl_loop:\n");
-    s.push_str("    cmp     r8, #0\n    beq     vdl_done\n");
-    s.push_str("    sdiv    r0, r4, r8\n");   // sub_dx = remaining_dx / steps_left
-    s.push_str("    sdiv    r1, r5, r8\n");   // sub_dy = remaining_dy / steps_left
-    s.push_str("    sub     r4, r4, r0\n");   // remaining_dx -= sub_dx
-    s.push_str("    sub     r5, r5, r1\n");   // remaining_dy -= sub_dy
-    s.push_str("    sub     r8, r8, #1\n");   // steps_left--
+    s.push_str("    sub     r0, r6, r4\n    sub     r1, r7, r5\n"); // dx=x1-x0, dy=y1-y0 (MOVE cancels)
+    // Un solo trazo: el SDK trocea por el limite real de la rampa; el troceo a 127 que
+    // habia aqui era para un formato de comando de i8 que ya no existe.
     s.push_str("    bl      dv_draw_delta\n");
-    s.push_str("    b       vdl_loop\n");
-    s.push_str("vdl_done:\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, pc}\n    .ltorg\n\n");
     s
 }
@@ -230,16 +324,31 @@ fn emit_draw_vector_ex() -> String {
     //   r9 = ox
     //   r10 = oy
     // Push r10 so it is callee-saved.  8 regs × 4 = 32 bytes → sp+32 = intensity arg.
-    s.push_str("@ vpy_draw_vector_ex(r0=asset, r1=ox, r2=oy, r3=mirror, [sp+0]=intensity)\n");
+    s.push_str("@ vpy_draw_vector_ex(r0=asset, r1=ox, r2=oy, r3=mirror, [sp+0]=intensity; escala en VPY_DRAW_SCALE)\n");
     s.push_str("@ Draws asset centered at (ox,oy); mirror: bit0=flipX, bit1=flipY\n");
     s.push_str("@ dv_reset called before EVERY path so each path starts from screen centre.\n");
+    s.push_str("@\n");
+    s.push_str("@ ESCALA (r11) desde VPY_DRAW_SCALE, en treintaydosavos: 32 = 1:1, y 0 tambien.\n");
+    s.push_str("@ El .vplay siempre llevo el byte y NINGUN dibujante lo leia — por eso los\n");
+    s.push_str("@ objetos salian al 100% aunque el editor dijera 0,7.\n");
+    s.push_str("@\n");
+    s.push_str("@ Se escala la POSICION ACUMULADA, no cada delta. Escalar delta a delta\n");
+    s.push_str("@ redondea en cada uno y el error se suma: con 0,7 un trazo de veinte\n");
+    s.push_str("@ segmentos de 1 unidad acabaria a cero o al doble segun caiga el redondeo.\n");
+    s.push_str("@ Llevando la cuenta sin escalar y restando posiciones escaladas, el error\n");
+    s.push_str("@ nunca pasa de medio punto. [sp+0..12] = ux, uy, lsx, lsy.\n");
     s.push_str(".global vpy_draw_vector_ex\n.type vpy_draw_vector_ex, %function\n.thumb_func\nvpy_draw_vector_ex:\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, lr}\n"); // 8 regs = 32 bytes
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}\n"); // 9 regs = 36 bytes
+    s.push_str("    sub     sp, sp, #16         @ [sp+0]=ux [sp+4]=uy [sp+8]=lsx [sp+12]=lsy\n");
     s.push_str("    mov     r4, r0              @ asset_ptr\n");
-    s.push_str("    mov     r9, r1              @ ox  (kept for whole function)\n");
-    s.push_str("    mov     r10, r2             @ oy  (kept for whole function)\n");
+    s.push_str("    lsl     r9, r1, #4          @ ox en 1/16 (kept for whole function)\n");
+    s.push_str("    lsl     r10, r2, #4         @ oy en 1/16\n");
     s.push_str("    mov     r7, r3              @ mirror\n");
-    s.push_str("    ldr     r8, [sp, #32]       @ intensity arg (8 saved regs = 32 bytes)\n");
+    s.push_str("    ldr     r8, [sp, #52]       @ intensity arg (16 locales + 9 regs = 52)\n");
+    s.push_str("    ldr     r0, =VPY_DRAW_SCALE\n");
+    s.push_str("    ldrb    r11, [r0]           @ escala pedida (x32)\n");
+    s.push_str("    mov     r1, #0\n    strb    r1, [r0]    @ CONSUMIDA: no se hereda\n");
+    s.push_str("    cmp     r11, #0\n    it      eq\n    moveq   r11, #32   @ 0 => 1:1\n");
     s.push_str("    ldr     r5, [r4]            @ path_count\n");
     s.push_str("    mov     r6, #0              @ path_idx\n");
     s.push_str("dvex_pl:\n");
@@ -264,9 +373,17 @@ fn emit_draw_vector_ex() -> String {
     s.push_str("dvex_nfx:\n");
     s.push_str("    tst     r7, #2\n    beq     dvex_nfy\n    neg     r1, r1\n");
     s.push_str("dvex_nfy:\n");
-    s.push_str("    add     r0, r0, r9          @ x_start + ox\n");
-    s.push_str("    add     r1, r1, r10         @ y_start + oy\n");
-    s.push_str("    bl      dv_move_to\n");
+    // La POSICION del objeto (ox,oy) no se escala: escalar mueve el dibujo, no
+    // lo coloca. Se escala solo el punto de arranque DENTRO del asset.
+    s.push_str("    str     r0, [sp, #0]        @ ux = x_start (sin escalar)\n");
+    s.push_str("    str     r1, [sp, #4]        @ uy = y_start\n");
+    s.push_str("    mul     r0, r0, r11\n    add     r0, r0, #1\n    asr     r0, r0, #1   @ (x*s+1)>>1 = 1/16 de unidad\n");
+    s.push_str("    mul     r1, r1, r11\n    add     r1, r1, #1\n    asr     r1, r1, #1\n");
+    s.push_str("    str     r0, [sp, #8]        @ lsx = ultimo x escalado\n");
+    s.push_str("    str     r1, [sp, #12]       @ lsy\n");
+    s.push_str("    add     r0, r0, r9          @ x_start*escala + ox\n");
+    s.push_str("    add     r1, r1, r10         @ y_start*escala + oy\n");
+    s.push_str("    bl      dv_move_to_q4\n");
     // r2 = cmd_ptr (r3 still holds path_ptr; r2 is caller-free across dv_* traps)
     s.push_str("    add     r2, r3, #5          @ command ptr\n");
     s.push_str("dvex_cl:\n");
@@ -279,17 +396,33 @@ fn emit_draw_vector_ex() -> String {
     s.push_str("dvex_nfx2:\n");
     s.push_str("    tst     r7, #2\n    beq     dvex_nfy2\n    neg     r1, r1\n");
     s.push_str("dvex_nfy2:\n");
-    s.push_str("    bl      dv_draw_delta\n");
+    // Escalado: se acumula la posicion SIN escalar y se emite la diferencia entre
+    // posiciones escaladas. r12 es de arranque libre (AAPCS) y aqui no cruza el bl.
+    s.push_str("    ldr     r12, [sp, #0]       @ ux\n");
+    s.push_str("    add     r12, r12, r0\n    str     r12, [sp, #0]\n");
+    s.push_str("    mul     r12, r12, r11\n    add     r12, r12, #1\n    asr     r12, r12, #1\n");
+    s.push_str("    ldr     r0, [sp, #8]        @ lsx\n");
+    s.push_str("    sub     r0, r12, r0         @ dx escalado\n");
+    s.push_str("    str     r12, [sp, #8]\n");
+    s.push_str("    ldr     r12, [sp, #4]       @ uy\n");
+    s.push_str("    add     r12, r12, r1\n    str     r12, [sp, #4]\n");
+    s.push_str("    mul     r12, r12, r11\n    add     r12, r12, #1\n    asr     r12, r12, #1\n");
+    s.push_str("    ldr     r1, [sp, #12]       @ lsy\n");
+    s.push_str("    sub     r1, r12, r1         @ dy escalado\n");
+    s.push_str("    str     r12, [sp, #12]\n");
+    s.push_str("    bl      dv_draw_delta_q4\n");
     s.push_str("    add     r2, r2, #3\n    b       dvex_cl\n");
     s.push_str("dvex_cskip:\n    add     r2, r2, #1\n    b       dvex_cl\n");
     s.push_str("dvex_cend:\n    add     r6, r6, #1\n    b       dvex_pl\n");
-    s.push_str("dvex_done:\n    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n    .ltorg\n\n");
+    s.push_str("dvex_done:\n    add     sp, sp, #16         @ soltar ux/uy/lsx/lsy\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
     s
 }
 
 // ─── DRAW_CIRCLE / DRAW_RECT / DRAW_FILLED_RECT / DRAW_POLYGON ────────────
+// Each shape routine is emitted independently (gated by its own usage group).
 
-fn emit_draw_shapes() -> String {
+fn emit_draw_circle() -> String {
     let mut s = String::new();
 
     // ── vpy_draw_circle(r0=cx, r1=cy, r2=radius, r3=intensity) ──────────────
@@ -301,44 +434,50 @@ fn emit_draw_shapes() -> String {
     s.push_str(".global vpy_draw_circle\n.type vpy_draw_circle, %function\n.thumb_func\nvpy_draw_circle:\n");
     s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}\n");
     s.push_str("    sub     sp, sp, #8              @ [sp+0]=first_x [sp+4]=first_y\n");
-    s.push_str("    mov     r4, r0                  @ cx\n");
-    s.push_str("    mov     r5, r1                  @ cy\n");
-    s.push_str("    asr     r6, r2, #1              @ r6 = diam/2 = radius (matches M6809 convention)\n");
+    s.push_str("    lsl     r4, r0, #4              @ cx en 1/16\n");
+    s.push_str("    lsl     r5, r1, #4              @ cy en 1/16\n");
+    s.push_str("    mov     r6, r2                  @ r6 = radius (the 3rd arg IS the radius, per the API/docs; the old asr#1 halved it → circles came out at half size / dim)\n");
     s.push_str("    mov     r7, r3                  @ intensity\n");
     s.push_str("    bl      dv_reset\n");
     s.push_str("    mov     r0, r7\n    bl      vpy_set_intensity\n");
     // first point at angle=0: cos(0)=127, sin(0)=0
     s.push_str("    mov     r0, #0\n    bl      vpy_cos\n");
-    s.push_str("    mul     r0, r0, r6\n    mov     r1, #127\n    sdiv    r0, r0, r1\n");
+    s.push_str("    mul     r0, r0, r6\n    lsl     r0, r0, #4\n    mov     r1, #127\n    sdiv    r0, r0, r1   @ 1/16\n");
     s.push_str("    add     r9, r4, r0              @ prev_x = cx + cos(0)*r/127\n");
     s.push_str("    mov     r0, #0\n    bl      vpy_sin\n");
-    s.push_str("    mul     r0, r0, r6\n    mov     r1, #127\n    sdiv    r0, r0, r1\n");
+    s.push_str("    mul     r0, r0, r6\n    lsl     r0, r0, #4\n    mov     r1, #127\n    sdiv    r0, r0, r1   @ 1/16\n");
     s.push_str("    add     r10, r5, r0             @ prev_y = cy + sin(0)*r/127\n");
     s.push_str("    str     r9, [sp]\n    str     r10, [sp, #4] @ save first point\n");
-    s.push_str("    mov     r0, r9\n    mov     r1, r10\n    bl      dv_move_to\n");
+    s.push_str("    mov     r0, r9\n    mov     r1, r10\n    bl      dv_move_to_q4\n");
     s.push_str("    mov     r8, #1\n");
     s.push_str("vpy_dc_loop:\n");
     s.push_str("    cmp     r8, #16\n    bge     vpy_dc_close\n");
     s.push_str("    lsl     r0, r8, #3\n    bl      vpy_cos\n");
-    s.push_str("    mul     r0, r0, r6\n    mov     r1, #127\n    sdiv    r0, r0, r1\n");
+    s.push_str("    mul     r0, r0, r6\n    lsl     r0, r0, #4\n    mov     r1, #127\n    sdiv    r0, r0, r1   @ 1/16\n");
     s.push_str("    add     r11, r4, r0             @ new_x\n");
     s.push_str("    lsl     r0, r8, #3\n    bl      vpy_sin\n");
-    s.push_str("    mul     r0, r0, r6\n    mov     r1, #127\n    sdiv    r0, r0, r1\n");
+    s.push_str("    mul     r0, r0, r6\n    lsl     r0, r0, #4\n    mov     r1, #127\n    sdiv    r0, r0, r1   @ 1/16\n");
     s.push_str("    add     r0, r5, r0              @ new_y in r0\n");
     s.push_str("    sub     r2, r11, r9             @ dx = new_x - prev_x\n");
     s.push_str("    sub     r3, r0, r10             @ dy = new_y - prev_y\n");
     s.push_str("    mov     r9, r11                 @ prev_x = new_x\n");
     s.push_str("    mov     r10, r0                 @ prev_y = new_y\n");
-    s.push_str("    mov     r0, r2\n    mov     r1, r3\n    bl      dv_draw_delta\n");
+    s.push_str("    mov     r0, r2\n    mov     r1, r3\n    bl      dv_draw_delta_q4\n");
     s.push_str("    add     r8, r8, #1\n    b       vpy_dc_loop\n");
     s.push_str("vpy_dc_close:\n");
     s.push_str("    ldr     r0, [sp]                @ first_x\n");
     s.push_str("    ldr     r1, [sp, #4]            @ first_y\n");
     s.push_str("    sub     r0, r0, r9              @ dx = first_x - prev_x\n");
     s.push_str("    sub     r1, r1, r10             @ dy = first_y - prev_y\n");
-    s.push_str("    bl      dv_draw_delta\n");
+    s.push_str("    bl      dv_draw_delta_q4\n");
     s.push_str("    add     sp, sp, #8\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
+
+    s
+}
+
+fn emit_draw_rect() -> String {
+    let mut s = String::new();
 
     // ── vpy_draw_rect(r0=x, r1=y, r2=w, r3=h, [sp+0]=intensity) ─────────────
     // Stack: push {r4..r8,lr} = 24 bytes → intensity at sp+24
@@ -355,6 +494,12 @@ fn emit_draw_shapes() -> String {
     s.push_str("    neg     r0, r6\n    mov     r1, #0\n    bl      dv_draw_delta\n"); // left
     s.push_str("    mov     r0, #0\n    neg     r1, r7\n    bl      dv_draw_delta\n"); // down
     s.push_str("    pop     {r4, r5, r6, r7, r8, pc}\n    .ltorg\n\n");
+
+    s
+}
+
+fn emit_draw_filled_rect() -> String {
+    let mut s = String::new();
 
     // ── vpy_draw_filled_rect(r0=x, r1=y, r2=w, r3=h, [sp+28]=intensity) ──────
     // Draws horizontal scan lines to simulate fill (step 3 units).
@@ -395,6 +540,12 @@ fn emit_draw_shapes() -> String {
     s.push_str("vdfr_done:\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, pc}\n    .ltorg\n\n");
 
+    s
+}
+
+fn emit_draw_polygon() -> String {
+    let mut s = String::new();
+
     // ── vpy_draw_polygon(r0=n, r1=intensity, r2=x0, r3=y0, [sp+0]=x1,y1,...) ─
     // Closed polygon with n vertices. push {r4..r11,lr} = 36 bytes.
     // Extra vertex pairs at [sp+36], [sp+40], [sp+44], ...
@@ -428,6 +579,12 @@ fn emit_draw_shapes() -> String {
     s.push_str("    bl      dv_draw_delta\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
 
+    s
+}
+
+fn emit_draw_ellipse() -> String {
+    let mut s = String::new();
+
     // ── vpy_draw_ellipse(r0=cx, r1=cy, r2=rx, r3=ry, [sp+0]=intensity) ──────
     // 16-segment parametric ellipse: x = cx + rx*cos(i*8)/127, y = cy + ry*sin(i*8)/127
     // push {r4..r11,lr} = 36 bytes + sub sp,#8 (locals) = 44 total → intensity at [sp+44].
@@ -438,8 +595,8 @@ fn emit_draw_shapes() -> String {
     s.push_str(".global vpy_draw_ellipse\n.type vpy_draw_ellipse, %function\n.thumb_func\nvpy_draw_ellipse:\n");
     s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 36 bytes\n");
     s.push_str("    sub     sp, sp, #8          @ [sp+0]=first_x [sp+4]=first_y\n");
-    s.push_str("    mov     r4, r0              @ cx\n");
-    s.push_str("    mov     r5, r1              @ cy\n");
+    s.push_str("    lsl     r4, r0, #4          @ cx en 1/16\n");
+    s.push_str("    lsl     r5, r1, #4          @ cy en 1/16\n");
     s.push_str("    mov     r6, r2              @ rx\n");
     s.push_str("    mov     r7, r3              @ ry\n");
     s.push_str("    ldr     r8, [sp, #44]       @ intensity (8+36=44)\n");
@@ -447,40 +604,46 @@ fn emit_draw_shapes() -> String {
     s.push_str("    mov     r0, r8\n    bl      vpy_set_intensity\n");
     // First point i=0: cos(0)=127 → prev_x = cx + rx; sin(0)=0 → prev_y = cy
     s.push_str("    mov     r0, #0\n    bl      vpy_cos\n");
-    s.push_str("    mul     r0, r0, r6\n    mov     r1, #127\n    sdiv    r0, r0, r1\n");
+    s.push_str("    mul     r0, r0, r6\n    lsl     r0, r0, #4\n    mov     r1, #127\n    sdiv    r0, r0, r1   @ 1/16\n");
     s.push_str("    add     r8, r4, r0          @ prev_x = cx + rx*cos(0)/127\n");
     s.push_str("    str     r8, [sp, #0]        @ first_x\n");
     s.push_str("    mov     r0, #0\n    bl      vpy_sin\n");
-    s.push_str("    mul     r0, r0, r7\n    mov     r1, #127\n    sdiv    r0, r0, r1\n");
+    s.push_str("    mul     r0, r0, r7\n    lsl     r0, r0, #4\n    mov     r1, #127\n    sdiv    r0, r0, r1   @ 1/16\n");
     s.push_str("    add     r9, r5, r0          @ prev_y = cy + ry*sin(0)/127\n");
     s.push_str("    str     r9, [sp, #4]        @ first_y\n");
-    s.push_str("    mov     r0, r8\n    mov     r1, r9\n    bl      dv_move_to\n");
+    s.push_str("    mov     r0, r8\n    mov     r1, r9\n    bl      dv_move_to_q4\n");
     s.push_str("    mov     r10, #1             @ i = 1\n");
     s.push_str("vde_loop:\n");
     s.push_str("    cmp     r10, #16\n    bge     vde_close\n");
     s.push_str("    lsl     r0, r10, #3         @ angle = i*8\n");
     s.push_str("    bl      vpy_cos\n");
-    s.push_str("    mul     r0, r0, r6\n    mov     r1, #127\n    sdiv    r0, r0, r1\n");
+    s.push_str("    mul     r0, r0, r6\n    lsl     r0, r0, #4\n    mov     r1, #127\n    sdiv    r0, r0, r1   @ 1/16\n");
     s.push_str("    add     r11, r4, r0         @ new_x = cx + rx*cos/127\n");
     s.push_str("    lsl     r0, r10, #3\n");
     s.push_str("    bl      vpy_sin\n");
-    s.push_str("    mul     r0, r0, r7\n    mov     r1, #127\n    sdiv    r0, r0, r1\n");
+    s.push_str("    mul     r0, r0, r7\n    lsl     r0, r0, #4\n    mov     r1, #127\n    sdiv    r0, r0, r1   @ 1/16\n");
     s.push_str("    add     r0, r5, r0          @ new_y\n");
     // Compute deltas while new values are still in r11/r0, before overwriting prev
     s.push_str("    sub     r2, r11, r8         @ dx = new_x - prev_x\n");
     s.push_str("    sub     r3, r0, r9          @ dy = new_y - prev_y\n");
     s.push_str("    mov     r8, r11             @ prev_x = new_x\n");
     s.push_str("    mov     r9, r0              @ prev_y = new_y\n");
-    s.push_str("    mov     r0, r2\n    mov     r1, r3\n    bl      dv_draw_delta\n");
+    s.push_str("    mov     r0, r2\n    mov     r1, r3\n    bl      dv_draw_delta_q4\n");
     s.push_str("    add     r10, r10, #1\n    b       vde_loop\n");
     s.push_str("vde_close:\n");
     s.push_str("    ldr     r0, [sp, #0]        @ first_x\n");
     s.push_str("    ldr     r1, [sp, #4]        @ first_y\n");
     s.push_str("    sub     r0, r0, r8          @ dx = first_x - prev_x\n");
     s.push_str("    sub     r1, r1, r9          @ dy = first_y - prev_y\n");
-    s.push_str("    bl      dv_draw_delta\n");
+    s.push_str("    bl      dv_draw_delta_q4\n");
     s.push_str("    add     sp, sp, #8\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
+
+    s
+}
+
+fn emit_draw_arc() -> String {
+    let mut s = String::new();
 
     // ── vpy_draw_arc(r0=segs, r1=cx, r2=cy, r3=r, [sp+0]=start_deg, [sp+4]=sweep_deg, [sp+8]=intensity) ──
     // Open arc from start_deg, sweeping sweep_deg degrees (CCW), in segs segments.
@@ -492,8 +655,8 @@ fn emit_draw_shapes() -> String {
     s.push_str(".global vpy_draw_arc\n.type vpy_draw_arc, %function\n.thumb_func\nvpy_draw_arc:\n");
     s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 36 bytes\n");
     s.push_str("    mov     r4, r0              @ segs (loop counter)\n");
-    s.push_str("    mov     r5, r1              @ cx\n");
-    s.push_str("    mov     r6, r2              @ cy\n");
+    s.push_str("    lsl     r5, r1, #4          @ cx en 1/16\n");
+    s.push_str("    lsl     r6, r2, #4          @ cy en 1/16\n");
     s.push_str("    mov     r7, r3              @ radius\n");
     // Convert start_deg → LUT step (0-127 = 0-360°)
     s.push_str("    ldr     r0, [sp, #36]       @ start_deg\n");
@@ -513,36 +676,34 @@ fn emit_draw_shapes() -> String {
     // First point at start_angle
     s.push_str("    and     r0, r8, #127\n");
     s.push_str("    bl      vpy_cos\n");
-    s.push_str("    mul     r0, r0, r7\n    mov     r1, #127\n    sdiv    r0, r0, r1\n");
+    s.push_str("    mul     r0, r0, r7\n    lsl     r0, r0, #4\n    mov     r1, #127\n    sdiv    r0, r0, r1   @ 1/16\n");
     s.push_str("    add     r10, r5, r0         @ prev_x = cx + r*cos(start)/127\n");
     s.push_str("    and     r0, r8, #127\n");
     s.push_str("    bl      vpy_sin\n");
-    s.push_str("    mul     r0, r0, r7\n    mov     r1, #127\n    sdiv    r0, r0, r1\n");
+    s.push_str("    mul     r0, r0, r7\n    lsl     r0, r0, #4\n    mov     r1, #127\n    sdiv    r0, r0, r1   @ 1/16\n");
     s.push_str("    add     r11, r6, r0         @ prev_y = cy + r*sin(start)/127\n");
-    s.push_str("    mov     r0, r10\n    mov     r1, r11\n    bl      dv_move_to\n");
+    s.push_str("    mov     r0, r10\n    mov     r1, r11\n    bl      dv_move_to_q4\n");
     s.push_str("vpy_arc_loop:\n");
     s.push_str("    cmp     r4, #0\n    beq     vpy_arc_done\n");
     s.push_str("    add     r8, r8, r9          @ current_angle += step_size\n");
     s.push_str("    and     r0, r8, #127\n");
     s.push_str("    bl      vpy_cos\n");
-    s.push_str("    mul     r0, r0, r7\n    mov     r1, #127\n    sdiv    r0, r0, r1\n");
+    s.push_str("    mul     r0, r0, r7\n    lsl     r0, r0, #4\n    mov     r1, #127\n    sdiv    r0, r0, r1   @ 1/16\n");
     s.push_str("    add     r0, r5, r0          @ new_x\n");
     s.push_str("    push    {r0}                @ save new_x (r0 clobbered by next bl)\n");
     s.push_str("    and     r0, r8, #127\n");
     s.push_str("    bl      vpy_sin\n");
-    s.push_str("    mul     r0, r0, r7\n    mov     r1, #127\n    sdiv    r0, r0, r1\n");
+    s.push_str("    mul     r0, r0, r7\n    lsl     r0, r0, #4\n    mov     r1, #127\n    sdiv    r0, r0, r1   @ 1/16\n");
     s.push_str("    add     r1, r6, r0          @ new_y\n");
     s.push_str("    pop     {r0}                @ restore new_x\n");
     s.push_str("    sub     r2, r0, r10         @ dx = new_x - prev_x\n");
     s.push_str("    sub     r3, r1, r11         @ dy = new_y - prev_y\n");
     s.push_str("    mov     r10, r0             @ prev_x = new_x\n");
     s.push_str("    mov     r11, r1             @ prev_y = new_y\n");
-    s.push_str("    mov     r0, r2\n    mov     r1, r3\n    bl      dv_draw_delta\n");
+    s.push_str("    mov     r0, r2\n    mov     r1, r3\n    bl      dv_draw_delta_q4\n");
     s.push_str("    sub     r4, r4, #1\n    b       vpy_arc_loop\n");
     s.push_str("vpy_arc_done:\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
-
-    emit_bezier_functions(&mut s);
 
     s
 }
@@ -561,24 +722,25 @@ fn emit_draw_shapes() -> String {
 ///
 /// Caller args (6 words) at sp+72:
 ///   [sp+72]=cp2x [sp+76]=cp2y [sp+80]=x1 [sp+84]=y1 [sp+88]=steps [sp+92]=intensity
-fn emit_bezier_functions(s: &mut String) {
+fn emit_draw_bezier_cubic() -> String {
+    let mut s = String::new();
     // ── cubic ──────────────────────────────────────────────────────────────────
     s.push_str("@ vpy_draw_bezier(x0,y0,cp1x,cp1y,[sp+0]=cp2x,cp2y,x1,y1,steps,intensity)\n");
     s.push_str(".global vpy_draw_bezier\n.type vpy_draw_bezier, %function\n.thumb_func\nvpy_draw_bezier:\n");
     s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}\n");    // 36 bytes
     s.push_str("    sub     sp, sp, #36\n");                                 // 9 slots; total=72
-    s.push_str("    mov     r4, r0\n    mov     r5, r1\n    mov     r6, r2\n    mov     r7, r3\n");
-    s.push_str("    ldr     r8,  [sp, #72]      @ cp2x\n");
-    s.push_str("    ldr     r9,  [sp, #76]      @ cp2y\n");
-    s.push_str("    ldr     r10, [sp, #80]      @ x1\n");
-    s.push_str("    ldr     r11, [sp, #84]      @ y1\n");
+    s.push_str("    lsl     r4, r0, #4\n    lsl     r5, r1, #4\n    lsl     r6, r2, #4\n    lsl     r7, r3, #4   @ P0, cp1 en 1/16\n");
+    s.push_str("    ldr     r8,  [sp, #72]      @ cp2x\n    lsl     r8, r8, #4\n");
+    s.push_str("    ldr     r9,  [sp, #76]      @ cp2y\n    lsl     r9, r9, #4\n");
+    s.push_str("    ldr     r10, [sp, #80]      @ x1\n    lsl     r10, r10, #4\n");
+    s.push_str("    ldr     r11, [sp, #84]      @ y1\n    lsl     r11, r11, #4\n");
     s.push_str("    ldr     r1,  [sp, #88]      @ steps\n");
     s.push_str("    ldr     r0,  [sp, #92]      @ intensity\n");
     s.push_str("    cmp     r1, #1\n    blt     vbez_done\n");
     s.push_str("    str     r1, [sp]\n");                                    // steps_total
     s.push_str("    mov     r1, #1\n    str     r1, [sp, #4]\n");            // t_num = 1
     s.push_str("    bl      dv_reset\n    bl      vpy_set_intensity\n");
-    s.push_str("    mov     r0, r4\n    mov     r1, r5\n    bl      dv_move_to\n");
+    s.push_str("    mov     r0, r4\n    mov     r1, r5\n    bl      dv_move_to_q4\n");
     s.push_str("    str     r4, [sp, #8]\n    str     r5, [sp, #12]\n");     // prev = P0
 
     s.push_str("vbez_loop:\n");
@@ -622,7 +784,7 @@ fn emit_bezier_functions(s: &mut String) {
     s.push_str("    str     r1, [sp, #12]       @ prev_y = by\n");
     s.push_str("    sub     r0, r0, r2          @ dx = bx - prev_x\n");
     s.push_str("    sub     r1, r1, r3          @ dy = by - prev_y\n");
-    s.push_str("    bl      dv_draw_delta\n");
+    s.push_str("    bl      dv_draw_delta_q4\n");
 
     // t_num++
     s.push_str("    ldr     r0, [sp, #4]\n    add     r0, r0, #1\n    str     r0, [sp, #4]\n");
@@ -632,6 +794,11 @@ fn emit_bezier_functions(s: &mut String) {
     s.push_str("    add     sp, sp, #36\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
 
+    s
+}
+
+fn emit_draw_bezier_quad() -> String {
+    let mut s = String::new();
     // ── quadratic ─────────────────────────────────────────────────────────────
     // vpy_draw_bezier_quad(r0=x0, r1=y0, r2=cpx, r3=cpy,
     //   [sp+0]=x1, [sp+4]=y1, [sp+8]=steps, [sp+12]=intensity)
@@ -642,16 +809,16 @@ fn emit_bezier_functions(s: &mut String) {
     s.push_str(".global vpy_draw_bezier_quad\n.type vpy_draw_bezier_quad, %function\n.thumb_func\nvpy_draw_bezier_quad:\n");
     s.push_str("    push    {r4, r5, r6, r7, r8, r9, lr}\n");    // 28 bytes
     s.push_str("    sub     sp, sp, #28\n");                       // 7 slots; total=56
-    s.push_str("    mov     r4, r0\n    mov     r5, r1\n    mov     r6, r2\n    mov     r7, r3\n");
-    s.push_str("    ldr     r8, [sp, #56]       @ x1\n");
-    s.push_str("    ldr     r9, [sp, #60]       @ y1\n");
+    s.push_str("    lsl     r4, r0, #4\n    lsl     r5, r1, #4\n    lsl     r6, r2, #4\n    lsl     r7, r3, #4   @ P0, cp en 1/16\n");
+    s.push_str("    ldr     r8, [sp, #56]       @ x1\n    lsl     r8, r8, #4\n");
+    s.push_str("    ldr     r9, [sp, #60]       @ y1\n    lsl     r9, r9, #4\n");
     s.push_str("    ldr     r1, [sp, #64]       @ steps\n");
     s.push_str("    ldr     r0, [sp, #68]       @ intensity\n");
     s.push_str("    cmp     r1, #1\n    blt     vbezq_done\n");
     s.push_str("    str     r1, [sp]\n");
     s.push_str("    mov     r1, #1\n    str     r1, [sp, #4]\n");
     s.push_str("    bl      dv_reset\n    bl      vpy_set_intensity\n");
-    s.push_str("    mov     r0, r4\n    mov     r1, r5\n    bl      dv_move_to\n");
+    s.push_str("    mov     r0, r4\n    mov     r1, r5\n    bl      dv_move_to_q4\n");
     s.push_str("    str     r4, [sp, #8]\n    str     r5, [sp, #12]\n");
 
     s.push_str("vbezq_loop:\n");
@@ -676,13 +843,15 @@ fn emit_bezier_functions(s: &mut String) {
     s.push_str("    str     r1, [sp, #12]       @ prev_y = by\n");
     s.push_str("    sub     r0, r0, r2          @ dx\n");
     s.push_str("    sub     r1, r1, r3          @ dy\n");
-    s.push_str("    bl      dv_draw_delta\n");
+    s.push_str("    bl      dv_draw_delta_q4\n");
     s.push_str("    ldr     r0, [sp, #4]\n    add     r0, r0, #1\n    str     r0, [sp, #4]\n");
     s.push_str("    b       vbezq_loop\n");
 
     s.push_str("vbezq_done:\n");
     s.push_str("    add     sp, sp, #28\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, pc}\n    .ltorg\n\n");
+
+    s
 }
 
 // ─── PRINT_TEXT ────────────────────────────────────────────────────────────
@@ -699,364 +868,29 @@ fn emit_bezier_functions(s: &mut String) {
 /// font path. Returns (ascii, Vec<(cmd, glyph_x, glyph_y)>) where cmd=1=MOVE
 /// (beam off), cmd=2=DRAW (beam on); glyph_x in 0..4, glyph_y in 0..6 with
 /// y=0 bottom, y=6 top.
-fn font_glyphs() -> Vec<(u8, Vec<(u8, u8, u8)>)> {
-    // (ascii, [(cmd=1 move | 2 draw, glyph_x 0..4, glyph_y 0..6)])
-    // y=0 bottom, y=6 top; glyph box width=4
-    let mut g: Vec<(u8, Vec<(u8, u8, u8)>)> = vec![
-        (b' ', vec![]),  // space: no strokes, just advance
-        (b'!', vec![(1,2,6),(2,2,2),(1,2,0),(2,2,1)]),
-        (b'"', vec![(1,1,5),(2,1,6),(1,3,5),(2,3,6)]),
-        (b'+', vec![(1,2,1),(2,2,5),(1,0,3),(2,4,3)]),
-        (b',', vec![(1,2,1),(2,1,0)]),
-        (b'-', vec![(1,0,3),(2,4,3)]),
-        (b'.', vec![(1,1,0),(2,2,0)]),
-        (b'/', vec![(1,0,0),(2,4,6)]),
-        (b'0', vec![(1,0,0),(2,4,0),(2,4,6),(2,0,6),(2,0,0)]),
-        (b'1', vec![(1,2,0),(2,2,6)]),
-        (b'2', vec![(1,0,6),(2,4,6),(2,4,3),(2,0,3),(2,0,0),(2,4,0)]),
-        (b'3', vec![(1,0,6),(2,4,6),(2,4,0),(2,0,0),(1,4,3),(2,1,3)]),
-        (b'4', vec![(1,0,6),(2,0,3),(2,4,3),(1,4,6),(2,4,0)]),
-        (b'5', vec![(1,4,6),(2,0,6),(2,0,3),(2,4,3),(2,4,0),(2,0,0)]),
-        (b'6', vec![(1,4,6),(2,0,6),(2,0,0),(2,4,0),(2,4,3),(2,0,3)]),
-        (b'7', vec![(1,0,6),(2,4,6),(2,2,0)]),
-        (b'8', vec![(1,0,0),(2,4,0),(2,4,6),(2,0,6),(2,0,0),(1,0,3),(2,4,3)]),
-        (b'9', vec![(1,4,0),(2,4,6),(2,0,6),(2,0,3),(2,4,3)]),
-        (b':', vec![(1,2,1),(2,2,2),(1,2,4),(2,2,5)]),
-        (b';', vec![(1,2,4),(2,2,5),(1,2,1),(2,1,0)]),
-        (b'<', vec![(1,3,6),(2,0,3),(2,3,0)]),
-        (b'=', vec![(1,0,4),(2,4,4),(1,0,2),(2,4,2)]),
-        (b'>', vec![(1,1,6),(2,4,3),(2,1,0)]),
-        (b'?', vec![(1,0,6),(2,4,6),(2,4,4),(2,2,3),(1,2,1),(2,2,2)]),
-        (b'A', vec![(1,0,0),(2,2,6),(2,4,0),(1,0,3),(2,4,3)]),
-        (b'B', vec![(1,0,0),(2,0,6),(2,3,6),(2,3,3),(2,0,3),(2,3,3),(2,3,0),(2,0,0)]),
-        (b'C', vec![(1,4,6),(2,0,6),(2,0,0),(2,4,0)]),
-        (b'D', vec![(1,0,0),(2,0,6),(2,3,6),(2,4,5),(2,4,1),(2,3,0),(2,0,0)]),
-        (b'E', vec![(1,4,0),(2,0,0),(2,0,6),(2,4,6),(1,0,3),(2,3,3)]),
-        (b'F', vec![(1,0,0),(2,0,6),(2,4,6),(1,0,3),(2,3,3)]),
-        (b'G', vec![(1,4,6),(2,0,6),(2,0,0),(2,4,0),(2,4,3),(2,2,3)]),
-        (b'H', vec![(1,0,0),(2,0,6),(1,4,0),(2,4,6),(1,0,3),(2,4,3)]),
-        (b'I', vec![(1,1,0),(2,3,0),(1,2,0),(2,2,6),(1,1,6),(2,3,6)]),
-        (b'J', vec![(1,0,1),(2,1,0),(2,4,0),(2,4,6),(1,1,6),(2,3,6)]),
-        (b'K', vec![(1,0,0),(2,0,6),(1,0,3),(2,4,6),(1,0,3),(2,4,0)]),
-        (b'L', vec![(1,0,6),(2,0,0),(2,4,0)]),
-        (b'M', vec![(1,0,0),(2,0,6),(2,2,3),(2,4,6),(2,4,0)]),
-        (b'N', vec![(1,0,0),(2,0,6),(2,4,0),(2,4,6)]),
-        (b'O', vec![(1,0,0),(2,4,0),(2,4,6),(2,0,6),(2,0,0)]),
-        (b'P', vec![(1,0,0),(2,0,6),(2,3,6),(2,4,5),(2,4,4),(2,3,3),(2,0,3)]),
-        (b'Q', vec![(1,0,0),(2,4,0),(2,4,6),(2,0,6),(2,0,0),(1,3,1),(2,4,0)]),
-        (b'R', vec![(1,0,0),(2,0,6),(2,3,6),(2,4,5),(2,4,4),(2,3,3),(2,0,3),(2,4,0)]),
-        (b'S', vec![(1,4,6),(2,0,6),(2,0,3),(2,4,3),(2,4,0),(2,0,0)]),
-        (b'T', vec![(1,0,6),(2,4,6),(1,2,6),(2,2,0)]),
-        (b'U', vec![(1,0,6),(2,0,0),(2,4,0),(2,4,6)]),
-        (b'V', vec![(1,0,6),(2,2,0),(2,4,6)]),
-        (b'W', vec![(1,0,6),(2,1,0),(2,2,3),(2,3,0),(2,4,6)]),
-        (b'X', vec![(1,0,0),(2,4,6),(1,0,6),(2,4,0)]),
-        (b'Y', vec![(1,0,6),(2,2,3),(2,4,6),(1,2,3),(2,2,0)]),
-        (b'Z', vec![(1,0,6),(2,4,6),(2,0,0),(2,4,0)]),
-    ];
-    // lowercase maps to uppercase
-    for i in 0..26u8 {
-        let uc = b'A' + i;
-        if let Some(idx) = g.iter().position(|(c, _)| *c == uc) {
-            let strokes = g[idx].1.clone();
-            g.push((b'a' + i, strokes));
-        }
-    }
-    g
-}
-
-fn emit_font_data() -> String {
-    let glyphs = font_glyphs();
-    let mut s = String::new();
-
-    s.push_str("@ ============================================================\n");
-    s.push_str("@ Vector font — ASCII 32-126 stroke data\n");
-    s.push_str("@ Each glyph: [cmd(1=move,2=draw), x(0-4), y(0-6), ..., 0x00]\n");
-    s.push_str("@ _FONT_PTRS[char-32] = absolute address of glyph (0 = no strokes)\n");
-    s.push_str("@ ============================================================\n\n");
-
-    // Build lookup: char → label
-    let mut label_map: std::collections::HashMap<u8, String> = std::collections::HashMap::new();
-    for (ch, strokes) in &glyphs {
-        if !strokes.is_empty() {
-            label_map.insert(*ch, format!("_glyph_{:03}", ch));
-        }
-    }
-
-    // Emit pointer table for chars 32-126 (95 chars, 4 bytes each = 380 bytes)
-    s.push_str(".global _FONT_PTRS\n_FONT_PTRS:\n");
-    for c in 32u8..=126 {
-        if let Some(lbl) = label_map.get(&c) {
-            s.push_str(&format!("    .word   {}   @ '{}'\n", lbl, c as char));
-        } else {
-            s.push_str(&format!("    .word   0    @ '{}' no strokes\n", c as char));
-        }
-    }
-    s.push('\n');
-
-    // Emit glyph data
-    s.push_str(".global _FONT_DATA\n_FONT_DATA:\n");
-    let mut sorted = glyphs;
-    sorted.sort_by_key(|(c, _)| *c);
-    for (ch, strokes) in &sorted {
-        if strokes.is_empty() { continue; }
-        let lbl = label_map.get(ch).unwrap();
-        s.push_str(&format!("{}:  @ '{}'\n", lbl, *ch as char));
-        for (cmd, x, y) in strokes {
-            s.push_str(&format!("    .byte   {}, {}, {}\n", cmd, x, y));
-        }
-        s.push_str("    .byte   0\n");  // end marker
-    }
-    s.push('\n');
-    s
-}
-
 fn emit_print_text() -> String {
-    let mut s = String::new();
-    s.push_str("@ vpy_print_text(r0=x, r1=y, r2=str_ptr)\n");
-    s.push_str("@ Draws null-terminated or $80-terminated ASCII string at (x, y).\n");
-    s.push_str("@ Uses TEXT_SIZE for scale, TEXT_COLOR for intensity.\n");
-    s.push_str(".global vpy_print_text\n.type vpy_print_text, %function\n.thumb_func\nvpy_print_text:\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}\n"); // 9 regs = 36 bytes
-    s.push_str("    mov     r4, r0              @ x\n");
-    s.push_str("    mov     r5, r1              @ y\n");
-    s.push_str("    mov     r6, r2              @ str_ptr\n");
-
-    // Load text_size and text_color from RAM
-    s.push_str("    ldr     r7, =TEXT_SIZE\n    ldr     r7, [r7]\n"); // r7 = scale
-    s.push_str("    cmp     r7, #0\n    bne     vpt_scale_ok\n    mov     r7, #1\n");
-    s.push_str("vpt_scale_ok:\n");
-    s.push_str("    ldr     r8, =TEXT_COLOR\n    ldr     r8, [r8]\n"); // r8 = color
-    s.push_str("    cmp     r8, #0\n    bne     vpt_color_ok\n    mov     r8, #100\n"); // default brightness
-    s.push_str("vpt_color_ok:\n");
-
-    // Reset and position beam
-    s.push_str("    bl      dv_reset\n");
-    s.push_str("    mov     r0, r8\n    bl      vpy_set_intensity\n");
-    s.push_str("    mov     r0, r4\n    mov     r1, r5\n    bl      dv_move_to\n");
-    s.push_str("    ldr     r9, =PRINT_BEAM_X\n    str     r4, [r9]\n");
-    s.push_str("    ldr     r10, =PRINT_BEAM_Y\n    str     r5, [r10]\n");
-
-    // r11 = cur_x (current character start x)
-    s.push_str("    mov     r11, r4\n");
-
-    // Main character loop
-    s.push_str("vpt_loop:\n");
-    s.push_str("    ldrb    r0, [r6]\n"); // load char
-    s.push_str("    cmp     r0, #0\n    beq     vpt_done\n"); // null terminator
-    s.push_str("    cmp     r0, #0x80\n    beq     vpt_done\n"); // Vectrex $80 terminator
-    s.push_str("    add     r6, r6, #1\n"); // advance string ptr
-
-    // Fold lowercase to uppercase
-    s.push_str("    cmp     r0, #0x61\n    blt     vpt_not_lower\n");
-    s.push_str("    cmp     r0, #0x7A\n    bgt     vpt_not_lower\n");
-    s.push_str("    sub     r0, r0, #0x20\n"); // 'a'-'A'
-    s.push_str("vpt_not_lower:\n");
-
-    // Bounds check: char must be 32-126
-    s.push_str("    cmp     r0, #32\n    blt     vpt_advance\n");
-    s.push_str("    cmp     r0, #126\n    bgt     vpt_advance\n");
-
-    // Load glyph pointer: _FONT_PTRS[(char-32)*4]
-    s.push_str("    sub     r0, r0, #32\n");
-    s.push_str("    ldr     r1, =_FONT_PTRS\n");
-    s.push_str("    lsl     r0, r0, #2\n    ldr     r0, [r1, r0]\n"); // glyph_ptr
-    s.push_str("    cmp     r0, #0\n    beq     vpt_advance\n"); // no strokes for this char
-
-    // Move beam from current beam pos to char start (r11, r5)
-    s.push_str("    ldr     r1, =PRINT_BEAM_X\n    ldr     r2, [r1]\n"); // r2 = beam_x
-    s.push_str("    ldr     r3, =PRINT_BEAM_Y\n    ldr     r3, [r3]\n"); // r3 = beam_y
-    s.push_str("    sub     r1, r11, r2\n"); // dx = char_x - beam_x
-    s.push_str("    sub     r3, r5, r3\n"); // dy = char_y - beam_y
-    s.push_str("    push    {r0, r3}\n"); // save glyph_ptr and dy
-    s.push_str("    mov     r0, r1\n    pop     {r2}\n    push    {r2}\n"); // dx, dy
-    // Actually let me restructure: save glyph_ptr, compute beam move
-    // r0 = glyph_ptr saved above; r1=dx, r3=dy
-    s.push_str("    push    {r0}\n"); // push glyph_ptr
-    // We have dx in r1 (= r11 - beam_x), dy in r3 (= r5 - beam_y).  Wait, r3 was overwritten.
-    // Let me redo this properly.
-    // Actually I messed up the register flow. Let me restructure draw_glyph call.
-
-    // OK, let's use a simpler flow: call a helper that handles everything.
-    // r0 = glyph_ptr (saved), r11 = char_x, r5 = char_y, r7 = scale, r9/r10 = PRINT_BEAM_X/Y ptrs
-    // Restore and call draw_glyph
-    s.push_str("    pop     {r0}            @ glyph_ptr\n");
-    s.push_str("    mov     r1, r11         @ char_x\n");
-    s.push_str("    mov     r2, r5          @ char_y\n");
-    s.push_str("    mov     r3, r7          @ scale\n");
-    s.push_str("    bl      vpt_draw_glyph\n");
-
-    s.push_str("vpt_advance:\n");
-    // cur_x += 5 * scale
-    s.push_str("    mov     r0, #5\n    mul     r0, r0, r7\n");
-    s.push_str("    add     r11, r11, r0\n");
-    s.push_str("    b       vpt_loop\n");
-
-    s.push_str("vpt_done:\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
-
-    // --- vpt_draw_glyph helper ---
-    // r0=glyph_ptr, r1=char_x, r2=char_y, r3=scale
-    // reads/writes PRINT_BEAM_X, PRINT_BEAM_Y
-    s.push_str("@ vpt_draw_glyph(r0=glyph_ptr, r1=char_x, r2=char_y, r3=scale)\n");
-    s.push_str(".type vpt_draw_glyph, %function\n.thumb_func\nvpt_draw_glyph:\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9, lr}\n"); // 7×4=28 bytes
-    s.push_str("    mov     r4, r0              @ glyph_ptr\n");
-    s.push_str("    mov     r5, r1              @ char_x\n");
-    s.push_str("    mov     r6, r2              @ char_y\n");
-    s.push_str("    mov     r7, r3              @ scale\n");
-    // r8 = beam_x (current), r9 = beam_y
-    s.push_str("    ldr     r0, =PRINT_BEAM_X\n    ldr     r8, [r0]\n");
-    s.push_str("    ldr     r0, =PRINT_BEAM_Y\n    ldr     r9, [r0]\n");
-
-    s.push_str("vdg_loop:\n");
-    s.push_str("    ldrb    r0, [r4]            @ cmd\n");
-    s.push_str("    cmp     r0, #0\n    beq     vdg_done\n");
-    s.push_str("    ldrb    r1, [r4, #1]        @ gx (0-4)\n");
-    s.push_str("    ldrb    r2, [r4, #2]        @ gy (0-6)\n");
-    s.push_str("    add     r4, r4, #3\n");
-    // target_x = char_x + gx * scale
-    s.push_str("    mul     r1, r1, r7\n    add     r1, r1, r5\n"); // target_x
-    // target_y = char_y + gy * scale
-    s.push_str("    mul     r2, r2, r7\n    add     r2, r2, r6\n"); // target_y
-    // dx = target_x - beam_x; dy = target_y - beam_y
-    s.push_str("    sub     r3, r1, r8          @ dx\n");
-    s.push_str("    push    {r0, r1, r2}\n"); // save cmd, target_x, target_y
-    s.push_str("    sub     r1, r2, r9          @ dy\n");
-    s.push_str("    mov     r0, r3              @ dx\n");
-    s.push_str("    pop     {r3}\n"); // r3 = cmd; target_x and target_y still on stack
-    s.push_str("    push    {r3}\n"); // push cmd back
-    // actually this register dance is getting complicated. Let me use a simpler approach.
-    // Save new_beam_x/y in r8/r9 first, then call.
-    s.pop(); // undo the last push
-    s.pop(); // undo pop {r3}
-    s.pop(); // undo push {r0,r1,r2}
-    s.pop(); // undo sub r3,r1,r8
-    // Let me just directly compute:
-    s.push_str("    sub     r10, r1, r8         @ dx = target_x - beam_x\n");
-    s.push_str("    sub     r11, r2, r9         @ dy = target_y - beam_y\n");
-    s.push_str("    push    {r0, r1, r2}\n"); // save cmd, target_x, target_y
-    s.push_str("    mov     r0, r10\n    mov     r1, r11\n"); // dx, dy for call
-    s.push_str("    pop     {r3}\n"); // r3 = cmd
-    s.push_str("    push    {r3}\n"); // still need target_x, target_y on stack
-    // Hmm, this is getting messy with push/pop. Let me use a completely different approach.
-
-    // The issue is we need both dx/dy for the call AND target_x/target_y to update beam_x/y.
-    // Solution: compute dx/dy, then update beam_x/y before the call (since we know the targets).
-
-    // Let me re-do from vdg_loop cleanly:
-    // Scratch r10, r11 for temp:
-    s.clear(); // Start over this function
-
-    // Redo the whole print_text + draw_glyph cleanly
+    // vpy_print_text is a thin BIOS-trap stub (font + renderer live in the BIOS).
     emit_print_text_clean()
 }
 
 fn emit_print_text_clean() -> String {
     let mut s = String::new();
-
-    // ─── vpy_print_text ───────────────────────────────────────────────────
-    s.push_str("@ vpy_print_text(r0=x, r1=y, r2=str_ptr)\n");
+    // vpy_print_text is now a thin BIOS-trap stub. It resolves scale (TEXT_SIZE,
+    // else 3) and colour (SET_INTENSITY override, else default 100), packs
+    // them into r3 = scale | (colour << 8), and traps: the BIOS owns the font +
+    // glyph renderer (firmware text.rs, SYS_PRINT_TEXT #16). r0=x, r1=y, r2=str_ptr
+    // pass straight through. PRINT_NUMBER/PRINT_MSG still call this symbol.
+    s.push_str("@ vpy_print_text(r0=x, r1=y, r2=str_ptr) -> BIOS trap SYS_PRINT_TEXT\n");
     s.push_str(".global vpy_print_text\n.type vpy_print_text, %function\n.thumb_func\nvpy_print_text:\n");
-    // Save: r4=x, r5=y, r6=str_ptr, r7=scale, r8=color, r9=cur_x, r10=BEAM_X ptr, r11=BEAM_Y ptr
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}\n");
-    s.push_str("    mov     r4, r0\n    mov     r5, r1\n    mov     r6, r2\n");
-
-    s.push_str("    ldr     r7, =TEXT_SIZE\n    ldr     r7, [r7]\n");
-    // Scale is stored as 2× the effective multiplier so non-integer sizes are possible.
-    // TEXT_SIZE=2 → effective ×1.0,  TEXT_SIZE=3 → effective ×1.5,  TEXT_SIZE=4 → effective ×2.0
-    s.push_str("    cmp     r7, #0\n    bne     vpt_sc\n    mov     r7, #3\nvpt_sc:\n");
-    s.push_str("    ldr     r8, =TEXT_COLOR\n    ldr     r8, [r8]\n");
-    s.push_str("    cmp     r8, #0\n    bne     vpt_cc\n    mov     r8, #100\nvpt_cc:\n");
-
-    s.push_str("    bl      dv_reset\n");
-    s.push_str("    mov     r0, r8\n    bl      vpy_set_intensity\n");
-    // ARM font: glyph_y=0 is bottom of glyph, glyph_y=6 is top.
-    // VPy convention: y parameter = top of text. Convert to glyph-bottom so the
-    // top of the glyph aligns with the requested y position.
-    // glyph_height = (6 * scale) >> 1; adjusted_y = y - glyph_height
-    s.push_str("    mov     r0, #6\n    mul     r0, r0, r7\n    asr     r0, r0, #1\n    sub     r5, r5, r0\n");
-    s.push_str("    mov     r0, r4\n    mov     r1, r5\n    bl      dv_move_to\n");
-
-    s.push_str("    ldr     r10, =PRINT_BEAM_X\n    str     r4, [r10]\n");
-    s.push_str("    ldr     r11, =PRINT_BEAM_Y\n    str     r5, [r11]\n");
-    s.push_str("    mov     r9, r4              @ cur_x = x\n");
-
-    s.push_str("vpt_loop:\n");
-    s.push_str("    ldrb    r0, [r6]\n    add     r6, r6, #1\n");
-    s.push_str("    cmp     r0, #0\n    beq     vpt_done\n");
-    s.push_str("    cmp     r0, #0x80\n    beq     vpt_done\n");
-    // fold lowercase
-    s.push_str("    cmp     r0, #0x61\n    blt     vpt_nl\n");
-    s.push_str("    cmp     r0, #0x7A\n    bgt     vpt_nl\n");
-    s.push_str("    sub     r0, r0, #0x20\nvpt_nl:\n");
-    // bounds
-    s.push_str("    cmp     r0, #32\n    blt     vpt_adv\n");
-    s.push_str("    cmp     r0, #126\n    bgt     vpt_adv\n");
-    // load glyph ptr
-    s.push_str("    sub     r0, r0, #32\n");
-    s.push_str("    ldr     r1, =_FONT_PTRS\n    lsl     r0, r0, #2\n    ldr     r0, [r1, r0]\n");
-    s.push_str("    cmp     r0, #0\n    beq     vpt_adv\n");
-    // call draw_glyph(glyph_ptr, cur_x, cur_y, scale, beam_x_ptr, beam_y_ptr)
-    s.push_str("    mov     r1, r9\n    mov     r2, r5\n    mov     r3, r7\n");
-    s.push_str("    push    {r10, r11}\n"); // pass BEAM_X/Y ptrs via stack
-    s.push_str("    bl      vpt_draw_glyph\n");
-    s.push_str("    add     sp, sp, #8\n"); // clean up the 2 extra stack args
-    s.push_str("vpt_adv:\n");
-    s.push_str("    mov     r0, #7\n    mul     r0, r0, r7\n    asr     r0, r0, #1\n    add     r9, r9, r0\n");
-    s.push_str("    b       vpt_loop\n");
-    s.push_str("vpt_done:\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
-
-    // ─── vpt_draw_glyph(r0=ptr, r1=char_x, r2=char_y, r3=scale, [sp+0]=bx_ptr, [sp+4]=by_ptr)
-    s.push_str("@ vpt_draw_glyph — internal: draw one glyph at (char_x, char_y) with scale\n");
-    s.push_str(".type vpt_draw_glyph, %function\n.thumb_func\nvpt_draw_glyph:\n");
-    // save r4-r11
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}\n"); // 9×4=36 bytes
-    s.push_str("    mov     r4, r0              @ glyph_ptr\n");
-    s.push_str("    mov     r5, r1              @ char_x\n");
-    s.push_str("    mov     r6, r2              @ char_y\n");
-    s.push_str("    mov     r7, r3              @ scale\n");
-    // load beam ptrs from stack (past 9 saved regs = 36 bytes + 8 bytes for the push we did in caller)
-    s.push_str("    ldr     r8, [sp, #36]       @ bx_ptr (PRINT_BEAM_X)\n");
-    s.push_str("    ldr     r9, [sp, #40]       @ by_ptr (PRINT_BEAM_Y)\n");
-    s.push_str("    ldr     r10, [r8]           @ beam_x\n");
-    s.push_str("    ldr     r11, [r9]           @ beam_y\n");
-
-    s.push_str("vdg_loop:\n");
-    s.push_str("    ldrb    r0, [r4]\n");
-    s.push_str("    cmp     r0, #0\n    beq     vdg_done\n");
-    s.push_str("    ldrb    r1, [r4, #1]        @ gx\n");
-    s.push_str("    ldrb    r2, [r4, #2]        @ gy\n");
-    s.push_str("    add     r4, r4, #3\n");
-    s.push_str("    push    {r0}               @ save cmd\n");
-    // target_x = char_x + (gx * scale) >> 1  (scale is 2× effective multiplier)
-    s.push_str("    mul     r1, r1, r7\n    asr     r1, r1, #1\n    add     r1, r1, r5\n"); // r1 = target_x
-    // target_y = char_y + (gy * scale) >> 1
-    s.push_str("    mul     r2, r2, r7\n    asr     r2, r2, #1\n    add     r2, r2, r6\n"); // r2 = target_y
-    // dx = target_x - beam_x; dy = target_y - beam_y
-    s.push_str("    sub     r0, r1, r10         @ dx\n");
-    s.push_str("    sub     r3, r2, r11         @ dy\n");
-    // update beam tracking before the call
-    s.push_str("    mov     r10, r1\n    mov     r11, r2\n"); // beam moves to target
-    // call dv_move_to or dv_draw_delta based on cmd
-    s.push_str("    pop     {r1}               @ restore cmd\n");
-    s.push_str("    push    {r0, r3}           @ save dx, dy\n");
-    s.push_str("    cmp     r1, #1\n"); // cmd==1: move
-    s.push_str("    bne     vdg_draw\n");
-    s.push_str("    pop     {r0, r1}\n    bl      dv_move_to\n    b       vdg_loop\n");
-    s.push_str("vdg_draw:\n");
-    s.push_str("    pop     {r0, r1}\n    bl      dv_draw_delta\n    b       vdg_loop\n");
-
-    s.push_str("vdg_done:\n");
-    s.push_str("    str     r10, [r8]           @ update PRINT_BEAM_X\n");
-    s.push_str("    str     r11, [r9]           @ update PRINT_BEAM_Y\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
-
+    s.push_str("    ldr     r3, =TEXT_SIZE\n    ldr     r3, [r3]\n");
+    s.push_str("    cmp     r3, #0\n    it      eq\n    moveq   r3, #3\n");
+    s.push_str("    ldr     r12, =VPY_BRIGHTNESS_OVERRIDE\n    ldrb    r12, [r12]\n");
+    s.push_str("    cmp     r12, #0\n    it      eq\n    moveq   r12, #100\n"); // SET_INTENSITY, else 100
+    s.push_str("    orr     r3, r3, r12, lsl #8\n");   // r3 = scale | colour<<8
+    s.push_str("    svc     #16                     @ SYS_PRINT_TEXT\n");
+    s.push_str("    bx      lr\n    .ltorg\n\n");
     s
 }
-
-// ─── PRINT_NUMBER ──────────────────────────────────────────────────────────
 
 fn emit_print_number() -> String {
     let mut s = String::new();
@@ -1157,90 +991,54 @@ fn emit_joystick() -> String {
 fn emit_psg_helpers() -> String {
     let mut s = String::new();
 
-    // ─── psg_write(r0=reg, r1=data) ─────────────────────────────────────
-    s.push_str("@ psg_write(r0=reg, r1=data) — write AY-3-8912 PSG register\n");
+    // psg_write / psg_read are now thin BIOS-trap stubs — the BIOS owns the VIA,
+    // so the game never drives PORT_A/PORT_B directly. (Was: inline bus_write/read
+    // sequences; the inline read path was a non-working stub anyway. The BIOS's
+    // E-synced read makes joystick/buttons actually work.)
+    s.push_str("@ psg_write(r0=reg, r1=data) — BIOS trap: SYS_PSG_WRITE\n");
     s.push_str(".global psg_write\n.type psg_write, %function\n.thumb_func\npsg_write:\n");
-    s.push_str("    push    {r4, r5, lr}\n");
-    s.push_str("    mov     r4, r0              @ reg\n");
-    s.push_str("    mov     r5, r1              @ data\n");
-    // Port A = register number
-    s.push_str("    mov     r0, #0xD001\n    mov     r1, r4\n    bl      bus_write\n");
-    // Port B = LATCH (0x19 = BC1=1, BDIR=1, base=1)
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x19\n    bl      bus_write\n");
-    // Port B = INACTIVE
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x01\n    bl      bus_write\n");
-    // Port A = data
-    s.push_str("    mov     r0, #0xD001\n    mov     r1, r5\n    bl      bus_write\n");
-    // Port B = WRITE (0x11 = BDIR=1, BC1=0, base=1)
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x11\n    bl      bus_write\n");
-    // Port B = INACTIVE
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x01\n    bl      bus_write\n");
-    s.push_str("    pop     {r4, r5, pc}\n    .ltorg\n\n");
+    s.push_str("    svc     #5                      @ SYS_PSG_WRITE\n");
+    s.push_str("    bx      lr\n\n");
 
-    // ─── psg_read(r0=reg) → r0=data ─────────────────────────────────────
-    s.push_str("@ psg_read(r0=reg) → r0 = PSG register value\n");
+    s.push_str("@ psg_read(r0=reg) -> r0=data — BIOS trap: SYS_PSG_READ\n");
     s.push_str(".global psg_read\n.type psg_read, %function\n.thumb_func\npsg_read:\n");
-    s.push_str("    push    {r4, lr}\n");
-    s.push_str("    mov     r4, r0              @ reg\n");
-    // Port A = register number
-    s.push_str("    mov     r0, #0xD001\n    mov     r1, r4\n    bl      bus_write\n");
-    // Port B = LATCH
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x19\n    bl      bus_write\n");
-    // Port B = INACTIVE
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x01\n    bl      bus_write\n");
-    // Set Port A as input: write 0x00 to DDR_A ($D003)
-    s.push_str("    mov     r0, #0xD003\n    mov     r1, #0x00\n    bl      bus_write\n");
-    // Port B = READ (0x09 = BC1=1, BDIR=0, base=1)
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x09\n    bl      bus_write\n");
-    // Read Port A
-    s.push_str("    mov     r0, #0xD001\n    bl      bus_read\n");
-    s.push_str("    push    {r0}               @ save result\n");
-    // Port B = INACTIVE; restore Port A DDR to output
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x01\n    bl      bus_write\n");
-    s.push_str("    mov     r0, #0xD003\n    mov     r1, #0xFF\n    bl      bus_write\n");
-    s.push_str("    pop     {r0}               @ return value\n");
-    s.push_str("    pop     {r4, pc}\n    .ltorg\n\n");
+    s.push_str("    svc     #12                     @ SYS_PSG_READ\n");
+    s.push_str("    bx      lr\n\n");
+
+    s
+}
+
+/// vpy_update_buttons — part of the JOYSTICK group (calls psg_read → PSG group).
+fn emit_update_buttons(read_axes: bool) -> String {
+    let mut s = String::new();
 
     // ─── vpy_update_buttons() ────────────────────────────────────────────
-    s.push_str("@ vpy_update_buttons() — cache buttons and joystick axes (safe: called in WAIT_RECAL window)\n");
+    // All VIA access now lives in the BIOS: SYS_READ_BUTTONS_RAW (#14) does the
+    // DDR_B dance for J1 + PSG reg 14 for J2; SYS_READ_AXES (#13) reads the four
+    // mux channels. We just unpack the packed results into the RAM cache that the
+    // J1_*/J2_* getters read. No VIA/mux knowledge in the game any more.
+    //
+    // The analog read (#13, SAR against the DAC/comparator) perturbs the PSG and
+    // sample-holds → audible speaker noise + a stretched first vector each frame.
+    // So it is emitted ONLY when the program actually reads an analog axis
+    // (J1_X/J1_Y/J2_X/J2_Y). Button-only programs skip it entirely → no noise.
+    s.push_str("@ vpy_update_buttons() — cache buttons (+axes if analog is used)\n");
     s.push_str(".global vpy_update_buttons\n.type vpy_update_buttons, %function\n.thumb_func\nvpy_update_buttons:\n");
     s.push_str("    push    {r4, lr}\n");
-    // DDR_B = 0x0F: bits 4-7 become inputs so J1 button pins drive PORT_B[4-7].
-    // The Vectrex BIOS leaves DDR_B = 0xFF (all-output); if we read PORT_B without
-    // switching, we get the output latch (0x01 from dv_draw_delta) → bits 4-7 = 0 →
-    // all J1 buttons appear pressed → try_shoot fires every frame → snowballs → frame
-    // time exceeds phosphor persistence → blank display.
-    s.push_str("    mov     r0, #0xD002\n    mov     r1, #0x0F\n    bl      bus_write\n");
-    // Read J1 buttons (VIA Port B bits 4-7 = hardware button state)
-    s.push_str("    mov     r0, #0xD000\n    bl      bus_read\n");
-    s.push_str("    ldr     r1, =BTN_STATE_J1\n    str     r0, [r1]\n");
-    // Restore DDR_B = 0xFF so drawing code can drive all PORT_B lines as output
-    s.push_str("    mov     r0, #0xD002\n    mov     r1, #0xFF\n    bl      bus_write\n");
-    // Read J2 buttons (PSG reg 14)
-    s.push_str("    mov     r0, #14\n    bl      psg_read\n");
-    s.push_str("    ldr     r1, =BTN_STATE_J2\n    str     r0, [r1]\n");
-    // Cache J1 X axis: PORT_B = 0x01 (mux A0=1 = X channel)
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x01\n    bl      bus_write\n");
-    s.push_str("    mov     r0, #0xD001\n    bl      bus_read\n");
-    s.push_str("    sxtb    r4, r0\n");
-    s.push_str("    ldr     r0, =J1_AXIS_X\n    str     r4, [r0]\n");
-    // Cache J1 Y axis: PORT_B = 0x03 (mux A0=1, A1=1 = J1 Y channel)
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x03\n    bl      bus_write\n");
-    s.push_str("    mov     r0, #0xD001\n    bl      bus_read\n");
-    s.push_str("    sxtb    r4, r0\n");
-    s.push_str("    ldr     r0, =J1_AXIS_Y\n    str     r4, [r0]\n");
-    // Cache J2 X axis: PORT_B = 0x00 (mux A0=0, A1=0 = J2 X channel)
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x00\n    bl      bus_write\n");
-    s.push_str("    mov     r0, #0xD001\n    bl      bus_read\n");
-    s.push_str("    sxtb    r4, r0\n");
-    s.push_str("    ldr     r0, =J2_AXIS_X\n    str     r4, [r0]\n");
-    // Cache J2 Y axis: PORT_B = 0x02 (mux A0=0, A1=1 = J2 Y channel)
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x02\n    bl      bus_write\n");
-    s.push_str("    mov     r0, #0xD001\n    bl      bus_read\n");
-    s.push_str("    sxtb    r4, r0\n");
-    s.push_str("    ldr     r0, =J2_AXIS_Y\n    str     r4, [r0]\n");
-    // Restore PORT_B to neutral (0x01 = same as J1_X mux, safe for display)
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x01\n    bl      bus_write\n");
+    // Buttons: r0 = (J1_portB << 8) | J2_psg14
+    s.push_str("    svc     #14                     @ SYS_READ_BUTTONS_RAW\n");
+    s.push_str("    mov     r4, r0\n");
+    s.push_str("    ubfx    r0, r4, #8, #8\n    ldr     r1, =BTN_STATE_J1\n    str     r0, [r1]\n");
+    s.push_str("    and     r0, r4, #0xFF\n    ldr     r1, =BTN_STATE_J2\n    str     r0, [r1]\n");
+    if read_axes {
+        // Axes: r0 = (J1X<<24)|(J1Y<<16)|(J2X<<8)|J2Y, each a raw byte → sign-extend.
+        s.push_str("    svc     #13                     @ SYS_READ_AXES (analog used)\n");
+        s.push_str("    mov     r4, r0\n");
+        s.push_str("    ubfx    r0, r4, #24, #8\n    sxtb    r0, r0\n    ldr     r1, =J1_AXIS_X\n    str     r0, [r1]\n");
+        s.push_str("    ubfx    r0, r4, #16, #8\n    sxtb    r0, r0\n    ldr     r1, =J1_AXIS_Y\n    str     r0, [r1]\n");
+        s.push_str("    ubfx    r0, r4, #8, #8\n    sxtb    r0, r0\n    ldr     r1, =J2_AXIS_X\n    str     r0, [r1]\n");
+        s.push_str("    sxtb    r0, r4\n    ldr     r1, =J2_AXIS_Y\n    str     r0, [r1]\n");
+    }
     s.push_str("    pop     {r4, pc}\n    .ltorg\n\n");
 
     s
@@ -1248,7 +1046,8 @@ fn emit_psg_helpers() -> String {
 
 // ─── MATH BUILTINS ─────────────────────────────────────────────────────────
 
-fn emit_math_builtins() -> String {
+/// vpy_abs / vpy_min / vpy_max / vpy_clamp — MATH_BASIC group.
+fn emit_math_basic() -> String {
     let mut s = String::new();
 
     // vpy_abs
@@ -1267,6 +1066,13 @@ fn emit_math_builtins() -> String {
     s.push_str(".global vpy_clamp\n.type vpy_clamp, %function\n.thumb_func\nvpy_clamp:\n");
     s.push_str("    cmp     r0, r1\n    it      lt\n    movlt   r0, r1\n");
     s.push_str("    cmp     r0, r2\n    it      gt\n    movgt   r0, r2\n    bx      lr\n\n");
+
+    s
+}
+
+/// vpy_sin / vpy_cos — TRIG group (reads _SIN_TABLE → SIN_TABLE group).
+fn emit_trig() -> String {
+    let mut s = String::new();
 
     // vpy_sin(r0=angle 0-127) → r0 = SIN_TABLE[angle & 0x7F]
     s.push_str("@ vpy_sin(r0=angle) → r0 = sin(angle*2π/128)*127 as signed i8\n");
@@ -1287,16 +1093,24 @@ fn emit_math_builtins() -> String {
     s.push_str("    sxtb    r0, r0\n");
     s.push_str("    bx      lr\n    .ltorg\n\n");
 
+    s
+}
+
+/// vpy_sqrt — SQRT group.
+fn emit_sqrt() -> String {
+    let mut s = String::new();
+
     // vpy_sqrt(r0=n) — integer square root via binary search
     s.push_str("@ vpy_sqrt(r0=n) → r0 = floor(sqrt(n))\n");
     s.push_str(".global vpy_sqrt\n.type vpy_sqrt, %function\n.thumb_func\nvpy_sqrt:\n");
-    s.push_str("    cmp     r0, #0\n    beq     vsqrt_zero\n");
+    s.push_str("    cmp     r0, #0\n    ble     vsqrt_zero\n");
     s.push_str("    push    {r4, r5, r6}\n");
     s.push_str("    mov     r4, r0              @ n\n");
     s.push_str("    mov     r5, #0              @ lo\n");
-    s.push_str("    ldr     r6, =46340         @ hi (floor(sqrt(2^31-1)))\n"); // 46340^2 = 2147395600 < 2^31
-    s.push_str("    cmp     r4, r6\n    blt     vsqrt_loop\n    mov     r0, r6\n");
-    s.push_str("    pop     {r4, r5, r6}\n    bx      lr\n");
+    // hi = 46341: sqrt of any positive int32 is at most 46340 (46340^2 = 2147395600),
+    // and mid < hi keeps mid*mid within 31 bits. (This used to RETURN 46340 for every
+    // n >= 46340: sqrt(100000) was 46340.)
+    s.push_str("    ldr     r6, =46341         @ hi (exclusive)\n");
     s.push_str("vsqrt_loop:\n");
     s.push_str("    add     r0, r5, r6\n    lsr     r0, r0, #1  @ mid = (lo+hi)/2\n");
     s.push_str("    mul     r2, r0, r0           @ mid*mid\n");
@@ -1309,7 +1123,14 @@ fn emit_math_builtins() -> String {
     s.push_str("vsqrt_done:\n    mov     r0, r5\n    sub     r0, r0, #1\n"); // floor: return lo-1
     s.push_str("    pop     {r4, r5, r6}\n    bx      lr\n");
     s.push_str("vsqrt_exact:\n    pop     {r4, r5, r6}\n    bx      lr\n");
-    s.push_str("vsqrt_zero:\n    bx      lr\n    .ltorg\n\n");
+    s.push_str("vsqrt_zero:\n    mov     r0, #0\n    bx      lr\n    .ltorg\n\n");
+
+    s
+}
+
+/// vpy_rand / vpy_rand_range — RAND group (also a dep of ENEMIES wander AI).
+fn emit_rand() -> String {
+    let mut s = String::new();
 
     // vpy_rand() → LCG: seed = seed*1664525 + 1013904223, return seed>>16 & 0x7FFF
     s.push_str("@ vpy_rand() → r0 = pseudo-random 0-32767 (LCG)\n");
@@ -1339,7 +1160,8 @@ fn emit_math_builtins() -> String {
 
 // ─── UTILITY BUILTINS ──────────────────────────────────────────────────────
 
-fn emit_utility_builtins() -> String {
+/// vpy_peek / vpy_poke — PEEK_POKE group (bus_read/bus_write are core).
+fn emit_peek_poke() -> String {
     let mut s = String::new();
 
     // vpy_peek(r0=addr) → bus_read(addr)
@@ -1352,6 +1174,13 @@ fn emit_utility_builtins() -> String {
     s.push_str(".global vpy_poke\n.type vpy_poke, %function\n.thumb_func\nvpy_poke:\n");
     s.push_str("    push    {lr}\n    bl      bus_write\n    pop     {pc}\n    .ltorg\n\n");
 
+    s
+}
+
+/// vpy_wait — WAIT group (calls vpy_wait_recal, which is core).
+fn emit_wait_builtin() -> String {
+    let mut s = String::new();
+
     // vpy_wait(r0=frames) — call wait_recal r0 times
     s.push_str("@ vpy_wait(r0=frames) — busy-wait N frames via wait_recal\n");
     s.push_str(".global vpy_wait\n.type vpy_wait, %function\n.thumb_func\nvpy_wait:\n");
@@ -1362,6 +1191,14 @@ fn emit_utility_builtins() -> String {
     s.push_str("    bl      vpy_wait_recal\n");
     s.push_str("    sub     r4, r4, #1\n    b       vwt_loop\n");
     s.push_str("vwt_done:\n    pop     {r4, pc}\n    .ltorg\n\n");
+
+    s
+}
+
+/// vpy_beep + vpy_beep_update — BEEP group (calls psg_write → PSG group).
+/// The auto-injected `bl vpy_beep_update` in game_main is gated on this group.
+fn emit_beep() -> String {
+    let mut s = String::new();
 
     // vpy_beep(r0=freq_period, r1=duration_frames) — non-blocking PSG beep
     s.push_str("@ vpy_beep(r0=freq_period, r1=duration_frames) — non-blocking PSG tone on channel A\n");
@@ -1395,12 +1232,6 @@ fn emit_utility_builtins() -> String {
     s.push_str("    mov     r0, #7\n    mov     r1, #0x3F\n    bl      psg_write\n"); // mixer: all off
     s.push_str("vbu_done:\n    pop     {r4, pc}\n    .ltorg\n\n");
 
-    // vpy_len — fallback for non-Var len() arguments; emit_call handles len(arr_name) as a
-    // compile-time constant (ldr r0, =ARRAY_NAME_LEN) without calling this function.
-    s.push_str("@ vpy_len — fallback, returns 0 (len(arr) on static arrays resolved at compile time)\n");
-    s.push_str(".global vpy_len\n.type vpy_len, %function\n.thumb_func\nvpy_len:\n");
-    s.push_str("    mov     r0, #0\n    bx      lr\n\n");
-
     s
 }
 
@@ -1415,7 +1246,39 @@ fn emit_utility_builtins() -> String {
 //     .byte  reg0, val0
 //     .byte  reg1, val1, ...
 
-fn emit_audio_builtins() -> String {
+/// vpy_play_music / vpy_stop_music / vpy_music_update — MUSIC group.
+/// The auto-injected `bl vpy_music_update` in game_main is gated on this group.
+fn emit_music_engine() -> String {
+    let mut s = String::new();
+
+    // The PSG music sequencer now runs on the BIOS's CORE 1, clocked by real time
+    // so the tempo is independent of the frame's draw load (a heavy scene used to
+    // slow the music down). These are thin BIOS traps: PLAY hands the .vmus table
+    // pointer to core 1, STOP silences it, and the per-frame UPDATE is a no-op —
+    // the BIOS flushes core 1's PSG shadow to the chip from WAIT_RECAL each frame.
+    s.push_str("@ vpy_play_music(r0=music_data_ptr) — BIOS trap: SYS_PLAY_MUSIC\n");
+    s.push_str(".global vpy_play_music\n.type vpy_play_music, %function\n.thumb_func\nvpy_play_music:\n");
+    s.push_str("    svc     #21                     @ SYS_PLAY_MUSIC\n");
+    s.push_str("    bx      lr\n\n");
+
+    s.push_str("@ vpy_stop_music() — BIOS trap: SYS_STOP_MUSIC\n");
+    s.push_str(".global vpy_stop_music\n.type vpy_stop_music, %function\n.thumb_func\nvpy_stop_music:\n");
+    s.push_str("    svc     #22                     @ SYS_STOP_MUSIC\n");
+    s.push_str("    bx      lr\n\n");
+
+    s.push_str("@ vpy_music_update() — no-op: core 1 advances the sequencer, the\n");
+    s.push_str("@ BIOS flushes it each frame from WAIT_RECAL. Kept so the auto-\n");
+    s.push_str("@ injected per-frame call still links.\n");
+    s.push_str(".global vpy_music_update\n.type vpy_music_update, %function\n.thumb_func\nvpy_music_update:\n");
+    s.push_str("    bx      lr\n\n");
+
+    s
+}
+
+/// OLD inline core-0 music engine — replaced by the core-1 player above. Kept for
+/// reference / quick rollback; not called.
+#[allow(dead_code)]
+fn emit_music_engine_inline() -> String {
     let mut s = String::new();
 
     // ─── vpy_play_music(r0=ptr) ─────────────────────────────────────────
@@ -1492,6 +1355,36 @@ fn emit_audio_builtins() -> String {
     s.push_str("    ldrb    r0, [r1]\n    str     r0, [r4]\n"); // reset delay
     s.push_str("vmu_done:\n    pop     {r4, r5, r6, r7, pc}\n    .ltorg\n\n");
 
+    s
+}
+
+/// vpy_play_sfx / vpy_audio_update — SFX group.
+/// The auto-injected `bl vpy_audio_update` in game_main is gated on this group.
+fn emit_sfx_engine() -> String {
+    let mut s = String::new();
+
+    // SFX now runs on the BIOS's CORE 1 alongside the music sequencer (it overlays
+    // channel C on top of the music in core 1's PSG shadow, which the BIOS flushes
+    // each frame). Thin traps: PLAY hands the .vsfx table pointer to core 1, and
+    // the per-frame UPDATE is a no-op.
+    s.push_str("@ vpy_play_sfx(r0=sfx_data_ptr) — BIOS trap: SYS_PLAY_SFX\n");
+    s.push_str(".global vpy_play_sfx\n.type vpy_play_sfx, %function\n.thumb_func\nvpy_play_sfx:\n");
+    s.push_str("    svc     #23                     @ SYS_PLAY_SFX\n");
+    s.push_str("    bx      lr\n\n");
+
+    s.push_str("@ vpy_audio_update() — no-op: core 1 advances SFX, BIOS flushes each frame\n");
+    s.push_str(".global vpy_audio_update\n.type vpy_audio_update, %function\n.thumb_func\nvpy_audio_update:\n");
+    s.push_str("    bx      lr\n\n");
+
+    s
+}
+
+/// OLD inline core-0 SFX engine — replaced by the core-1 player. Kept for
+/// reference / rollback; not called.
+#[allow(dead_code)]
+fn emit_sfx_engine_inline() -> String {
+    let mut s = String::new();
+
     // ─── vpy_play_sfx(r0=ptr) ────────────────────────────────────────────
     s.push_str("@ vpy_play_sfx(r0=sfx_data_ptr)\n");
     s.push_str(".global vpy_play_sfx\n.type vpy_play_sfx, %function\n.thumb_func\nvpy_play_sfx:\n");
@@ -1550,7 +1443,7 @@ fn emit_note_engine() -> String {
     let mut s = String::new();
 
     // ── NOTE_PERIOD_TABLE in .rodata ──────────────────────────────────────────
-    // 84 entries (MIDI 24-107).  period = round(88200 / (440 * 2^((n-69)/12)))
+    // 84 entradas (MIDI 24-107). period = clk / (16 * f), clk = 1,5 MHz. Ver crate::psg.
     s.push_str("@ --- NOTE_PERIOD_TABLE: MIDI 24-107 → AY period (84 hwords) ---\n");
     s.push_str(".section .rodata\n");
     s.push_str(".balign 2\n");
@@ -1559,7 +1452,7 @@ fn emit_note_engine() -> String {
     let mut periods: Vec<u16> = Vec::new();
     for n in 24u32..=107 {
         let freq = 440.0 * 2f64.powf((n as f64 - 69.0) / 12.0);
-        let period = (88200.0 / freq).round() as u16;
+        let period = crate::psg::hz_to_period(freq);
         let period = period.max(1).min(4095);
         periods.push(period);
     }
@@ -1734,30 +1627,34 @@ fn emit_note_engine() -> String {
 
 // ─── STATE BUILTINS ────────────────────────────────────────────────────────
 
-fn emit_state_builtins() -> String {
+/// One-line setter: `NAME(r0)` stores r0 to a RAM symbol.
+fn simple_set(name: &str, sym: &str) -> String {
+    format!(
+        ".global {name}\n.type {name}, %function\n.thumb_func\n{name}:\n\
+         \x20   ldr     r1, ={sym}\n    str     r0, [r1]\n    bx      lr\n\n"
+    )
+}
+
+/// One-line getter: `NAME()` loads a RAM symbol into r0.
+fn simple_get(name: &str, sym: &str) -> String {
+    format!(
+        ".global {name}\n.type {name}, %function\n.thumb_func\n{name}:\n\
+         \x20   ldr     r0, ={sym}\n    ldr     r0, [r0]\n    bx      lr\n\n"
+    )
+}
+
+/// Camera / scroll-limit accessors + vpy_get_level_floor_y — CAMERA group.
+fn emit_camera_builtins() -> String {
     let mut s = String::new();
 
-    macro_rules! simple_set {
-        ($name:expr, $sym:expr) => {{
-            s.push_str(&format!(".global {}\n.type {}, %function\n.thumb_func\n{}:\n", $name, $name, $name));
-            s.push_str(&format!("    ldr     r1, ={}\n    str     r0, [r1]\n    bx      lr\n\n", $sym));
-        }};
-    }
-    macro_rules! simple_get {
-        ($name:expr, $sym:expr) => {{
-            s.push_str(&format!(".global {}\n.type {}, %function\n.thumb_func\n{}:\n", $name, $name, $name));
-            s.push_str(&format!("    ldr     r0, ={}\n    ldr     r0, [r0]\n    bx      lr\n\n", $sym));
-        }};
-    }
-
-    simple_set!("vpy_set_camera_x", "CAMERA_X");
-    simple_set!("vpy_set_camera_y", "CAMERA_Y");
-    simple_get!("vpy_get_camera_x", "CAMERA_X");
-    simple_get!("vpy_get_camera_y", "CAMERA_Y");
-    simple_get!("vpy_get_scroll_limit_left",   "SCROLL_LIMIT_LEFT");
-    simple_get!("vpy_get_scroll_limit_right",  "SCROLL_LIMIT_RIGHT");
-    simple_get!("vpy_get_scroll_limit_top",    "SCROLL_LIMIT_TOP");
-    simple_get!("vpy_get_scroll_limit_bottom", "SCROLL_LIMIT_BOTTOM");
+    s.push_str(&simple_set("vpy_set_camera_x", "CAMERA_X"));
+    s.push_str(&simple_set("vpy_set_camera_y", "CAMERA_Y"));
+    s.push_str(&simple_get("vpy_get_camera_x", "CAMERA_X"));
+    s.push_str(&simple_get("vpy_get_camera_y", "CAMERA_Y"));
+    s.push_str(&simple_get("vpy_get_scroll_limit_left",   "SCROLL_LIMIT_LEFT"));
+    s.push_str(&simple_get("vpy_get_scroll_limit_right",  "SCROLL_LIMIT_RIGHT"));
+    s.push_str(&simple_get("vpy_get_scroll_limit_top",    "SCROLL_LIMIT_TOP"));
+    s.push_str(&simple_get("vpy_get_scroll_limit_bottom", "SCROLL_LIMIT_BOTTOM"));
 
     // vpy_get_level_floor_y() → camera_y - 128 + groundBottomOffset (level header +32).
     // Mirrors pitrex_get_level_floor_y so cross-target code can share spawn-height math.
@@ -1774,12 +1671,28 @@ fn emit_state_builtins() -> String {
     s.push_str("    bx      lr\n");
     s.push_str("vglfy_none:\n    mov     r0, #0\n    bx      lr\n\n");
 
+    s
+}
+
+/// vpy_get_frame_us — FRAME_US group.
+fn emit_frame_us() -> String {
+    let mut s = String::new();
+
     // vpy_get_frame_us() → stub. PiTrex uses the BCM CLO; rp2350 has no equivalent
     // hardware exposed yet, so return 0. Code paths that use this for adaptive
     // timing (e.g. SnowBros frame profiling) just see "no time elapsed" and skip
     // their slow-frame branches, which is harmless.
     s.push_str(".global vpy_get_frame_us\n.type vpy_get_frame_us, %function\n.thumb_func\nvpy_get_frame_us:\n");
     s.push_str("    mov     r0, #0\n    bx      lr\n\n");
+
+    s
+}
+
+/// vpy_set_text_size — TEXT group (state for print_text). (No text "color": the
+/// Vectrex is monochrome; text brightness is SET_INTENSITY.)
+fn emit_text_state() -> String {
+    let mut s = String::new();
+
     // vpy_set_text_size: converts M6809 convention (n=1..8, n=8=normal) to ARM scale.
     // ARM TEXT_SIZE=3 ≈ normal Vectrex text (glyph 4×6 box, scale=3 → height=9 units).
     // Mapping: TEXT_SIZE = max(1, (n*3 + 4) >> 3)
@@ -1794,7 +1707,13 @@ fn emit_state_builtins() -> String {
     s.push_str("    mov     r1, #1\n");
     s.push_str("vsts_ok:\n");
     s.push_str("    ldr     r0, =TEXT_SIZE\n    str     r1, [r0]\n    bx      lr\n\n");
-    simple_set!("vpy_set_text_color", "TEXT_COLOR");
+
+    s
+}
+
+/// vpy_debug_print / vpy_debug_print_labeled / vpy_debug_print_str — DEBUG group.
+fn emit_debug_builtins() -> String {
+    let mut s = String::new();
 
     // debug_print: write value to DBGVAL (readable via debugger / bus_read)
     s.push_str(".global vpy_debug_print\n.type vpy_debug_print, %function\n.thumb_func\nvpy_debug_print:\n");
@@ -1910,6 +1829,10 @@ fn emit_msg_builtins(entries: &[MsgEntry]) -> String {
 //   +0 world_x(i16)  +2 world_y(i16)  +4 vel_x(i8)  +5 vel_y(i8)
 //   +6 alive(u8)     +7 pad
 
+/// Level system: vpy_load_level / vpy_show_level (+ vsl_draw_static) /
+/// vpy_update_level / vpy_get_level_width/height/tile — LEVEL group.
+/// vpy_show_level / vsl_draw_static call vpy_draw_vector_ex (dependency).
+/// Collision routines live in `emit_level_collision` (LEVEL_COLLISION group).
 fn emit_level_builtins() -> String {
     let mut s = String::new();
 
@@ -2004,7 +1927,9 @@ fn emit_level_builtins() -> String {
     s.push_str("    cmp     r2, #0\n    bne     vsl_gp_havei\n    mov     r2, #127\n");
     s.push_str("vsl_gp_havei:\n");
     // push {intensity(r2), pad(r3=0)} → 8 bytes, maintains 8-alignment
-    s.push_str("    mov     r3, #0\n    push    {r2, r3}            @ [sp+0]=intensity pad\n");
+    s.push_str("    ldrb    r3, [r6, #4]              @ escala del objeto (x32)\n");
+    s.push_str("    ldr     r12, =VPY_DRAW_SCALE\n    strb    r3, [r12]\n");
+    s.push_str("    mov     r3, #0\n    push    {r2, r3}            @ [sp+0]=intensity, +4 relleno\n");
     // reorder: r0=vector_ptr, r1=screen_x, r2=screen_y, r3=mirror=0
     s.push_str("    mov     r2, r1                    @ screen_y\n");
     s.push_str("    mov     r1, r0                    @ screen_x\n");
@@ -2057,7 +1982,9 @@ fn emit_level_builtins() -> String {
     s.push_str("    cmp     r2, #0\n    bne     vsd_havei\n    mov     r2, #127\n");
     s.push_str("vsd_havei:\n");
     // push {intensity(r2), pad(r3=0)} → 8 bytes, sp stays 8-aligned (48+8=56)
-    s.push_str("    mov     r3, #0\n    push    {r2, r3}\n");
+    s.push_str("    ldrb    r3, [r5, #4]              @ escala del objeto (x32)\n");
+    s.push_str("    ldr     r12, =VPY_DRAW_SCALE\n    strb    r3, [r12]\n");
+    s.push_str("    mov     r3, #0\n    push    {r2, r3}            @ [sp+0]=intensity, +4 relleno\n");
     // args: r0=vector_ptr, r1=screen_x, r2=screen_y, r3=mirror
     s.push_str("    mov     r2, r1                    @ screen_y\n");
     s.push_str("    mov     r1, r0                    @ screen_x\n");
@@ -2166,7 +2093,9 @@ fn emit_level_builtins() -> String {
     s.push_str("    ldrb    r2, [r6, #5]              @ intensity\n");
     s.push_str("    cmp     r2, #0\n    bne     vsl_gp_havei\n    mov     r2, #127\n");
     s.push_str("vsl_gp_havei:\n");
-    s.push_str("    mov     r3, #0\n    push    {r2, r3}            @ [sp]=intensity, align+8\n");
+    s.push_str("    ldrb    r3, [r6, #4]              @ escala del objeto (x32)\n");
+    s.push_str("    ldr     r12, =VPY_DRAW_SCALE\n    strb    r3, [r12]\n");
+    s.push_str("    mov     r3, #0\n    push    {r2, r3}            @ [sp+0]=intensity, +4 relleno\n");
     s.push_str("    mov     r2, r1\n    mov     r1, r0\n    ldr     r0, [r6, #8]  @ vector_ptr\n");
     s.push_str("    mov     r3, #0\n    bl      vpy_draw_vector_ex\n");
     s.push_str("    add     sp, sp, #8\n");
@@ -2201,7 +2130,9 @@ fn emit_level_builtins() -> String {
     s.push_str("    ldrb    r2, [r5, #5]\n    cmp     r2, #0\n    bne     vsd_havei\n    mov     r2, #127\n");
     s.push_str("vsd_havei:\n");
     // push {intensity, pad} = 8 bytes → total (24+24+8=56), 8-aligned ✓
-    s.push_str("    mov     r3, #0\n    push    {r2, r3}\n");
+    s.push_str("    ldrb    r3, [r5, #4]              @ escala del objeto (x32)\n");
+    s.push_str("    ldr     r12, =VPY_DRAW_SCALE\n    strb    r3, [r12]\n");
+    s.push_str("    mov     r3, #0\n    push    {r2, r3}            @ [sp+0]=intensity, +4 relleno\n");
     s.push_str("    mov     r2, r1\n    mov     r1, r0\n    ldr     r0, [r5, #8]\n");
     s.push_str("    mov     r3, #0\n    bl      vpy_draw_vector_ex\n");
     s.push_str("    add     sp, sp, #8\n");
@@ -2303,6 +2234,15 @@ fn emit_level_builtins() -> String {
     s.push_str("vglt_next:\n    add     r0, r0, #8\n    add     r1, r1, #1\n    b       vglt_loop\n");
     s.push_str("vglt_notfound:\n    mvn     r0, #0            @ return -1\n");
     s.push_str("    pop     {r4, r5, r6, pc}\n    .ltorg\n\n");
+
+    s
+}
+
+/// vpy_level_collision_x / vpy_level_collision_y — LEVEL_COLLISION group.
+/// Leaf routines (touch RAM equates only); also a dep of ENEMIES (wander AI
+/// calls vpy_level_collision_x for wall push-out).
+fn emit_level_collision() -> String {
+    let mut s = String::new();
 
     // ── vpy_level_collision_x(r0=px, r1=py, r2=half_w, r3=half_h) → r0 = push-out dx ──
     // Scans collidable GP objects with wall mesh segments. Returns push-out dx (0 if none).
@@ -2484,6 +2424,21 @@ fn emit_draw_anim() -> String {
     s.push_str("    ldrb    r6, [r5]                    @ frame_idx\n");
     s.push_str("    ldrb    r7, [r5, #1]                @ ticks_left (0=uninitialized)\n");
 
+    // Guard a STALE frame_idx. The anim state (frame_idx, ticks_left) is shared
+    // between a player's animations (e.g. player_walk vs player_idle), which have
+    // different frame counts. If a longer anim left frame_idx past THIS anim's
+    // frame_count, dar_draw_frame indexes past its frame table → a garbage frame
+    // ptr → garbage vec ptr → bus fault (the star_hop crash on walk→idle). Clamp
+    // to frame 0 and zero ticks so dar_tick re-inits this frame cleanly.
+    s.push_str("    ldrb    r8, [r4]                    @ frame_count of THIS anim\n");
+    s.push_str("    cmp     r6, r8\n");
+    s.push_str("    bcc     dar_idx_ok                  @ frame_idx < frame_count (unsigned) → ok\n");
+    s.push_str("    mov     r6, #0\n");
+    s.push_str("    mov     r7, #0\n");
+    s.push_str("    strb    r6, [r5]\n");
+    s.push_str("    strb    r7, [r5, #1]\n");
+    s.push_str("dar_idx_ok:\n");
+
     // Draw base_refs every frame
     s.push_str("    ldrb    r8, [r4, #2]                @ base_ref_count\n");
     s.push_str("    cmp     r8, #0\n");
@@ -2492,8 +2447,8 @@ fn emit_draw_anim() -> String {
     s.push_str("dar_base_loop:\n");
     s.push_str("    push    {r8, r9}\n");
     s.push_str("    sub     sp, sp, #8                  @ intensity slot + align\n");
-    s.push_str("    mov     r0, #127\n");
-    s.push_str("    str     r0, [sp]                    @ intensity = 127\n");
+    s.push_str("    mov     r0, #0\n");
+    s.push_str("    str     r0, [sp]                    @ intensity = 0 → use .vec per-path (authored)\n");
     s.push_str("    ldr     r0, [r9]                    @ ARM ptr to vec data\n");
     s.push_str("    mov     r1, r10                     @ ox\n");
     s.push_str("    mov     r2, r11                     @ oy\n");
@@ -2562,8 +2517,8 @@ fn emit_draw_anim() -> String {
     s.push_str("dar_vec_loop:\n");
     s.push_str("    push    {r6, r9}\n");
     s.push_str("    sub     sp, sp, #8                  @ intensity slot + align\n");
-    s.push_str("    mov     r0, #127\n");
-    s.push_str("    str     r0, [sp]                    @ intensity = 127\n");
+    s.push_str("    mov     r0, #0\n");
+    s.push_str("    str     r0, [sp]                    @ intensity = 0 → use .vec per-path (authored)\n");
     s.push_str("    ldr     r0, [r9]                    @ ARM ptr to vec data\n");
     s.push_str("    mov     r1, r10                     @ ox\n");
     s.push_str("    mov     r2, r11                     @ oy\n");

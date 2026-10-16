@@ -1,0 +1,4 @@
+build_wasm/
+build_pitrex/
+gen/
+kernel7l.img

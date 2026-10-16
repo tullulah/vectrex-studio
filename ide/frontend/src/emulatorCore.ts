@@ -3,9 +3,15 @@
 
 export interface RegistersSnapshot { a:number;b:number;dp:number;x:number;y:number;u:number;s:number;pc:number;cycles:number;frame_count:number;cycle_frame?:number;bios_frame?:number;last_intensity:number;draw_vl_count?:number; }
 export interface MetricsSnapshot { total:number;unimplemented:number;frames:number;cycle_frame?:number;bios_frame?:number;draw_vl:number;last_intensity:number;unique_unimplemented:number[];cycles:number;avg_cycles_per_frame?:number;top_opcodes:[number,number][];first_unimpl?:number;via_t1?:number;via_irq_count?:number;via_irq_line?:boolean;via_ifr?:number;via_ier?:number; }
-export interface Segment { x0:number;y0:number;x1:number;y1:number;intensity:number;frame:number; }
+export interface Segment { x0:number;y0:number;x1:number;y1:number;intensity:number;frame:number;
+  /** Bus cycles the beam spent lit on this segment (dwell); 0 = no data. A zero-length
+   *  segment with ticks>0 is a real DOT (beam parked lit) — render it, don't drop it. */
+  ticks?:number; }
 
 export interface IEmulatorCore {
+  /** Coste del ultimo frame completo, solo en el objetivo uvm2. Opcional: los demas
+   *  nucleos no llevan contadores de bus del Vectrex y devuelven undefined. */
+  readonly uvm2FrameStats?: { ciclos: number; vectores: number; frames: number } | null;
   init(wasmUrl?: string): Promise<void> | void;
   ensureBios?(opts?: { bytes?: Uint8Array; urlCandidates?: string[] }): Promise<boolean>;
   loadBios(bytes: Uint8Array): void;
@@ -43,7 +49,12 @@ export interface IEmulatorCore {
   getLastDebugOutput?(): string;
 
   /** Load an ARM binary (rp2350 target). Switches the active backend to Rp2350System. */
-  loadArm?(bin: Uint8Array, elf?: Uint8Array, canvas?: HTMLCanvasElement): void;
+  loadArm?(bin: Uint8Array, elf?: Uint8Array, canvas?: HTMLCanvasElement, simSdFiles?: string[], simSdPreviews?: Record<string, string>, simRomZip?: Uint8Array): void;
+
+  /** Load a `.um2` image (uvm2 target). Switches the active backend to Uvm2System. */
+  loadUvm2?(um2: Uint8Array, canvas?: HTMLCanvasElement,
+            elf?: Uint8Array, sdFiles?: Record<string, Uint8Array>, psramElf?: Uint8Array,
+            sdDeferred?: Record<string, number>): void;
 
   /** Set joystick J1 axis values for RP2350 backend (-128..127, 0=center). */
   setJoyAxis?(x: number, y: number): void;
@@ -53,6 +64,10 @@ export interface IEmulatorCore {
   setJoyAxis2?(x: number, y: number): void;
   /** Set joystick J2 button state (active-low, bits 0-3 = btn 1-4). */
   setJoyButtons2?(mask: number): void;
+
+  // Live AudioContext + output node of the active target, for the parallel
+  // MediaStream tap used by the gameplay video recorder. Null when no audio.
+  getAudioContextAndOutputNode?(): { ctx: AudioContext; outputNode: AudioNode } | null;
 }
 
 // Tipo del identificador de backend.

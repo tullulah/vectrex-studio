@@ -466,15 +466,11 @@ impl SfxResource {
         let name = override_name.unwrap_or(&self.name);
         let label = format!("_{}_SFX", name.to_uppercase().replace(" ", "_").replace("-", "_"));
 
-        // Calculate PSG period from frequency
-        // AY-3-8910: f = clock / (16 * TP), so TP = clock / (16 * f)
-        // JSVecX emulator: 4 PSG ticks per output sample (tick_rate = 4*44100 = 176400 Hz)
-        //   freq = tick_rate / (2 * period)  =>  period = 88200 / freq
-        //   Virtual PSG clock = 16 * 88200 = 1411200 Hz
+        // TP = clk / (16 * f), con clk = 1,5 MHz. Ver `crate::psg`.
         let base_period = if self.oscillator.frequency > 0 {
-            (1_411_200u32 / (16 * self.oscillator.frequency as u32)).max(1).min(4095) as u16
+            crate::psg::hz_to_period(self.oscillator.frequency as f64)
         } else {
-            200 // Default to A4 (440Hz) = period ~200
+            crate::psg::hz_to_period(440.0) // A4 por defecto
         };
         
         // Duration in frames (50 FPS for Vectrex)
@@ -549,17 +545,12 @@ impl SfxResource {
                 // Apply note offset
                 let current_midi = (base_midi_note + note_offset as f32).round() as i32;
 
-                // Convert MIDI note to PSG period (calibrated for JSVecX: virtual clock = 1411200 Hz)
-                // freq = 440 * 2^((midi - 69) / 12)
-                // TP = 1411200 / (16 * freq) = 88200 / freq
-                let frequency = 440.0 * 2.0_f32.powf((current_midi - 69) as f32 / 12.0);
-                current_period = (1_411_200.0 / (16.0 * frequency)).round() as u16;
-                current_period = current_period.max(1).min(4095);
+                current_period = crate::psg::midi_to_period(current_midi as f64);
             } else if self.pitch.enabled && total_frames > 1 {
                 // PITCH SWEEP — same convention as SFX editor:
                 //   start_mult = frequency multiplier at frame 0
                 //   end_mult   = frequency multiplier at last frame
-                //   period = 88200 / (base_freq × mult), mult interpolated linearly.
+                //   period = clk / (16 * base_freq * mult), mult interpolado linealmente.
                 let t = frame as f32 / (total_frames - 1) as f32;
                 let mult = self.pitch.start_mult + (self.pitch.end_mult - self.pitch.start_mult) * t;
                 let base_freq_f = if self.oscillator.frequency > 0 {
@@ -568,11 +559,7 @@ impl SfxResource {
                     440.0
                 };
                 let freq_f = base_freq_f * mult;
-                current_period = if freq_f > 0.0 {
-                    (88200.0 / freq_f).round() as u16
-                } else {
-                    4095
-                };
+                current_period = crate::psg::hz_to_period(freq_f as f64);
                 current_period = current_period.max(1).min(4095);
             }
             

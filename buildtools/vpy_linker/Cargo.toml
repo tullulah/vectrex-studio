@@ -9,6 +9,7 @@ workspace = true
 
 [dependencies]
 vpy_codegen = { path = "../vpy_codegen" }
+vpy_parser = { path = "../vpy_parser" }
 vpy_assembler = { path = "../vpy_assembler" }
 vpy_bank_allocator = { path = "../vpy_bank_allocator" }
 thiserror = "1.0"

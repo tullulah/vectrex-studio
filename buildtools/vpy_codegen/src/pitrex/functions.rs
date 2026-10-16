@@ -3,7 +3,8 @@
 //! Key differences from the ARM/RP2350 backend:
 //!   - No .thumb_func directives (ARM32 mode, not Thumb)
 //!   - No SDIV: bl __aeabi_idiv (r0=dividend, r1=divisor → r0=quotient)
-//!   - Variables: same RamAllocator pattern but Pi Zero RAM at 0x00100000+
+//!   - Globals: same RamAllocator pattern but Pi Zero RAM at 0x00100000+;
+//!     parameters and locals live in stack frames (crate::arm::frame, r7-relative)
 //!   - Startup: calls vectrexinit(1), v_init(), v_setRefresh(50)
 //!   - Loop: calls v_WaitRecal(), v_readButtons(), v_readJoystick1Analog()
 //!   - No explicit music/audio update call (stubbed for now)
@@ -13,6 +14,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU32, Ordering};
 use crate::AssetInfo;
 use super::expressions::{emit_expr, register_string_arrays};
+use crate::arm::frame::{self, Scope};
 
 /// Returns true if the module contains any PLAY_NOTE() calls.
 /// Used to gate auto-injection of pitrex_note_update in the game loop.
@@ -140,7 +142,8 @@ pub fn allocate_globals_bss(module: &Module) -> (HashMap<String, u32>, String) {
                 match value {
                     Expr::List(elems) => {
                         let len = elems.len();
-                        let data_size = ((len * 2) as u32 + 3) & !3;
+                        let elem_bytes = crate::arm::arrays::of_global(name).bytes;
+                        let data_size = ((len * elem_bytes) as u32 + 3) & !3;
                         let data_addr = alloc.alloc(data_size);
                         let ptr_addr  = alloc.alloc(4);
                         decls.push_str(&format!(".equ ARRAY_{varname}_DATA, 0x{data_addr:08X}\n"));
@@ -176,21 +179,12 @@ pub fn allocate_globals_bss(module: &Module) -> (HashMap<String, u32>, String) {
         }
     }
 
-    for item in &module.items {
-        if let Item::Function(func) = item {
-            for param in &func.params {
-                ensure_var(param, &mut alloc, &mut addrs, &mut decls, "param");
-            }
-            collect_locals(&func.body, &mut alloc, &mut addrs, &mut decls);
-        }
-    }
-
     (addrs, decls)
 }
 
 /// Emit const array ROM data tables (to be placed in .rodata section).
 /// String arrays emit a .word pointer table followed by .asciz string data.
-/// Numeric arrays emit .hword entries (i16).
+/// Numeric arrays emit entries of their element type (.byte/.hword/.word).
 /// Also registers string array names for stride-4/ldr indexing in expressions.
 pub fn emit_const_array_data(module: &Module) -> String {
     let mut s = String::new();
@@ -219,11 +213,12 @@ pub fn emit_const_array_data(module: &Module) -> String {
                         }
                     }
                 } else {
+                    let directive = crate::arm::arrays::directive(crate::arm::arrays::of_global(name));
                     s.push_str(".align 2\n");
                     s.push_str(&format!("ARRAY_{varname}_DATA:\n"));
                     for elem in elems {
                         if let Expr::Number(n) = elem {
-                            s.push_str(&format!("    .hword {n}\n"));
+                            s.push_str(&format!("    {directive} {n}\n"));
                         }
                     }
                 }
@@ -242,123 +237,81 @@ pub fn emit_functions(
     var_addrs: &HashMap<String, u32>,
 ) -> Result<String, String> {
     let mut s = String::new();
+    // Parameters and locals of every function (m6809's name-resolution rules,
+    // shared): they live in stack frames, globals at fixed addresses.
+    let scopes = crate::m6809::frames::function_scopes(module)?;
 
     // User-defined functions (skip main/loop — inlined in game_main).
     for item in &module.items {
         if let Item::Function(func) = item {
             let n = func.name.to_uppercase();
             if n == "MAIN" || n == "LOOP" { continue; }
-            s.push_str(&emit_function(&func.name, &func.params, &func.body, var_addrs)?);
+            s.push_str(&emit_function(func, &Scope::of(func, &scopes), var_addrs)
+                .map_err(|e| crate::origins::locate_for(&func.name, &e))?);
         }
     }
 
-    s.push_str(&emit_game_main(module, var_addrs)?);
+    s.push_str(&emit_game_main(module, &scopes, var_addrs)
+        .map_err(|e| crate::origins::locate_for("MAIN", &e))?);
     Ok(s)
 }
 
 // ── Private helpers ───────────────────────────────────────────────────────
 
-fn ensure_var(
-    name: &str,
-    alloc: &mut RamAllocator,
-    addrs: &mut HashMap<String, u32>,
-    decls: &mut String,
-    kind: &str,
-) {
-    let varname = name.to_uppercase();
-    if !addrs.contains_key(&varname) {
-        let addr = alloc.alloc(4);
-        decls.push_str(&format!(".equ VAR_{varname}, 0x{addr:08X}  @ {kind}\n"));
-        addrs.insert(varname, addr);
-    }
-}
-
-fn collect_locals(
-    stmts: &[Stmt],
-    alloc: &mut RamAllocator,
-    addrs: &mut HashMap<String, u32>,
-    decls: &mut String,
-) {
-    for stmt in stmts {
-        match stmt {
-            Stmt::Let { name, value, .. } => {
-                ensure_var(name, alloc, addrs, decls, "local");
-                if let Expr::List(elems) = value {
-                    let len = elems.len();
-                    let data_size = ((len * 2) as u32 + 3) & !3;
-                    let data_addr = alloc.alloc(data_size);
-                    let varname = name.to_uppercase();
-                    decls.push_str(&format!(".equ ARRAY_{varname}_DATA, 0x{data_addr:08X}\n"));
-                    decls.push_str(&format!(".equ ARRAY_{varname}_LEN, {len}\n"));
-                }
-            }
-            Stmt::Assign { target, .. } => {
-                if let AssignTarget::Ident { name, .. } = target {
-                    ensure_var(name, alloc, addrs, decls, "local assign");
-                }
-            }
-            Stmt::For { var, body, .. } => {
-                ensure_var(var, alloc, addrs, decls, "for var");
-                collect_locals(body, alloc, addrs, decls);
-            }
-            Stmt::While { body, .. } => collect_locals(body, alloc, addrs, decls),
-            Stmt::If { body, elifs, else_body, .. } => {
-                collect_locals(body, alloc, addrs, decls);
-                for (_, eb) in elifs { collect_locals(eb, alloc, addrs, decls); }
-                if let Some(eb) = else_body { collect_locals(eb, alloc, addrs, decls); }
-            }
-            _ => {}
-        }
-    }
-}
+/// Registers every user function pushes: 6 (24 bytes), the frame pads to 8.
+const PUSH: &str = "push    {r4, r5, r6, r7, r8, lr}";
+const POP: &str = "pop     {r4, r5, r6, r7, r8, pc}";
+const PUSHED: u32 = 24;
 
 /// Emit a single user-defined function (ARM32, not Thumb).
 fn emit_function(
-    name: &str,
-    params: &[String],
-    body: &[Stmt],
+    func: &vpy_parser::Function,
+    scope: &Scope,
     var_addrs: &HashMap<String, u32>,
 ) -> Result<String, String> {
+    let name = &func.name;
+    let layout = frame::layout(&[scope], PUSHED, name)?.remove(0);
+    let ret_label = format!(".Lret_{name}");
     let mut s = String::new();
     s.push_str(&format!("@ --- function {name} ---\n"));
     s.push_str(".align 2\n");
     // ARM32: no .thumb_func directive
     s.push_str(&format!(".global {name}\n.type {name}, %function\n{name}:\n"));
-    // Push 6 registers (24 bytes) to maintain 8-byte stack alignment
-    s.push_str("    push    {r4, r5, r6, r7, r8, lr}\n");
+    s.push_str(&format!("    {PUSH}\n"));
+    crate::arm::arrays::enter_function(name, &func.params);
+    // Frame: parameters (r0-r3, then the caller's stack arguments) and locals.
+    s.push_str(&frame::prologue(&layout, &func.params, PUSHED, true));
 
-    // Args 0-3 arrive in r0-r3 (ARM EABI). Args 4+ live on the caller's
-    // stack at sp+24+4*(i-4) after our own push of 6 regs (r4-r8+lr = 24
-    // bytes). Caller pushed extras right-to-left so arg 4 sits at the
-    // lowest offset above the saved frame.
-    for (i, param) in params.iter().enumerate() {
-        let varname = param.to_uppercase();
-        let Some(&addr) = var_addrs.get(&varname) else { continue };
-        if i < 4 {
-            s.push_str(&format!(
-                "    ldr     r4, =0x{addr:08X}    @ save param {param}\n    str     r{i}, [r4]\n"
-            ));
-        } else {
-            let stack_off = 24 + (i - 4) * 4;
-            s.push_str(&format!(
-                "    ldr     r5, [sp, #{stack_off}]   @ load stack arg {param}\n\
-                 \x20   ldr     r4, =0x{addr:08X}    @ save param {param}\n\
-                 \x20   str     r5, [r4]\n"
-            ));
-        }
-    }
-
-    let loop_labels: Vec<(String, String)> = Vec::new();
-    for stmt in body {
-        s.push_str(&emit_stmt(stmt, var_addrs, &loop_labels, None)?);
-    }
-    s.push_str("    pop     {r4, r5, r6, r7, r8, pc}\n");
+    frame::enter(&layout);
+    crate::arm::pool::reset();
+    let body = emit_body(&func.body, var_addrs, &[], &ret_label);
+    frame::leave();
+    s.push_str(&body?);
+    s.push_str(&frame::epilogue(&ret_label, &layout, POP, true));
     s.push_str("    .ltorg\n\n");
     Ok(s)
 }
 
+/// The statements of a body, in order.
+fn emit_body(
+    stmts: &[Stmt],
+    var_addrs: &HashMap<String, u32>,
+    loop_labels: &[(String, String)],
+    return_label: &str,
+) -> Result<String, String> {
+    let mut s = String::new();
+    for stmt in stmts {
+        s.push_str(&emit_stmt(stmt, var_addrs, loop_labels, return_label)?);
+    }
+    Ok(s)
+}
+
 /// Emit the PiTrex main() — SDK init + game loop.
-fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<String, String> {
+fn emit_game_main(
+    module: &Module,
+    scopes: &std::collections::BTreeMap<String, crate::m6809::frames::Frame>,
+    var_addrs: &HashMap<String, u32>,
+) -> Result<String, String> {
     let mut s = String::new();
 
     let main_fn = module.items.iter().find_map(|i| {
@@ -375,6 +328,14 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     s.push_str(".global main\n.type main, %function\nmain:\n");
     // Push 8 registers (32 bytes) to maintain 16-byte stack alignment required by NEON
     s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, lr}\n");
+    // One frame (kept 16-byte aligned) holds the locals of main() and, in other
+    // slots, those of loop(): they persist across frames like the globals.
+    let main_scope = main_fn.map(|f| Scope::of(f, scopes)).unwrap_or_default();
+    let loop_scope = loop_fn.map(|f| Scope::of(f, scopes)).unwrap_or_default();
+    let layouts = frame::layout_aligned(&[&main_scope, &loop_scope], 32, 16, "main")?;
+    crate::arm::arrays::enter_function("", &[]);
+    s.push_str(&frame::prologue(&layouts[0], &[], 32, true));
+    crate::arm::pool::reset();
 
     // UART debug init (PL011, 921600 baud, 250 MHz clock) — Malban SDK
     s.push_str("    @ UART debug init\n");
@@ -451,14 +412,16 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
                         }
                         Expr::List(elems) => {
                             let data_varname = format!("ARRAY_{varname}_DATA");
+                            let elem = crate::arm::arrays::of_global(name);
+                            let store = crate::arm::arrays::store(elem);
                             s.push_str(&format!("    @ init array {name}\n"));
                             s.push_str(&format!("    ldr     r2, ={data_varname}\n"));
                             // ARMv6 STRH immediate offset max = 255 bytes.
-                            // For arrays > 128 halfwords, rechunk into r3 every 256 bytes.
+                            // For arrays > 255 bytes, rechunk into r3 every 256 bytes.
                             let mut chunk_base: usize = 0;
-                            for (i, elem) in elems.iter().enumerate() {
-                                if let Expr::Number(n) = elem {
-                                    let byte_off = i * 2;
+                            for (i, e) in elems.iter().enumerate() {
+                                if let Expr::Number(n) = e {
+                                    let byte_off = i * elem.bytes;
                                     if byte_off > 0 && byte_off >= chunk_base + 256 {
                                         chunk_base = (byte_off / 256) * 256;
                                         s.push_str(&format!(
@@ -473,7 +436,7 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
                                         format!("    ldr     r0, ={n}\n")
                                     };
                                     s.push_str(&format!(
-                                        "{mov}    strh    r0, [{base_reg}, #{local_off}]\n"
+                                        "{mov}    {store}   r0, [{base_reg}, #{local_off}]\n"
                                     ));
                                 }
                             }
@@ -518,15 +481,18 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     let loop_labels: Vec<(String, String)> = Vec::new();
     if let Some(f) = main_fn {
         s.push_str("    @ main() body\n");
-        for stmt in &f.body {
-            s.push_str(&emit_stmt(stmt, var_addrs, &loop_labels, Some("pitrex_game_loop"))?);
-        }
+        frame::enter(&layouts[0]);
+        let body = emit_body(&f.body, var_addrs, &loop_labels, "pitrex_game_loop");
+        frame::leave();
+        s.push_str(&body?);
         // Flush after main() body before entering game loop
         flush_pool(&mut s, &mut pool_idx);
     }
 
     // Game loop — PiTrex frame sync + input
     s.push_str("\npitrex_game_loop:\n");
+    // Drop anything a `return` from inside a switch left on the stack.
+    s.push_str("    mov     sp, r7\n");
     s.push_str("    bl      pitrex_wait_recal   @ wraps v_WaitRecal + scale fix + UART frame trace\n");
     // v_WaitRecal resets the SDK's currentCursorX/Y to 0 via v_deflok → ZERO_AND_WAIT.
     // Mirror that here so PITREX_CUR_X/Y stays in sync for delta moves in draw_vector.
@@ -536,8 +502,19 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     s.push_str("    bl      v_readButtons\n");
     s.push_str("    bl      v_readJoystick1Analog\n");
     s.push_str("    bl      v_readJoystick2Analog\n");
-    s.push_str("    bl      pitrex_music_update\n");
-    s.push_str("    bl      pitrex_sfx_update\n");
+    // Per-frame sequencer advance. When the MUSIC/SFX group is bridged to
+    // libvpy (BLOCK 6), call the C runtime's sequencer so the music/SFX state
+    // lives in exactly one place (libvpy s_mus_*/s_sfx_*); otherwise use the
+    // inline BCM-CLO/frame-counter helpers. MUSIC_UPDATE/SFX_UPDATE are not
+    // user builtins, so this call site is remapped here rather than in
+    // expressions.rs.
+    if crate::pitrex::libvpy::music_group_bridged() {
+        s.push_str("    bl      vpy_music_update\n");
+        s.push_str("    bl      vpy_sfx_update\n");
+    } else {
+        s.push_str("    bl      pitrex_music_update\n");
+        s.push_str("    bl      pitrex_sfx_update\n");
+    }
     if has_note_calls(module) {
         s.push_str("    bl      pitrex_note_update\n");
     }
@@ -552,14 +529,23 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
         // Emit loop body with periodic pool flushes every ~3 KB of generated text
         // ARM ldr= pool must be within 4KB; ~3000 chars ≈ 600 instructions ≈ 2.4 KB — safe margin
         let mut last_flush_len = s.len();
+        frame::enter(&layouts[1]);
         for stmt in &f.body {
-            let stmt_code = emit_stmt(stmt, var_addrs, &loop_labels, Some("pitrex_game_loop"))?;
+            let stmt_code = emit_stmt(stmt, var_addrs, &loop_labels, "pitrex_game_loop");
+            let stmt_code = match stmt_code {
+                Ok(code) => code,
+                Err(e) => {
+                    frame::leave();
+                    return Err(e);
+                }
+            };
             s.push_str(&stmt_code);
             if s.len() - last_flush_len > 3000 {
                 flush_pool(&mut s, &mut pool_idx);
                 last_flush_len = s.len();
             }
         }
+        frame::leave();
     }
     s.push_str("    b       pitrex_game_loop\n\n");
 
@@ -690,46 +676,53 @@ fn emit_index_load(
     var_addrs: &HashMap<String, u32>,
     s: &mut String,
 ) -> Result<(), String> {
+    let elem = crate::arm::arrays::of(target);
     s.push_str(&emit_expr(target, var_addrs)?);  // r0 = base ptr
     s.push_str("    push    {r0}           @ save base ptr\n");
     s.push_str(&emit_expr(index, var_addrs)?);   // r0 = index
-    s.push_str("    lsl     r0, r0, #1       @ index * 2\n");
+    s.push_str(&crate::arm::arrays::scale("r0", elem));
     s.push_str("    pop     {r1}           @ base ptr\n");
     s.push_str("    add     r1, r1, r0       @ element addr\n");
-    s.push_str("    ldrsh   r0, [r1]         @ signed 16-bit load\n");
+    s.push_str(&format!("    {}   r0, [r1]         @ load {} element\n", crate::arm::arrays::load(elem), elem.type_name()));
     Ok(())
 }
 
+/// One statement's code, followed by a literal-pool island when one is due.
 fn emit_stmt(
     stmt: &Stmt,
     var_addrs: &HashMap<String, u32>,
     loop_labels: &[(String, String)],
-    return_label: Option<&str>,
+    return_label: &str,
+) -> Result<String, String> {
+    let mut code = emit_stmt_code(stmt, var_addrs, loop_labels, return_label)?;
+    crate::arm::pool::after(&mut code);
+    Ok(code)
+}
+
+fn emit_stmt_code(
+    stmt: &Stmt,
+    var_addrs: &HashMap<String, u32>,
+    loop_labels: &[(String, String)],
+    return_label: &str,
 ) -> Result<String, String> {
     match stmt {
         Stmt::Assign { target, value, .. } => {
             let mut s = emit_expr(value, var_addrs)?;
             match target {
                 AssignTarget::Ident { name, .. } => {
-                    let varname = name.to_uppercase();
-                    if let Some(&addr) = var_addrs.get(&varname) {
-                        s.push_str(&format!(
-                            "    ldr     r1, =0x{addr:08X}    @ {name}\n    str     r0, [r1]\n"
-                        ));
-                    } else {
-                        return Err(format!("Unknown variable: {name}"));
-                    }
+                    s.push_str(&frame::store_r0(name, var_addrs)?);
                 }
                 AssignTarget::Index { target, index, .. } => {
+                    let elem = crate::arm::arrays::of(target);
                     s.push_str("    push    {r0}           @ save value\n");
                     s.push_str(&emit_expr(target, var_addrs)?);
                     s.push_str("    push    {r0}           @ save base ptr\n");
                     s.push_str(&emit_expr(index, var_addrs)?);
-                    s.push_str("    lsl     r0, r0, #1       @ index * 2\n");
+                    s.push_str(&crate::arm::arrays::scale("r0", elem));
                     s.push_str("    pop     {r1}           @ base ptr\n");
                     s.push_str("    add     r1, r1, r0       @ element addr\n");
                     s.push_str("    pop     {r0}           @ value\n");
-                    s.push_str("    strh    r0, [r1]         @ store 16-bit\n");
+                    s.push_str(&format!("    {}   r0, [r1]         @ store {}\n", crate::arm::arrays::store(elem), elem.type_name()));
                 }
                 other => return Err(format!("Unsupported assign target: {:?}", other)),
             }
@@ -738,10 +731,7 @@ fn emit_stmt(
 
         Stmt::Let { name, value, .. } => {
             let mut s = emit_expr(value, var_addrs)?;
-            let varname = name.to_uppercase();
-            if let Some(&addr) = var_addrs.get(&varname) {
-                s.push_str(&format!("    ldr     r1, =0x{addr:08X}\n    str     r0, [r1]\n"));
-            }
+            s.push_str(&frame::store_r0(name, var_addrs)?);
             Ok(s)
         }
 
@@ -749,18 +739,13 @@ fn emit_stmt(
             let mut s = String::new();
             match target {
                 AssignTarget::Ident { name, .. } => {
-                    let varname = name.to_uppercase();
-                    if let Some(&addr) = var_addrs.get(&varname) {
-                        s.push_str(&format!("    ldr     r1, =0x{addr:08X}\n    ldr     r0, [r1]\n"));
-                        s.push_str("    push    {r0}       @ left operand\n");
-                        s.push_str(&emit_expr(value, var_addrs)?);
-                        s.push_str("    mov     r1, r0\n");
-                        s.push_str("    pop     {r0}\n");
-                        emit_binop_on_regs(op, &mut s)?;
-                        s.push_str(&format!("    ldr     r1, =0x{addr:08X}\n    str     r0, [r1]\n"));
-                    } else {
-                        return Err(format!("Unknown variable: {name}"));
-                    }
+                    s.push_str(&frame::load_r0(name, var_addrs)?);
+                    s.push_str("    push    {r0}       @ left operand\n");
+                    s.push_str(&emit_expr(value, var_addrs)?);
+                    s.push_str("    mov     r1, r0\n");
+                    s.push_str("    pop     {r0}\n");
+                    emit_binop_on_regs(op, &mut s)?;
+                    s.push_str(&frame::store_r0(name, var_addrs)?);
                 }
                 AssignTarget::Index { target, index, .. } => {
                     emit_index_load(target, index, var_addrs, &mut s)?;
@@ -771,7 +756,7 @@ fn emit_stmt(
                     s.push_str("    pop     {r0}\n");
                     emit_binop_on_regs(op, &mut s)?;
                     s.push_str("    pop     {r1}       @ element addr\n");
-                    s.push_str("    strh    r0, [r1]     @ store result\n");
+                    s.push_str(&format!("    {}   r0, [r1]     @ store result\n", crate::arm::arrays::store(crate::arm::arrays::of(target))));
                 }
                 other => return Err(format!("Unsupported compound assign target: {:?}", other)),
             }
@@ -837,8 +822,6 @@ fn emit_stmt(
 
         Stmt::For { var, start, end, step, body, .. } => {
             let id = next_id();
-            let varname = var.to_uppercase();
-            let addr = var_addrs.get(&varname).copied().unwrap_or(0);
             let break_lbl    = format!("for_end_{id}");
             let continue_lbl = format!("for_inc_{id}");
             let mut inner = loop_labels.to_vec();
@@ -846,10 +829,10 @@ fn emit_stmt(
             let mut s = String::new();
             // init
             s.push_str(&emit_expr(start, var_addrs)?);
-            s.push_str(&format!("    ldr     r1, =0x{addr:08X}\n    str     r0, [r1]\n"));
+            s.push_str(&frame::store_r0(var, var_addrs)?);
             s.push_str(&format!("for_top_{id}:\n"));
             // condition: var < end
-            s.push_str(&format!("    ldr     r1, =0x{addr:08X}\n    ldr     r0, [r1]\n"));
+            s.push_str(&frame::load_r0(var, var_addrs)?);
             s.push_str("    push    {r0}\n");
             s.push_str(&emit_expr(end, var_addrs)?);
             s.push_str("    mov     r1, r0\n    pop     {r0}\n");
@@ -858,7 +841,7 @@ fn emit_stmt(
             for st in body { s.push_str(&emit_stmt(st, var_addrs, &inner, return_label)?); }
             // increment
             s.push_str(&format!("for_inc_{id}:\n"));
-            s.push_str(&format!("    ldr     r1, =0x{addr:08X}\n    ldr     r0, [r1]\n"));
+            s.push_str(&frame::load_r0(var, var_addrs)?);
             if let Some(step_expr) = step {
                 s.push_str("    push    {r0}\n");
                 s.push_str(&emit_expr(step_expr, var_addrs)?);
@@ -866,28 +849,18 @@ fn emit_stmt(
             } else {
                 s.push_str("    add     r0, r0, #1\n");
             }
-            s.push_str(&format!("    ldr     r1, =0x{addr:08X}\n    str     r0, [r1]\n"));
+            s.push_str(&frame::store_r0(var, var_addrs)?);
             s.push_str(&format!("    b       for_top_{id}\nfor_end_{id}:\n"));
             Ok(s)
         }
 
         Stmt::Return(Some(expr), _) => {
             let mut s = emit_expr(expr, var_addrs)?;
-            if let Some(lbl) = return_label {
-                s.push_str(&format!("    b       {lbl}\n"));
-            } else {
-                s.push_str("    pop     {r4, r5, r6, r7, r8, pc}\n");
-            }
+            s.push_str(&format!("    b       {return_label}\n"));
             Ok(s)
         }
 
-        Stmt::Return(None, _) => {
-            if let Some(lbl) = return_label {
-                Ok(format!("    b       {lbl}\n"))
-            } else {
-                Ok("    pop     {r4, r5, r6, r7, r8, pc}\n".to_string())
-            }
-        }
+        Stmt::Return(None, _) => Ok(format!("    b       {return_label}\n")),
 
         Stmt::Break { .. } => {
             if let Some((break_lbl, _)) = loop_labels.last() {

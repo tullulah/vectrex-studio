@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { useEmulatorStore } from '../../state/emulatorStore';
+import { useEmulatorStore, type ActiveEngine } from '../../state/emulatorStore';
 import { useEditorStore } from '../../state/editorStore';
 import { useEmulatorSettings } from '../../state/emulatorSettings';
 import { useDebugStore } from '../../state/debugStore';
@@ -12,6 +12,15 @@ import { psgAudio } from '../../psgAudio';
 import { inputManager } from '../../inputManager';
 import { asmAddressToVpyLine, formatAddress } from '../../utils/debugHelpers';
 import { emuCore } from '../../emulatorCoreSingleton';
+import { VectorRecorder, serializeVrec, defaultRecordingName, MAX_RECORD_SECONDS, type RawSegment } from '../../emulator/recorder/VectorRecorder';
+import { VideoRecorder, defaultVideoName } from '../../emulator/recorder/VideoRecorder';
+import { getAllLiveContextOutputs, getOutputsForContext } from '../../emulator/recorder/audioGraphTracker';
+import { PitrexSimView, PITREX_RANGE, type Segment as PitrexSegment } from '../PitrexSimView';
+import { installBreakpointSync, syncEmulatorBreakpoints } from '../../debug/breakpointSync';
+import { buildCallStack, sourceAt, statementAddresses } from '../../debug/pdbSource';
+import { showProjectSource } from '../../debug/showSource';
+import { armStep, showArmStop } from '../../debug/armSourceDebug';
+import { cartridgeDebugActive } from '../../debug/hwDebug';
 
 // Helper: Get line->address map for both single-bank and multibank formats
 function getLineAddressMap(pdb: PdbData | null): Record<number, number> {
@@ -38,6 +47,7 @@ function getLineAddressMap(pdb: PdbData | null): Record<number, number> {
   
   return result;
 }
+
 
 // Tipos para JSVecX
 interface VecxMetrics {
@@ -161,15 +171,23 @@ const getCurrentVpyLineForPC = (pc: number, pdbData: any): number | null => {
 };
 
 // Componente para mostrar información técnica del emulador (métricas reales)
-const EmulatorOutputInfo: React.FC = () => {
+/* `backend` = which emulator is running RIGHT NOW. Without it this panel always read
+  * `window.vecx` — the 6809 — so with UVM2 running it showed zeroed registers and a red
+  * "JSVecx: STOPPED / MISMATCH": a panel that looks broken when in fact it is reading the
+  * wrong machine. */
+const EmulatorOutputInfo: React.FC<{ backend: 'rp2350' | 'uvm2' | null }> = ({ backend }) => {
   const [metrics, setMetrics] = useState<VecxMetrics | null>(null);
   const [regs, setRegs] = useState<VecxRegs | null>(null);
   const [vecxRunning, setVecxRunning] = useState<boolean>(false);
-  
+  const [statsArm, setStatsArm] = useState<{ ciclos: number; vectores: number; frames: number } | null>(null);
+
   // Get debug state from debugStore
   const debugState = useDebugStore(s => s.state);
+  const emuFps = useDebugStore(s => s.currentFps);
+  const emuDrawFps = useDebugStore(s => s.drawFps);
 
   const fetchStats = () => {
+    try { setStatsArm((emuCore as any).uvm2FrameStats ?? null); } catch { setStatsArm(null); }
     try {
       const vecx = (window as any).vecx;
       if (!vecx) {
@@ -198,6 +216,10 @@ const EmulatorOutputInfo: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Each pause (a step, a breakpoint) has a new PC: show it now, not at the next poll
+  const pausedStack = useDebugStore(s => s.callStack);
+  useEffect(() => { fetchStats(); }, [debugState, pausedStack]);
+
   const hex8 = (v: any) => typeof v === 'number' ? `0x${(v & 0xFF).toString(16).padStart(2, '0')}` : '--';
   const hex16 = (v: any) => typeof v === 'number' ? `0x${(v & 0xFFFF).toString(16).padStart(4, '0')}` : '--';
   
@@ -222,11 +244,43 @@ const EmulatorOutputInfo: React.FC = () => {
         fontSize: '10px',
         textTransform: 'uppercase',
         letterSpacing: '0.5px',
-        fontFamily: 'system-ui'
+        fontFamily: 'var(--vs-ui-font)'
       }}>
-        Emulator Output
+        Emulator Output{backend ? ` — ${backend.toUpperCase()}` : ''}
       </div>
 
+      {/* With UVM2 (or the ARM core) running, the 6809 registers MEAN NOTHING: the 6809 is
+          stopped, everything reads zero, and the red MISMATCH is not a fault. Show the
+          counters of the backend that is actually running. */}
+      {backend ? (
+        <>
+          <div style={{ marginBottom: '2px' }}>
+            State: <span style={{
+              color: debugState === 'running' ? '#0f0' : debugState === 'paused' ? '#ff0' : '#f00',
+              fontWeight: 'bold'
+            }}>{debugState.toUpperCase()}</span>
+          </div>
+          <div style={{ marginBottom: '2px' }}>
+            Host FPS: {emuFps > 0 ? emuFps.toFixed(1) : '--'}
+          </div>
+          <div style={{ marginBottom: '2px' }}>
+            {/* What the frame's bus cycles would allow on the real console: this is the
+                number that matters, and it is NOT the one above (that one depends on this
+                machine). */}
+            Console refresh: {emuDrawFps > 0 ? `${emuDrawFps.toFixed(1)} Hz` : '--'}
+          </div>
+          <div style={{ marginBottom: '2px' }}>
+            Bus cycles/frame: {statsArm?.ciclos ? statsArm.ciclos : '--'}
+          </div>
+          <div style={{ marginBottom: '2px' }}>
+            Vectors/frame: {statsArm?.vectores ? statsArm.vectores : '--'}
+          </div>
+          <div>
+            Frames: {statsArm?.frames ?? 0}
+          </div>
+        </>
+      ) : (
+      <>
       <div style={{ marginBottom: '2px' }}>
         PC: {hex16(regs?.PC)}
         {' | '}BANK: {typeof regs?.BANK === 'number' ? regs.BANK.toString(16).toUpperCase() : '--'}
@@ -266,13 +320,60 @@ const EmulatorOutputInfo: React.FC = () => {
       <div>
         Avg Cycles/frame: {avgCyclesPerFrame > 0 ? avgCyclesPerFrame : '--'}
       </div>
+      </>
+      )}
     </div>
   );
 };
 
+// Romset for the simulated card. The ports read `roms/<STEM>.ZIP` off the SD at
+// boot instead of embedding the ROM (MAME model), so the emulator has to hand the
+// same bytes over — otherwise the game boots, finds no romset and says so, which is
+// correct behaviour but looks like a bug.
+//
+// Returns undefined when there is no romset: that is not an error here. A port that
+// still embeds its ROM ignores this entirely.
+async function loadSimRomZip(binPath?: string | null): Promise<Uint8Array | undefined> {
+  if (!binPath) return undefined;
+  const stem = binPath.split(/[/\\]/).pop()?.replace(/\.bin$/i, '');
+  if (!stem) return undefined;
+  // Se le pasa el .bin: el nombre del romset lo declara EL JUEGO (bloque RSET),
+  // no se deduce del nombre del fichero.
+  const res = await (window as any).electronAPI?.sdRomZip?.(stem, binPath).catch(() => null);
+  if (!res?.ok || !res.base64) {
+    console.log(`[EmulatorPanel] No romset for "${stem}" (${res?.error ?? 'no ipc'})` +
+      (res?.have?.length ? ` — roms/ has: ${res.have.join(', ')}` : '') +
+      ` — the game will report it if it needs one.`);
+    return undefined;
+  }
+  console.log(`[EmulatorPanel] \u2713 Romset ${res.name} (${res.size}b) from ${res.dir}`);
+  return Uint8Array.from(atob(res.base64), c => c.charCodeAt(0));
+}
+
 export const EmulatorPanel: React.FC = () => {
   const status = useEmulatorStore(s => s.status);
   const setStatus = useEmulatorStore(s => s.setStatus);
+  // External-project WASM simulator (PiTrex host SDK). When set, PitrexSimView
+  // runs the module in the canvas area instead of a Vectrex backend.
+  const simModulePath = useEmulatorStore(s => s.simModulePath);
+  const simModuleNonce = useEmulatorStore(s => s.simModuleNonce);
+  const setSimModule = useEmulatorStore(s => s.setSimModule);
+  // The simulator Stop took down, so Play can start it again from the beginning.
+  const stoppedSimRef = useRef<{ path: string; romZip: Uint8Array | null } | null>(null);
+  // The engine that owns the panel (see stopAllEngines). In the store, not in a ref,
+  // so it survives the panel remounting when the dock layout changes.
+  const activeEngine = useEmulatorStore(s => s.activeEngine);
+  const setActiveEngine = useEmulatorStore(s => s.setActiveEngine);
+
+  // Tell tools that start runs (MCP ide_run) whether anyone is here to load the program.
+  useEffect(() => {
+    useEmulatorStore.getState().setPanelMounted(true);
+    return () => useEmulatorStore.getState().setPanelMounted(false);
+  }, []);
+  // Which run backend is active, shown as a badge so it's never ambiguous whether
+  // you're SIMULATING (fast WASM, F5) or EMULATING the RP2350 ARM binary (slow
+  // HW-accurate, Shift+F5).  'rp2350' is set when an ARM binary is loaded below.
+  const [runMode, setRunMode] = useState<'rp2350' | 'uvm2' | null>(null);
   const { setConfigOpen, loadConfig } = useJoystickStore();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   
@@ -282,7 +383,7 @@ export const EmulatorPanel: React.FC = () => {
     overlayEnabled, 
     lastRomPath, 
     lastRomName,
-    emulatorWasRunning,
+    // emulatorWasRunning is persisted but deliberately not read: a mount never starts an engine.
     lastCompiledBinary,
     lastCompiledProject,
     setAudioEnabled, 
@@ -319,17 +420,151 @@ export const EmulatorPanel: React.FC = () => {
   const [breakpoints, setBreakpoints] = useState<Set<number>>(new Set());
   const debugState = useDebugStore(s => s.state);
   const pdbData = useDebugStore(s => s.pdbData);
+  /* FRAME COUNTER. The emulator loop already wrote this to the store, but the only
+   * component that rendered it (DebugToolbar) is not mounted anywhere, so the number was
+   * computed and thrown away. Shown here, next to the backend badge. */
+  const emuFps = useDebugStore(s => s.currentFps);
+  const emuDrawFps = useDebugStore(s => s.drawFps);
+  const emuCiclos = useDebugStore(s => s.cycles);
   const breakpointCheckIntervalRef = useRef<number | null>(null);
 
   // rp2350 requestAnimationFrame loop handle
   const rp2350LoopRef = useRef<number | null>(null);
+
+  // Vector recorder (.vrec capture for game-preview / attract-mode playback)
+  const recorderRef = useRef<VectorRecorder | null>(null);
+  const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [recordElapsed, setRecordElapsed] = useState<number>(0);
+
+  // Gameplay video recorder (real pixels + audio → WebM → MP4 via ffmpeg).
+  // Separate from the .vrec vector recorder above.
+  const videoRecorderRef = useRef<VideoRecorder | null>(null);
+  /* Cuantos contextos pincho el tap la ultima vez, para no imprimir el
+   * diagnostico diez veces por segundo: solo cuando cambia. */
+  const ultimoTapRef = useRef<number>(-1);
+  /* El canvas de PitrexSimView, que se superpone al del emulador cuando corre un
+   * simulador WASM de proyecto externo. Grabar el de abajo daba "Nothing captured"
+   * sin un solo error: no fallaba nada, es que ese canvas ya no lo pinta nadie. */
+  const simCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  /* Lector del ultimo frame del simulador externo, para el .vrec (mismo punto ciego
+   * que el video: emuCore y window.vecx estan parados mientras corre). */
+  const simSegmentsRef = useRef<(() => PitrexSegment[] | null) | null>(null);
+  /* Estables a proposito: una funcion en linea cambia de identidad en cada render y
+   * React la vuelve a invocar con null antes de reasignarla. */
+  const onSimCanvasReady = useCallback((el: HTMLCanvasElement | null) => { simCanvasRef.current = el; }, []);
+  const onSimCaptureReady = useCallback((leer: (() => PitrexSegment[] | null) | null) => { simSegmentsRef.current = leer; }, []);
+  const [isVideoRecording, setIsVideoRecording] = useState<boolean>(false);
+  const [videoElapsed, setVideoElapsed] = useState<number>(0);
+  // idle | recording | transcoding | saved | error
+  const [videoStatus, setVideoStatus] = useState<'idle' | 'recording' | 'transcoding' | 'saved' | 'error'>('idle');
+  const [videoMessage, setVideoMessage] = useState<string>('');
 
   // PiTrex ARM32 interpreter loop handle and core instance
   const pitrexLoopRef = useRef<number | null>(null);
   const pitrexCoreRef = useRef<import('../../pitrex/PitrexCore.js').PitrexCore | null>(null);
   // Last assembly text loaded into PitrexCore — needed for reset (re-parse + restart loop)
   const pitrexSFileRef = useRef<string | null>(null);
+  const pitrexLibvpyRef = useRef<string | null>(null);
   
+  // Reloads the last rp2350 / uvm2 image into its system (set by the load paths), so
+  // Reset, and Play after Stop, restart THAT program instead of falling through to
+  // the 6809 and booting the BIOS.
+  const armReloadRef = useRef<(() => void) | null>(null);
+  // The panel's Play / Pause / Stop, for the debugger message handler (a long-lived
+  // closure): assigned on every render once the handlers exist.
+  const runControlRef = useRef<{ play: () => void; pause: () => void; stop: () => void }>(
+    { play: () => {}, pause: () => {}, stop: () => {} });
+  // Mute state for handlers that live in long-lived closures (onCompiledBin).
+  const audioEnabledRef = useRef(audioEnabled);
+  audioEnabledRef.current = audioEnabled;
+
+  /* ── ONE ENGINE AT A TIME ────────────────────────────────────────────────
+   *
+   * Stops EVERY engine the panel can run and silences every audio path they own:
+   * JSVecX (CPU loop, its pending auto-start, its PSG callback), the psgAudio
+   * streamer, VectrexSystem's audio, the PiTrex interpreter, the rp2350 and uvm2
+   * systems (rAF loop + AudioContext) and, unless `keepSim`, the WASM simulator
+   * (unmounting PitrexSimView closes its contexts). Called at the single entry of
+   * every program load/start; the engine being started then starts itself (and its
+   * own audio) as before. Stopping only the CPU is not enough: a ScriptProcessor
+   * keeps rendering the last PSG registers, which is the stuck note.
+   *
+   * It does not change `activeEngine`: the caller that starts something sets it. */
+  const stopAllEngines = useCallback((reason: string, opts: { keepSim?: boolean } = {}) => {
+    // 1. JSVecX (m6809). stop() also cancels the start that vecx.reset() schedules
+    //    200 ms later, and silences the PSG even if the debugger had halted the loop.
+    const vecx = (window as any).vecx;
+    if (vecx) {
+      try { vecx.stop(); } catch {}
+      try { vecx.e8910?.stop?.(); } catch {}
+      // A 6809 debug session ends here: a stale 'paused' would make the breakpoint
+      // poller pause whatever engine runs next.
+      try { vecx.debugState = 'stopped'; vecx.stepMode = null; vecx.stepTargetAddress = null; } catch {}
+    }
+    // 2. The psgAudio streamer and VectrexSystem's own PSG output (the 6809 path).
+    try { psgAudio.stop(); } catch {}
+    try { (emuCore as any)._vectrexSystem?.stopAudio?.(); } catch {}
+    // 3. PiTrex interpreter: rAF loop + audio. The core is dropped; a reload makes a new one.
+    if (pitrexLoopRef.current !== null) {
+      cancelAnimationFrame(pitrexLoopRef.current);
+      pitrexLoopRef.current = null;
+    }
+    if (pitrexCoreRef.current) {
+      try { pitrexCoreRef.current.stopAudio?.(); } catch {}
+      pitrexCoreRef.current = null;
+    }
+    // 4. rp2350 and uvm2: one rAF loop drives either; each system owns an AudioContext.
+    if (rp2350LoopRef.current !== null) {
+      cancelAnimationFrame(rp2350LoopRef.current);
+      rp2350LoopRef.current = null;
+    }
+    try { (emuCore as any)._rp2350System?.stopAudio?.(); } catch {}
+    try { (emuCore as any)._uvm2System?.stopAudio?.(); } catch {}
+    // 5. The WASM simulator: unmounting PitrexSimView ends the program and closes its audio.
+    if (!opts.keepSim) {
+      stoppedSimRef.current = null;
+      if (useEmulatorStore.getState().simModulePath) setSimModule(null);
+    }
+    console.log(`[EmulatorPanel] stopAllEngines (${reason})${opts.keepSim ? ' — simulator kept' : ''}`);
+  }, [setSimModule]);
+
+  // Tools outside the panel (main.tsx before a build, the MCP bridge, DevTools) reach
+  // the same function and can see who owns the panel.
+  useEffect(() => {
+    (window as any).emulatorEngines = {
+      stopAll: (reason = 'external') => stopAllEngines(reason),
+      active: () => useEmulatorStore.getState().activeEngine,
+      // Who is running and which AudioContexts are live (for DevTools and tests).
+      state: () => {
+        const vecx = (window as any).vecx;
+        const ec = emuCore as any;
+        return {
+          active: useEmulatorStore.getState().activeEngine,
+          status: useEmulatorStore.getState().status,
+          sim: useEmulatorStore.getState().simModulePath,
+          m6809: { running: !!vecx?.running, pendingStart: vecx?.pendingStart != null,
+                   psgReady: !!vecx?.e8910?.psg?.ready, ctx: vecx?.e8910?.ctx?.state ?? null },
+          psgAudio: !!(psgAudio as any).running,
+          armLoop: rp2350LoopRef.current !== null,
+          rp2350Audio: ec._rp2350System?.audioCtx?.state ?? null,
+          uvm2Audio: ec._uvm2System?.audioCtx?.state ?? null,
+          pitrex: { loop: pitrexLoopRef.current !== null, core: !!pitrexCoreRef.current },
+          contexts: getAllLiveContextOutputs().map(t => `${t.ctx.state}/${t.outputs.length}`),
+        };
+      },
+    };
+    return () => { delete (window as any).emulatorEngines; };
+  }, [stopAllEngines]);
+
+  // rp2350 / uvm2 audio follows Pause and Mute by suspending the system's context
+  // (Stop closes it; the next load opens a new one).
+  const setArmAudioSuspended = useCallback((suspended: boolean) => {
+    const a = (emuCore as any)?.getAudioContextAndOutputNode?.();
+    const ctx: AudioContext | undefined = a?.ctx;
+    if (!ctx || ctx.state === 'closed') return;
+    (suspended ? ctx.suspend() : ctx.resume()).catch(() => {});
+  }, []);
+
   // Hook editor store para documentos activos
   const editorActive = useEditorStore(s => s.active);
   const editorDocuments = useEditorStore(s => s.documents);
@@ -341,12 +576,313 @@ export const EmulatorPanel: React.FC = () => {
     // console.log('📍 [EmulatorPanel] Mount stack trace:', new Error().stack); // Debug only
     return () => {
       console.log('💀 [EmulatorPanel] COMPONENT UNMOUNTING');
+      // The rAF loops and the PiTrex core live in this instance's refs: once it is
+      // gone nothing can stop them, so they stop here, sound included (cancelling
+      // only the loop left the last note sustaining). JSVecX is global and the
+      // remounted panel re-binds it, so it is left alone.
       if (rp2350LoopRef.current !== null) {
         cancelAnimationFrame(rp2350LoopRef.current);
         rp2350LoopRef.current = null;
+        try { (emuCore as any)._rp2350System?.stopAudio?.(); } catch {}
+        try { (emuCore as any)._uvm2System?.stopAudio?.(); } catch {}
       }
+      if (pitrexLoopRef.current !== null) {
+        cancelAnimationFrame(pitrexLoopRef.current);
+        pitrexLoopRef.current = null;
+      }
+      if (pitrexCoreRef.current) {
+        try { pitrexCoreRef.current.stopAudio?.(); } catch {}
+        pitrexCoreRef.current = null;
+      }
+      // Discard any in-progress vector recording
+      recorderRef.current?.discard();
+      // Discard any in-progress gameplay video recording
+      videoRecorderRef.current?.discard();
     };
   }, []);
+
+  // The WASM simulator's entry: every activation (main.tsx Shift+F5, MCP, Play/Reset
+  // here) goes through the store's setSimModule, so this effect is the one place that
+  // hands the panel to it. Keyed on the nonce too: a rebuild of the same module path
+  // is a new program load. PitrexSimView owns its own canvas + lifecycle.
+  useEffect(() => {
+    if (!simModulePath) return;
+    stopAllEngines('WASM simulator', { keepSim: true });
+    setActiveEngine('sim');
+    setRunMode(null);
+    setShowPitrexOverlay(false);
+  }, [simModulePath, simModuleNonce, stopAllEngines, setActiveEngine]);
+
+  // ── Vector recorder (.vrec) ─────────────────────────────────────────────
+  // Samples the most recent completed frame's draw list from whichever
+  // emulator backend is active.  All backends produce segments in the same
+  // ALG integrator space (x 0..33000, y 0..41000, Y down); conversion to
+  // Vectrex space (-127..127, Y up) happens inside VectorRecorder.
+  const captureCurrentSegments = useCallback((): RawSegment[] | null => {
+    // Simulador WASM de proyecto externo: tiene su propio bucle y su propio espacio
+    // de coordenadas, y mientras corre los otros backends estan parados. Se convierte
+    // de espacio PiTrex (x +-18000, y +-24000, Y arriba) al espacio ALG que espera el
+    // grabador (centro 16500/20500, 127 unidades por coordenada Vectrex, Y abajo), de
+    // forma que los extremos caigan justo en +-127.
+    const leerSim = simSegmentsRef.current;
+    if (simModulePath && leerSim) {
+      const segs = leerSim();
+      if (!segs) return null;
+      const kx = (127 * 127) / PITREX_RANGE.x;
+      const ky = (127 * 127) / PITREX_RANGE.y;
+      return segs.map(v => ({
+        x0: 16500 + v.x0 * kx, y0: 20500 - v.y0 * ky,
+        x1: 16500 + v.x1 * kx, y1: 20500 - v.y1 * ky,
+        intensity: v.b,
+      }));
+    }
+    // rp2350 path (Rp2350System): emuCore.runFrame() stores each completed
+    // frame in lastFrameSegments, exposed via getSegmentsShared().
+    if ((emuCore as any)?._activeTarget === 'rp2350') {
+      return emuCore.getSegmentsShared() ?? null;
+    }
+    // Legacy M6809 JSVecX: after the frame-boundary swap in vecx_emu(), the
+    // just-completed frame's draw list lives in vectors_erse[0..vector_erse_cnt).
+    // Pure read-only tap — entries carry intensity in `color`.
+    const vecx = (window as any).vecx;
+    if (vecx && Array.isArray(vecx.vectors_erse)) {
+      const cnt = Math.min(vecx.vector_erse_cnt | 0, vecx.vectors_erse.length);
+      const out: RawSegment[] = [];
+      for (let i = 0; i < cnt; i++) {
+        const v = vecx.vectors_erse[i];
+        if (v) out.push({ x0: v.x0, y0: v.y0, x1: v.x1, y1: v.y1, intensity: v.color });
+      }
+      return out;
+    }
+    // Fallback: VectrexSystem path (useVectrexSystem flag) also updates
+    // lastFrameSegments through emuCore.runFrame().
+    return emuCore.getSegmentsShared() ?? null;
+  }, [simModulePath]);
+
+  const finishRecording = useCallback(async () => {
+    const rec = recorderRef.current;
+    if (!rec) return;
+    setIsRecording(false);
+
+    const fallbackName = defaultRecordingName();
+    let name: string = fallbackName;
+    try {
+      const answer = window.prompt('Recording name (saved to assets/recordings/):', fallbackName);
+      if (answer === null) {
+        // User cancelled → discard the capture
+        rec.discard();
+        console.log('[EmulatorPanel] Vector recording discarded (cancelled)');
+        return;
+      }
+      name = answer.trim() || fallbackName;
+    } catch {
+      name = fallbackName; // window.prompt unsupported — derive the name
+    }
+    name = name.replace(/\.vrec$/i, '').replace(/[^\w.-]+/g, '_');
+
+    const vrec = rec.stop(name);
+    if (vrec.frames.length === 0) {
+      // Not just in the console: an empty recording is a failure, and the reason is
+      // almost always that a backend other than the running one was being read.
+      const motivo = simModulePath
+        ? 'the external simulator delivered no frames'
+        : 'the emulator delivered no frames';
+      console.warn(`[EmulatorPanel] Vector recording empty — ${motivo}`);
+      setVideoStatus('error');
+      setVideoMessage(`Vector recording empty — ${motivo}`);
+      setTimeout(() => setVideoStatus('idle'), 6000);
+      return;
+    }
+
+    const rootDir = useProjectStore.getState().vpyProject?.rootDir?.replace(/\\/g, '/');
+    const api = (window as any).files;
+    if (!rootDir || !api?.saveFile) {
+      console.error('[EmulatorPanel] Cannot save .vrec — no open project or saveFile API unavailable');
+      return;
+    }
+    const path = `${rootDir}/assets/recordings/${name}.vrec`;
+    try {
+      const res = await api.saveFile({ path, content: serializeVrec(vrec) });
+      if (res?.error) {
+        console.error('[EmulatorPanel] Failed to save recording:', res.error);
+      } else {
+        console.log(`[EmulatorPanel] ✓ Vector recording saved: ${path} (${vrec.frames.length} frames @ ${vrec.fps} fps)`);
+        // Also emit the hardware-compatible precompiled .vrb sibling.
+        try {
+          const vrb = await (window as any).electronAPI?.vrecCompile?.(path);
+          if (vrb?.ok) console.log(`[EmulatorPanel] ✓ Precompiled preview: ${vrb.vrbPath}`);
+        } catch { /* non-fatal */ }
+      }
+    } catch (e) {
+      console.error('[EmulatorPanel] Failed to save recording:', e);
+    }
+  }, [simModulePath]);
+
+  const onToggleRecording = useCallback(() => {
+    let rec = recorderRef.current;
+    if (!rec) {
+      rec = new VectorRecorder();
+      recorderRef.current = rec;
+    }
+    if (rec.isRecording) {
+      void finishRecording();
+      return;
+    }
+    rec.onTick = (elapsed) => setRecordElapsed(elapsed);
+    rec.onAutoStop = () => { void finishRecording(); }; // 10 s cap reached
+    setRecordElapsed(0);
+    setIsRecording(true);
+    rec.start(captureCurrentSegments);
+    console.log(`[EmulatorPanel] Vector recording started (max ${MAX_RECORD_SECONDS} s)`);
+  }, [captureCurrentSegments, finishRecording]);
+
+  // ── Gameplay video recorder (MP4) ───────────────────────────────────────
+  // Captures the live display canvas + the active target's audio to a WebM
+  // MediaStream, then hands the bytes to the Electron main process which
+  // transcodes to MP4 with the bundled ffmpeg. Independent of the .vrec path.
+
+  // Resolve the active target's live { ctx, outputNode } for the audio tap.
+  // PiTrex has its own core (not part of emuCore); everything else routes
+  // through emuCore's active system (m6809 → VectrexSystem, rp2350 → Rp2350System).
+  const getActiveAudio = useCallback((): Array<{ ctx: AudioContext; outputs: AudioNode[] }> => {
+    try {
+      // ── EVERY LIVE CONTEXT, AND THE ACTIVE TARGET'S FIRST ─────────────────
+      //
+      // THIS USED TO CHOOSE ONE, and choosing is what kept going wrong. First it
+      // preferred getRunningContextOutputs(), which returns the first tracked
+      // context that is 'running' with outputs — after switching targets that is
+      // often a STALE context: still running, still with an output node, and
+      // completely silent. So it was changed to pin the ACTIVE target's context,
+      // which fixed that and introduced the opposite failure: only a component
+      // this panel knows about can BE the active target, and the WASM simulator
+      // (PitrexSimView) is a React child that owns its own audio and is not one
+      // of them. Its recordings came out silent from end to end — video fine, no
+      // sound at all — and the recorder reported success both times. Measured,
+      // not guessed: ffmpeg volumedetect reads -91 dB on both of today's files
+      // and -21.7 dB on one from August.
+      //
+      // Tapping ALL of them cannot fail that way. A stale context contributes
+      // silence to a mix, which costs nothing; whatever is actually sounding is
+      // in there by construction. The active target still goes first so the
+      // diagnostic log names something meaningful.
+      const pit = (pitrexCoreRef.current as any)?.getAudioContextAndOutputNode?.();
+      const core = (emuCore as any)?.getAudioContextAndOutputNode?.();
+      const legacy = psgAudio.getAudioContextAndOutputNode?.();
+      const vx = (window as any).vecx;
+      const vecxAudio = (vx?.ctx && vx?.node) ? { ctx: vx.ctx as AudioContext, outputNode: vx.node as AudioNode } : null;
+      const activo = [pit, core, legacy, vecxAudio]
+        .find((c): c is { ctx: AudioContext; outputNode: AudioNode } =>
+          !!c?.ctx && !!c?.outputNode && c.ctx.state !== 'closed');
+
+      const todos = getAllLiveContextOutputs();
+      const lista = activo
+        ? [{ ctx: activo.ctx, outputs: getOutputsForContext(activo.ctx).length
+                                       ? getOutputsForContext(activo.ctx)
+                                       : [activo.outputNode] },
+           ...todos.filter(t => t.ctx !== activo.ctx)]
+        : todos;
+
+      if (lista.length !== ultimoTapRef.current) {
+        ultimoTapRef.current = lista.length;
+        const cual = activo === pit ? 'pitrex' : activo === core ? 'emuCore'
+                   : activo === legacy ? 'psgAudio' : activo === vecxAudio ? 'window.vecx'
+                   : 'ninguno declarado';
+        console.log(`[EmulatorPanel] audio tap → ${lista.length} contexto(s), activo: ${cual}`,
+                    lista.map(t => `${t.ctx.state}/${t.outputs.length}n`).join(' '));
+      }
+      return lista;
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const finishVideoRecording = useCallback(async () => {
+    const rec = videoRecorderRef.current;
+    if (!rec) return;
+    setIsVideoRecording(false);
+
+    const blob = await rec.stop();
+    if (!blob || blob.size === 0) {
+      setVideoStatus('error');
+      const porque = rec.lastDiagnostic;
+      setVideoMessage(porque ? `Nothing captured — ${porque}` : 'Nothing captured');
+      console.error('[EmulatorPanel] empty recording:', porque || '(no diagnostic)');
+      setTimeout(() => setVideoStatus('idle'), 4000);
+      return;
+    }
+
+    const api = (window as any).videoExport;
+    if (!api?.saveMp4) {
+      setVideoStatus('error');
+      setVideoMessage('Video export API unavailable');
+      setTimeout(() => setVideoStatus('idle'), 4000);
+      return;
+    }
+
+    setVideoStatus('transcoding');
+    setVideoMessage('Transcoding to MP4…');
+    try {
+      const webmBytes = await blob.arrayBuffer();
+      const res = await api.saveMp4({ webmBytes, name: defaultVideoName() });
+      if (res?.path) {
+        setVideoStatus('saved');
+        // A recording that came out MUTE used to be saved with a plain "Saved
+        // to ..." and no hint that anything was wrong. `hasAudio` is what the
+        // tap managed to connect; `inputHadAudio` is what ffmpeg actually found
+        // in the WebM — if they disagree the problem is the encoder, not the tap.
+        const mudo = !rec.hasAudio || res.inputHadAudio === false;
+        setVideoMessage(mudo ? `Saved (NO AUDIO) to ${res.path}` : `Saved to ${res.path}`);
+        console.log(`[EmulatorPanel] ✓ Gameplay MP4 saved: ${res.path}`,
+                    `| tap hasAudio=${rec.hasAudio} inputHadAudio=${res.inputHadAudio}`,
+                    res.streams ?? '');
+        setTimeout(() => setVideoStatus('idle'), 6000);
+      } else if (res?.canceled) {
+        setVideoStatus('idle');
+        setVideoMessage('');
+      } else {
+        setVideoStatus('error');
+        setVideoMessage(res?.error || 'Transcode failed');
+        console.error('[EmulatorPanel] Video export failed:', res?.error);
+        setTimeout(() => setVideoStatus('idle'), 8000);
+      }
+    } catch (e: any) {
+      setVideoStatus('error');
+      setVideoMessage(e?.message || 'Video export failed');
+      console.error('[EmulatorPanel] Video export threw:', e);
+      setTimeout(() => setVideoStatus('idle'), 8000);
+    }
+  }, []);
+
+  const onToggleVideoRecording = useCallback(() => {
+    let rec = videoRecorderRef.current;
+    if (!rec) {
+      rec = new VideoRecorder();
+      videoRecorderRef.current = rec;
+    }
+    if (rec.isRecording) {
+      void finishVideoRecording();
+      return;
+    }
+    // el que se VE: si hay simulador externo, el suyo; si no, el del emulador
+    const canvas = (simModulePath && simCanvasRef.current) || canvasRef.current;
+    if (!canvas) {
+      setVideoStatus('error');
+      setVideoMessage('No display canvas');
+      setTimeout(() => setVideoStatus('idle'), 4000);
+      return;
+    }
+    rec.onTick = (elapsed) => setVideoElapsed(elapsed);
+    setVideoElapsed(0);
+    setIsVideoRecording(true);
+    setVideoStatus('recording');
+    // Pass getActiveAudio as a CALLBACK: the recorder holds its own audio track
+    // from frame 0 and bridges the emulator's audio in once it appears — so you
+    // can hit Record before the game boots (e.g. the intro) and still get sound.
+    // Vectrex/6809 render at ~50 Hz; capture at 60 so no frame is dropped.
+    rec.start(canvas, 60, getActiveAudio);
+    console.log(`[EmulatorPanel] Gameplay video recording started — canvas ${canvas.width}x${canvas.height}`
+      + `${simModulePath ? ' (simulador externo)' : ''} (audio bridges when it appears)`);
+  }, [finishVideoRecording, getActiveAudio, simModulePath]);
 
   useEffect(() => {
     // Lista basada en las ROMs que vimos en la carpeta public/roms/
@@ -460,7 +996,9 @@ export const EmulatorPanel: React.FC = () => {
         
         jsVecxInitialized.current = true; // Mark as initialized
         
-        if (!cancelled) {
+        // Only when nothing owns the panel: on a remount the status belongs to the
+        // engine that is running (the simulator, a 6809 game that kept running, ...).
+        if (!cancelled && useEmulatorStore.getState().activeEngine === null) {
           setStatus('stopped');
         }
       } catch (e) {
@@ -584,14 +1122,20 @@ export const EmulatorPanel: React.FC = () => {
 
   // Expose breakpoint functions globally for debugStore integration
   useEffect(() => {
+    // The 6809's own breakpoint set (vecx.breakpoints) is what stops it; the panel's
+    // copy only mirrors it. debug/breakpointSync.ts drives these.
+    const vx = () => (window as any).vecx;
     (window as any).emulatorDebug = {
-      addBreakpoint,
-      removeBreakpoint,
+      addBreakpoint: (a: number) => { vx()?.addBreakpoint?.(a); addBreakpoint(a); },
+      removeBreakpoint: (a: number) => { vx()?.removeBreakpoint?.(a); removeBreakpoint(a); },
       toggleBreakpoint,
-      clearAllBreakpoints,
-      getBreakpoints: () => Array.from(breakpoints),
+      clearAllBreakpoints: () => { vx()?.clearBreakpoints?.(); clearAllBreakpoints(); },
+      getBreakpoints: () => Array.from((vx()?.breakpoints as Set<number> | undefined) ?? breakpoints),
       start: () => {
         const vecx = (window as any).vecx;
+        // Breakpoint sync calls this whenever the debugger reads 'paused'; that state
+        // is shared by every engine, so it must not start the 6809 under another one.
+        if (useEmulatorStore.getState().activeEngine !== 'm6809') return;
         if (vecx && vecx.debugState === 'paused') {
           console.log('[EmulatorPanel] 🚀 emulatorDebug.start() called - starting emulator');
           vecx.debugState = 'running';
@@ -599,6 +1143,8 @@ export const EmulatorPanel: React.FC = () => {
         }
       }
     };
+    installBreakpointSync();
+    syncEmulatorBreakpoints();
     
     return () => {
       delete (window as any).emulatorDebug;
@@ -913,7 +1459,9 @@ export const EmulatorPanel: React.FC = () => {
   useEffect(() => {
     const interval = setInterval(() => {
       const vecx = (window as any).vecx;
-      if (vecx && vecx.e8910 && status === 'running') {
+      // Only the 6809's PSG flag can be "reality" here: under another engine it is a
+      // leftover, and syncing from it would undo that engine's mute within a second.
+      if (vecx && vecx.e8910 && status === 'running' && activeEngine === 'm6809') {
         const actualState = vecx.e8910.enabled;
         if (actualState !== audioEnabled) {
           console.log('[EmulatorPanel] Audio state desync detected, syncing:', actualState);
@@ -923,12 +1471,14 @@ export const EmulatorPanel: React.FC = () => {
     }, 1000); // Check every second
 
     return () => clearInterval(interval);
-  }, [audioEnabled, status, setAudioEnabled]);
+  }, [audioEnabled, status, setAudioEnabled, activeEngine]);
 
   // Phase 3: Breakpoint detection system (REACTIVE - no polling)
   // The WASM emulator checks breakpoints after EVERY instruction
   // We just need to detect when it has paused
   const checkBreakpointHit = useCallback(() => {
+    // Breakpoints belong to the 6809 (a stale JSVecX 'paused' must not pause another engine)
+    if (useEmulatorStore.getState().activeEngine !== 'm6809') return;
     // Solo verificar si estamos en modo debug
     if (debugState !== 'running') {
       console.log('[EmulatorPanel] 🔍 checkBreakpointHit called but debugState is:', debugState);
@@ -1066,8 +1616,36 @@ export const EmulatorPanel: React.FC = () => {
       
       const { type, address, line, currentVpyLine } = event.data;
       console.log('[EmulatorPanel] 📨 Message type:', type, 'address:', address, 'line:', line, 'currentVpyLine:', currentVpyLine);
-      
 
+      // Run control drives the engine that owns the panel. These cases used to fall
+      // through to JSVecX whenever no rp2350 loop was running, so F12, a step key or
+      // MCP emulator_run/stop under the simulator, PiTrex or a stopped uvm2 started
+      // the 6809 — and with no cartridge the BIOS boots Minestorm. (debug-stop also
+      // called vecx.reset(), which starts the machine again 200 ms later.)
+      const RUN_CONTROL = ['debug-continue', 'debug-pause', 'debug-stop',
+                           'debug-step-over', 'debug-step-into', 'debug-step-out', 'debug-switch-to-asm'];
+      // A game being debugged on the cartridge owns the run control: debug/hwDebug.ts
+      // listens for these itself (this panel need not be open).
+      if (RUN_CONTROL.includes(type) && cartridgeDebugActive()) return;
+      const owner = useEmulatorStore.getState().activeEngine;
+      if (RUN_CONTROL.includes(type) && owner !== 'm6809') {
+        if (owner === null) {
+          console.log(`[EmulatorPanel] ${type} ignored: no program loaded`);
+        } else if (type === 'debug-continue') {
+          runControlRef.current.play();
+        } else if (type === 'debug-pause') {
+          runControlRef.current.pause();
+          if (owner === 'uvm2' || owner === 'rp2350') showArmStop();
+        } else if (type === 'debug-stop') {
+          runControlRef.current.stop();
+        } else if ((owner === 'uvm2' || owner === 'rp2350') && type !== 'debug-switch-to-asm') {
+          // steps by .vpy statement through the ELF's line table (debug/armSourceDebug.ts)
+          armStep(type === 'debug-step-over' ? 'over' : type === 'debug-step-into' ? 'into' : 'out');
+        } else {
+          console.log(`[EmulatorPanel] ${type} ignored: stepping is for 6809 and ARM programs (active: ${owner})`);
+        }
+        return;
+      }
 
       switch (type) {
         case 'debug-add-breakpoint':
@@ -1112,28 +1690,24 @@ export const EmulatorPanel: React.FC = () => {
           debugStoreForContinue.setCurrentVpyLine(null);
           debugStoreForContinue.setState('running');
 
-          if (rp2350LoopRef.current !== null) {
-            // rp2350 mode: RAF loop resumes automatically via state check
-            console.log('[EmulatorPanel] ✓ rp2350 RAF loop will resume (state=running)');
-            break;
-          }
-
           // CRITICAL: Check if paused by breakpoint BEFORE changing state
           const wasPausedByBreakpoint = vecx.isPausedByBreakpoint && vecx.isPausedByBreakpoint();
 
-          // Now set debugState to 'running' AFTER checking pause state
+          // Resume from breakpoint if it was paused by one. resumeFromBreakpoint
+          // (vecx.debugContinue) only resumes while vecx.debugState is still
+          // 'paused': it sets 'running', skips the breakpoint it stands on and
+          // restarts the loop. Setting 'running' first made it a no-op.
+          if (wasPausedByBreakpoint && vecx.resumeFromBreakpoint) {
+            console.log('[EmulatorPanel] 🔓 Resuming from breakpoint');
+            vecx.resumeFromBreakpoint();
+            break;
+          }
           vecx.debugState = 'running';
           vecx.stepMode = null; // Clear any step mode
           vecx.stepTargetAddress = null;
           console.log('[EmulatorPanel] ✓ JSVecx debugState set to running, step mode cleared');
 
-          // Resume from breakpoint if it was paused by one
-          if (wasPausedByBreakpoint) {
-            console.log('[EmulatorPanel] 🔓 Resuming from breakpoint');
-            if (vecx.resumeFromBreakpoint) {
-              vecx.resumeFromBreakpoint();
-            }
-          } else if (!vecx.running) {
+          if (!vecx.running) {
             // Only call start() if emulator is NOT paused by breakpoint
             initPsgLogging();
             vecx.start();
@@ -1155,24 +1729,21 @@ export const EmulatorPanel: React.FC = () => {
           
         case 'debug-pause':
           console.log('[EmulatorPanel] ⏸️  Debug: Pause execution');
-          if (rp2350LoopRef.current !== null) {
-            // rp2350 mode: RAF loop skips frames automatically via state check
-            console.log('[EmulatorPanel] ✓ rp2350 RAF loop paused (state=paused)');
-          } else if (vecx.running) {
-            vecx.stop();
-          }
+          // Pause where it is and say where (debugger-paused): the source line is shown,
+          // an in-progress step is cancelled. vecx.stop() also silences the PSG.
+          if (vecx.debugPause) vecx.debugPause();
+          if (vecx.running && vecx.pauseDebugger) vecx.pauseDebugger('manual', vecx.e6809.reg_pc & 0xffff);
+          vecx.stop();
           break;
 
         case 'debug-stop':
           console.log('[EmulatorPanel] 🛑 Debug: Stop execution');
-          if (rp2350LoopRef.current !== null) {
-            // rp2350 mode: reset ARM system; RAF loop skips frames via state check
-            emuCore.reset();
-            console.log('[EmulatorPanel] ✓ rp2350 system reset');
-          } else {
-            if (vecx.running) vecx.stop();
-            vecx.reset();
-          }
+          // Stop and rewind, but stay stopped: vecx.reset() would schedule start()
+          // 200 ms later and the program came back by itself.
+          vecx.stop();
+          vecx.vecx_reset();
+          try { vecx.osint.osint_clearscreen(); } catch {}
+          vecx.debugState = 'stopped';
           break;
           
         case 'debug-step-over':
@@ -1206,55 +1777,13 @@ export const EmulatorPanel: React.FC = () => {
             // PC === 0 is a valid address (e.g. multibank bank-relative entry of a
             // function placed at the bank's start), so check for undefined, not truthiness.
             if (currentPC !== undefined && stepOverPdbData) {
-              // Get line address map for both single-bank and multibank formats
-              const lineAddressMap = getLineAddressMap(stepOverPdbData);
-              
-              // Find current line by exact match or closest previous address
-              let currentLine: number | null = null;
-              
-              // First try exact match
-              for (const [line, addr] of Object.entries(lineAddressMap)) {
-                if (addr === currentPC) {
-                  currentLine = parseInt(line, 10);
-                  break;
-                }
-              }
-              
-              // If no exact match, find the line with the closest address <= currentPC
-              if (currentLine === null) {
-                let closestLine: number | null = null;
-                let closestAddr = 0;
-                for (const [line, addr] of Object.entries(lineAddressMap)) {
-                  if (addr <= currentPC && addr > closestAddr) {
-                    closestAddr = addr;
-                    closestLine = parseInt(line, 10);
-                  }
-                }
-                currentLine = closestLine;
-                if (currentLine !== null) {
-                  console.log(`[EmulatorPanel] Step Over: PC 0x${currentPC.toString(16)} mapped to closest line ${currentLine} (addr: 0x${closestAddr.toString(16)})`);
-                }
-              }
-              
-              if (currentLine !== null) {
-                // Find next line with address
-                const sortedLines = Object.keys(lineAddressMap).map(l => parseInt(l, 10)).sort((a, b) => a - b);
-                const nextLine = sortedLines.find(l => l > currentLine!);
-                if (nextLine && lineAddressMap[nextLine]) {
-                  const targetAddr = lineAddressMap[nextLine];
-                  console.log(`[EmulatorPanel] Step Over: line ${currentLine} → ${nextLine} (0x${targetAddr.toString(16)})`);
-                  vecx.debugStepOver(targetAddr);
-                } else {
-                  // No next line found - stop execution instead of auto-wrapping
-                  console.log(`[EmulatorPanel] ⚠️ Step Over: No next line after ${currentLine}, stopping execution`);
-                  debugStoreForStepOver.setState('paused');
-                  if (vecx.running) {
-                    vecx.stop();
-                  }
-                }
-              } else {
-                console.log(`[EmulatorPanel] ⚠️ Step Over: Could not map PC 0x${currentPC.toString(16)} to any line`);
-              }
+              // Run to the next statement start (any file: a module's code counts) that
+              // is not deeper in the stack: over calls, out of a finished function,
+              // past an `if` whose body is skipped, round to the top of loop().
+              const targets = statementAddresses(stepOverPdbData as any);
+              const s = vecx.e6809?.reg_s?.value ?? 0; // e6809 keeps S as {value}
+              console.log(`[EmulatorPanel] Step Over from 0x${currentPC.toString(16)} (S=0x${s.toString(16)}) to the next of ${targets.size} statements`);
+              vecx.debugStepOver(targets, s);
             }
           }
           break;
@@ -1263,41 +1792,22 @@ export const EmulatorPanel: React.FC = () => {
           console.log('[EmulatorPanel] 🔽 Debug: Step into');
           {
             const debugStoreForStepInto = useDebugStore.getState();
-            debugStoreForStepInto.setState('running');
-
-            if (!vecx.e6809 || !vecx.debugStepInto) break;
+            if (!vecx.e6809) break;
 
             // Step until PC maps to a *different* VPy source line. One M6809
             // instruction is rarely enough — a function call may go through a
             // cross-bank trampoline (JSR TRAMP_FOO → bank switch → JMP FOO) and
             // a non-call statement may emit several instructions before the
-            // next line's address. We loop synchronously through vecx_emu's
-            // step mechanism (each debugStepInto runs 1 instruction and pauses)
-            // until PC sits on a mapped, different VPy line, with a safety cap.
+            // next line's address. So run (in batches, like Step Over) until PC sits
+            // on the start of any statement, at any stack depth: into a called
+            // function — in whatever file it lives — or on to the next statement.
             const startPC = vecx.e6809.reg_pc;
             const pdb = debugStoreForStepInto.pdbData;
-            const startLine = getCurrentVpyLineForPC(startPC, pdb);
-            console.log(`[EmulatorPanel] 📍 Step Into from VPy line ${startLine}, PC ${formatAddress(startPC)}`);
-
-            const MAX_STEP_INTO_INSTRUCTIONS = 10000;
-            let steps = 0;
-            let landed = false;
-            while (steps < MAX_STEP_INTO_INSTRUCTIONS) {
-              vecx.debugStepInto(false); // runs 1 instruction synchronously
-              steps++;
-              const newPC = vecx.e6809.reg_pc;
-              const newLine = getCurrentVpyLineForPC(newPC, pdb);
-              if (newLine !== null && newLine !== startLine) {
-                console.log(`[EmulatorPanel] 🎯 Step Into landed at VPy line ${newLine}, PC ${formatAddress(newPC)} (${steps} instructions)`);
-                landed = true;
-                break;
-              }
-            }
-            if (!landed) {
-              console.warn(`[EmulatorPanel] ⚠️ Step Into hit safety cap (${MAX_STEP_INTO_INSTRUCTIONS} instructions) without reaching a new mapped line`);
-            }
-            // vecx posts 'debugger-paused' from the final debugStepInto;
-            // the handler will pick up the final PC and update the UI.
+            if (!pdb || !vecx.debugStepOver) break;
+            console.log(`[EmulatorPanel] 📍 Step Into from PC ${formatAddress(startPC)}`);
+            debugStoreForStepInto.setCurrentVpyLine(null);
+            vecx.debugStepOver(statementAddresses(pdb as any), 0);
+            // vecx_emu posts 'debugger-paused' where it lands; the handler shows it.
           }
           break;
           
@@ -1354,6 +1864,16 @@ export const EmulatorPanel: React.FC = () => {
           
         case 'debug-step-out':
           console.log('[EmulatorPanel] 🔼 Debug: Step out');
+          {
+            // Run to the first statement back in the caller: S above this frame's
+            // (RTS pops the 2-byte return address)
+            const outPdb = useDebugStore.getState().pdbData;
+            if (outPdb && vecx.e6809 && vecx.debugStepOver) {
+              useDebugStore.getState().setCurrentVpyLine(null);
+              vecx.debugStepOver(statementAddresses(outPdb as any), ((vecx.e6809.reg_s?.value ?? 0) + 2) & 0xffff);
+              break;
+            }
+          }
           if (vecx.debugStepOut) {
             vecx.debugStepOut();
             console.log('[EmulatorPanel] ✓ Step out executed');
@@ -1368,6 +1888,10 @@ export const EmulatorPanel: React.FC = () => {
           
           // Get pdbData from store directly (not from hook)
           const currentPdbData = debugStore.pdbData;
+          // Who called whom, from the return addresses on S (debug/pdbSource.ts)
+          debugStore.updateCallStack(currentPdbData && vecx.e6809
+            ? buildCallStack(currentPdbData as any, vecx.e6809.reg_pc & 0xffff, vecx.e6809.reg_s.value & 0xffff, (a: number) => vecx.read8(a))
+            : []);
           
           if (event.data.pc && currentPdbData) {
             const pcHex = event.data.pc.replace('0x', '').toLowerCase();
@@ -1381,45 +1905,16 @@ export const EmulatorPanel: React.FC = () => {
               let backInVpy = false;
               let vpyLine = null;
               
-              // Get line address map for both single-bank and multibank formats
-              const lineAddressMap = getLineAddressMap(currentPdbData);
-              const pcNum = parseInt(pcHex, 16);  // Convert "009b" to 155 (decimal)
-              for (const [line, addr] of Object.entries(lineAddressMap)) {
-                const addrNum = typeof addr === 'string' ? parseInt(addr, 10) : addr;
-                if (addrNum === pcNum) {
-                  vpyLine = parseInt(line, 10);
-                  console.log(`[EmulatorPanel] 🔄 PC back in VPy code at line ${vpyLine} - exiting ASM debugging mode`);
-                  (window as any).asmDebuggingMode = false;
-                  (window as any).asmDebuggingFile = null;
-                  backInVpy = true;
-                  
-                  // CRITICAL: Switch back to VPy file automatically
-                  const editorStore = useEditorStore.getState();
-                  
-                  // Get the VPy source file URI from lastCompiledBinary
-                  // (replace .bin with .vpy and go to src/ instead of build/)
-                  let vpyUri: string | null = null;
-                  if (lastCompiledBinary) {
-                    // From: /path/to/project/build/test_bp_min.bin
-                    // To:   /path/to/project/src/main.vpy
-                    const projectRoot = lastCompiledBinary.substring(0, lastCompiledBinary.lastIndexOf('/build/'));
-                    // Try to get source file from vpyLineMap, fallback to main.vpy
-                    let sourceFile = 'main.vpy';
-                    if (currentPdbData.vpyLineMap && Object.keys(currentPdbData.vpyLineMap).length > 0) {
-                      const firstEntry = Object.values(currentPdbData.vpyLineMap)[0] as any;
-                      if (firstEntry && firstEntry.file) {
-                        sourceFile = firstEntry.file;
-                      }
-                    }
-                    vpyUri = `file://${projectRoot}/src/${sourceFile}`;
-                    
-                    console.log(`[EmulatorPanel] 🔄 Auto-switching to VPy file: ${vpyUri}`);
-                    editorStore.gotoLocation(vpyUri, vpyLine, 1);
-                  } else {
-                    console.error(`[EmulatorPanel] ❌ Cannot switch to VPy - no lastCompiledBinary`);
-                  }
-                  break;
-                }
+              // Back in a VPy statement? Then leave ASM mode for that statement's file.
+              const backAt = sourceAt(currentPdbData as any, parseInt(pcHex, 16));
+              if (backAt) {
+                vpyLine = backAt.line;
+                console.log(`[EmulatorPanel] 🔄 PC back in VPy code at ${backAt.file}:${vpyLine} - exiting ASM debugging mode`);
+                (window as any).asmDebuggingMode = false;
+                (window as any).asmDebuggingFile = null;
+                backInVpy = true;
+                debugStore.setCurrentVpyLineWithFile(backAt.line, backAt.file);
+                showProjectSource(backAt.file, backAt.line);
               }
               
               // If still in ASM, try to find the exact ASM line using asmLineMap
@@ -1503,81 +1998,15 @@ export const EmulatorPanel: React.FC = () => {
               }
             }
             
-            // Check if PC is in VPy code range (lineMap or vpyLineMap)
+            // The statement at the PC, in its own file (an imported module too)
             let foundInVpy = false;
-            const lineAddressMap2 = getLineAddressMap(currentPdbData);
-            console.log(`[EmulatorPanel] 🔍 DEBUG lineAddressMap2:`, lineAddressMap2);
-            console.log(`[EmulatorPanel] 🔍 DEBUG pcHex from event:`, event.data.pc, 'parsed:', pcHex);
-            const pcNum = parseInt(pcHex, 16);  // Convert "009b" to 155 (decimal)
-            console.log(`[EmulatorPanel] 🔍 DEBUG pcNum (converted):`, pcNum);
-            for (const [line, addr] of Object.entries(lineAddressMap2)) {
-              const addrNum = typeof addr === 'string' ? parseInt(addr, 10) : addr;
-              console.log(`[EmulatorPanel] 🔍 DEBUG comparing: line=${line}, addr=${addr}, addrNum=${addrNum} vs pcNum=${pcNum}`);
-              if (addrNum === pcNum) {
-                const lineNumber = parseInt(line, 10);
-                // Get VPy filename from vpyLineMap or default to 'main.vpy'
-                let vpyFileName = 'main.vpy';
-                if (currentPdbData.vpyLineMap && Object.keys(currentPdbData.vpyLineMap).length > 0) {
-                  const firstEntry = Object.values(currentPdbData.vpyLineMap)[0] as any;
-                  if (firstEntry && firstEntry.file) {
-                    vpyFileName = firstEntry.file;
-                  }
-                }
-                console.log(`[EmulatorPanel] 📍 Highlighting VPy line ${lineNumber} in ${vpyFileName} (PC: ${event.data.pc})`);
-                debugStore.setCurrentVpyLine(lineNumber); // CRITICAL: file is derived from pdbData.source
-                
-                // CRITICAL: Auto-switch to VPy file if we're not already in it
-                const editorStore = useEditorStore.getState();
-                const activeUri = editorStore.active;
-                
-                // Search for the VPy file in open documents
-                const vpyDoc = editorStore.documents.find(d => {
-                  const docFileName = d.uri.split('/').pop() || '';
-                  return docFileName === vpyFileName;
-                });
-                
-                if (vpyDoc) {
-                  // File is already open - switch to it
-                  if (activeUri !== vpyDoc.uri) {
-                    console.log(`[EmulatorPanel] 🔄 Switching to open tab: ${vpyFileName}`);
-                    editorStore.setActive(vpyDoc.uri);
-                  }
-                } else {
-                  // File is not open - use gotoLocation to open it (auto-creates if not exists)
-                  const activeDoc = editorStore.documents.find(d => d.uri === activeUri);
-                  if (activeDoc) {
-                    // Extract directory path from URI (remove file:// prefix first, then get directory)
-                    let uriPath = activeDoc.uri.startsWith('file://') 
-                      ? activeDoc.uri.substring(7) 
-                      : activeDoc.uri;
-                    let dirPath = uriPath.substring(0, uriPath.lastIndexOf('/'));
-                    
-                    // CRITICAL: If we're in /build directory, go up to project root and enter /src
-                    if (dirPath.endsWith('/build')) {
-                      const projectRoot = dirPath.substring(0, dirPath.lastIndexOf('/build'));
-                      dirPath = `${projectRoot}/src`;
-                      console.log(`[EmulatorPanel] 🔄 Adjusted path from /build to /src: ${dirPath}`);
-                    }
-                    
-                    const vpyPath = `file://${dirPath}/${vpyFileName}`;
-                    
-                    console.log(`[EmulatorPanel] 📂 Opening VPy file:`);
-                    console.log(`   activeDoc.uri: ${activeDoc.uri}`);
-                    console.log(`   uriPath (after removing file://): ${uriPath}`);
-                    console.log(`   dirPath (adjusted): ${dirPath}`);
-                    console.log(`   vpyFileName: ${vpyFileName}`);
-                    console.log(`   vpyPath (final): ${vpyPath}`);
-                    console.log(`   lineNumber: ${lineNumber}`);
-                    console.log(`[EmulatorPanel] Calling gotoLocation with vpyPath=${vpyPath}, lineNumber=${lineNumber}`);
-                    editorStore.gotoLocation(vpyPath, lineNumber, 1);
-                  } else {
-                    console.log(`[EmulatorPanel] ⚠️ Could not find activeDoc with uri: ${activeUri}`);
-                  }
-                }
-                
-                foundInVpy = true;
-                break;
-              }
+            const here = sourceAt(currentPdbData as any, parseInt(pcHex, 16));
+            if (here) {
+              const { file: vpyFileName, line: lineNumber } = here;
+              console.log(`[EmulatorPanel] 📍 Highlighting VPy line ${lineNumber} in ${vpyFileName} (PC: ${event.data.pc})`);
+              debugStore.setCurrentVpyLineWithFile(lineNumber, vpyFileName);
+              showProjectSource(vpyFileName, lineNumber);
+              foundInVpy = true;
             }
             
             // If not in VPy range, we're in ASM (native call or generated code)
@@ -1780,19 +2209,17 @@ export const EmulatorPanel: React.FC = () => {
     };
   }, [addBreakpoint, removeBreakpoint, pdbData]);
 
-  // Listen for F5 hotkey from Electron (continue debugging)
-  useEffect(() => {
-    const electronAPI = (window as any).electronAPI;
-    if (!electronAPI?.ipcRenderer) return;
-    
-    const handleF5Continue = () => {
-      console.log('[EmulatorPanel] 🎮 F5 pressed - triggering debug continue');
-      window.postMessage({ type: 'debug-continue' }, '*');
-    };
-    
-    electronAPI.ipcRenderer.on('debug-continue-hotkey', handleF5Continue);
-    return () => electronAPI.ipcRenderer.removeListener('debug-continue-hotkey', handleF5Continue);
-  }, []);
+  /* THE `debug-continue-hotkey` LISTENER LIVED HERE AND IT OWNED F5.
+   *
+   * main.ts intercepted bare F5 in `before-input-event` and sent this event, so F5 meant
+   * "continue the 6809 emulator" — and on a project with no 6809 cartridge loaded that
+   * boots the BIOS, which is Minestorm. It had already been patched once, for external C
+   * projects only, which is why the fault survived: it looked handled.
+   *
+   * F5 now routes to build.run from main.ts like every other build key. Continuing a
+   * paused debug session is F12 (debug.continue) — it has its own key and does not need
+   * to borrow this one. Removed 2026-08-25.
+   */
 
   // Función para cargar ROM desde dropdown (definida antes de useEffects que la usan)
   const loadROMFromDropdown = useCallback(async (romName: string) => {
@@ -1815,6 +2242,12 @@ export const EmulatorPanel: React.FC = () => {
         console.error('[EmulatorPanel] vecx instance not available');
         return;
       }
+
+      // A new program: nothing else may keep running or sounding.
+      stopAllEngines('ROM from dropdown');
+      setActiveEngine('m6809');
+      setRunMode(null);
+      setShowPitrexOverlay(false);
       
       // Convertir Uint8Array a string para JSVecX
       let cartDataString = '';
@@ -1852,15 +2285,13 @@ export const EmulatorPanel: React.FC = () => {
       setTimeout(() => {
         console.log('🔄 [EmulatorPanel] CALLING vecx.reset() - Reason: Second reset after ROM load');
         console.log('📍 [EmulatorPanel] Reset stack trace:', new Error().stack);
-        vecx.reset();
+        vecx.reset();   // starts the cartridge 200 ms later (vecx.js reset())
         console.log('[EmulatorPanel] ✓ Second reset after ROM load');
-        
-        // Si estaba corriendo, reiniciar
-        if (status === 'running') {
-          vecx.debugState = 'running';
-          vecx.start();
-          console.log('[EmulatorPanel] ✓ Restarted after ROM load');
-        }
+        // (A `status === 'running'` restart lived here; `status` was the closure's, not
+        // the current one, and reset() starts the machine anyway.)
+        vecx.debugState = 'running';
+        setStatus('running');
+        useDebugStore.getState().setState('running');
         
         // CRÍTICO: Aplicar estado de audio después de reset/start
         setTimeout(() => {
@@ -1871,7 +2302,7 @@ export const EmulatorPanel: React.FC = () => {
     } catch (error) {
       console.error('[EmulatorPanel] Failed to load ROM from dropdown:', error);
     }
-  }, [status, loadOverlay, applyAudioState]); // dependencias: status, loadOverlay, applyAudioState
+  }, [loadOverlay, applyAudioState, stopAllEngines, setActiveEngine, setStatus]);
 
   // Auto-load last ROM on emulator start - DISABLED (user loads manually)
   /*
@@ -1901,12 +2332,18 @@ export const EmulatorPanel: React.FC = () => {
   }, [lastRomName, availableROMs]); // Fixed: removed loadedROM to prevent reset loop when ROM display changes
   */
 
+  // The audio effects below are keyed on `status`, which EVERY engine sets ('running'
+  // also means the simulator, rp2350, uvm2 or PiTrex is running). They drive the 6809's
+  // audio only, and only while the 6809 owns the panel: otherwise a 'running' from
+  // another engine restarted the 6809's sound underneath it.
+  const m6809Active = activeEngine === 'm6809';
+
   // Apply initial audio state when emulator starts
   useEffect(() => {
-    if (status === 'running') {
+    if (status === 'running' && m6809Active) {
       applyAudioState();
     }
-  }, [status, applyAudioState]); // Apply when status changes to running
+  }, [status, applyAudioState, m6809Active]); // Apply when status changes to running
 
   // Audio lifecycle: init worklet on enable; start/stop with status
   useEffect(() => {
@@ -1914,7 +2351,8 @@ export const EmulatorPanel: React.FC = () => {
       if (audioEnabled) {
         try {
           await psgAudio.init();
-          if (status === 'running') psgAudio.start();
+          if (useEmulatorStore.getState().status === 'running'
+              && useEmulatorStore.getState().activeEngine === 'm6809') psgAudio.start();
         } catch(e) {
           console.warn('[EmulatorPanel] audio init failed', e);
         }
@@ -1926,12 +2364,12 @@ export const EmulatorPanel: React.FC = () => {
 
   useEffect(() => {
     if (!audioEnabled) return;
-    if (status === 'running') {
+    if (status === 'running' && m6809Active) {
       psgAudio.start();
     } else {
       psgAudio.stop();
     }
-  }, [status, audioEnabled]);
+  }, [status, audioEnabled, m6809Active]);
 
   // Poll de estadísticas de audio (cada ~500ms mientras audioEnabled)
   useEffect(() => {
@@ -2127,21 +2565,124 @@ export const EmulatorPanel: React.FC = () => {
     console.log('[EmulatorPanel] pitrex RAF loop started');
   }, []); // no deps — reads refs directly
 
+  // ── rp2350 / uvm2 rAF loop launcher ─────────────────────────────────────────
+  // ONE loop for both systems (emuCore.runFrame dispatches on the active target),
+  // shared by every path that loads an ARM image and by Play / Reset. Capped at
+  // 50 fps: rAF fires at the display rate (120/144 Hz on many monitors) and the game
+  // logic would otherwise run faster than the 6809 path, which the 50 Hz VIA timer
+  // paces (Vectrex PAL; music compiled at 50 Hz).
+  const startArmRafLoop = useCallback(() => {
+    if (rp2350LoopRef.current !== null) {
+      cancelAnimationFrame(rp2350LoopRef.current);
+      rp2350LoopRef.current = null;
+    }
+    const TARGET_MS = 1000 / 50;  // 20 ms per frame
+    let frames = 0;
+    let lastFrameTs = 0;
+    /* FRAME COUNTER over a one-second window. Counts the frames the emulator PRODUCES,
+     * not the ones rAF asks for: with the image running slowly the loop skips turns and
+     * counting requests would always read 50. */
+    let ventana = 0, desde = 0;
+    const loop = (ts: number) => {
+      rp2350LoopRef.current = requestAnimationFrame(loop);
+      const elapsed = ts - lastFrameTs;
+      if (elapsed < TARGET_MS) return;          // too soon — skip
+      lastFrameTs = ts - (elapsed % TARGET_MS); // align to 50 Hz grid
+      // Honour pause/stop from debug controls
+      if (useDebugStore.getState().state !== 'running') return;
+      frames++;
+      if ((window as any).RP2350_DEBUG && (frames <= 5 || frames % 120 === 0)) {
+        console.log(`[EmulatorPanel] rp2350 rAF loop frame ${frames}`);
+      }
+      emuCore.runFrame();
+      ventana++;
+      if (!desde) desde = ts;
+      else if (ts - desde >= 1000) {
+        const fps = (ventana * 1000) / (ts - desde);
+        /* Frame bus cycles -> the refresh the drawing would allow on the console.
+         * The UVM2 bus clock is 1.5 MHz (30000 cycles x 50 Hz). */
+        const BUS_HZ = 30000 * 50;
+        const st = (emuCore as any).uvm2FrameStats;
+        useDebugStore.getState().updateStats(
+          st?.ciclos ?? 0, fps, st?.ciclos ? BUS_HZ / st.ciclos : 0);
+        ventana = 0; desde = ts;
+      }
+    };
+    // Mark as running so the loop doesn't bail on the first check.
+    useDebugStore.getState().setState('running');
+    rp2350LoopRef.current = requestAnimationFrame(loop);
+    console.log('[EmulatorPanel] ✓ rp2350/uvm2 rAF loop started');
+  }, []); // no deps — reads refs directly
+
+  // Clear the shared canvas (the previous engine's last frame stays on it otherwise).
+  const clearCanvas = useCallback(() => {
+    if (canvasRef.current) {
+      const ctx = canvasRef.current.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      }
+    }
+  }, []);
+
+  // Play / Pause / Stop / Reset act on the engine that owns the panel (activeEngine),
+  // never on "whatever ref happens to be set": the rp2350 system object outlives its
+  // run, so testing for it sent Stop to rp2350 while the 6809 played on, and every
+  // case that fell through to the JSVecX branch booted the BIOS behind the real engine.
   const onPlay = () => {
+    const engine = useEmulatorStore.getState().activeEngine;
+
+    if (engine === 'sim') {
+      // WASM simulator stopped by Stop: start it again from the beginning.
+      if (!simModulePath && stoppedSimRef.current) {
+        const { path, romZip } = stoppedSimRef.current;
+        stoppedSimRef.current = null;
+        setSimModule(path, romZip);
+        useDebugStore.getState().setState('running');
+        setStatus('running');
+        setEmulatorRunning(true);
+        console.log('[EmulatorPanel] WASM simulator restarted');
+      }
+      return;
+    }
+
     // PiTrex mode: the RAF loop already runs; just ungate it via debugStore state
-    if (pitrexCoreRef.current) {
+    if (engine === 'pitrex') {
+      if (!pitrexCoreRef.current) { console.log('[EmulatorPanel] PiTrex: nothing loaded — build again'); return; }
       useDebugStore.getState().setState('running');
       setStatus('running');
       setEmulatorRunning(true);
       // Ensure the RAF loop is actually running (may have been stopped on reset)
       if (pitrexLoopRef.current === null) {
-        pitrexCoreRef.current.startAudio();
+        if (audioEnabled) pitrexCoreRef.current.startAudio();
         startPitrexRafLoop();
       }
       console.log('[EmulatorPanel] PiTrex resumed');
       return;
     }
 
+    if (engine === 'rp2350' || engine === 'uvm2') {
+      if (rp2350LoopRef.current === null) {
+        // Stopped: start the same image again from the beginning.
+        if (!armReloadRef.current) { console.log(`[EmulatorPanel] ${engine}: nothing loaded — build again`); return; }
+        armReloadRef.current();
+        clearCanvas();
+        startArmRafLoop();
+      }
+      setArmAudioSuspended(!audioEnabled);
+      useDebugStore.getState().setState('running');
+      setStatus('running');
+      setEmulatorRunning(true);
+      console.log(`[EmulatorPanel] ${engine} running`);
+      return;
+    }
+
+    // The 6809 — also when nothing is loaded yet: pressing Play is the explicit start
+    // of the BIOS / inserted cartridge.
+    if (engine !== 'm6809') {
+      stopAllEngines('Play (6809)');
+      setActiveEngine('m6809');
+    }
     const vecx = (window as any).vecx;
     if (vecx) {
       // Si estaba stopped, reiniciar desde el principio
@@ -2167,11 +2708,30 @@ export const EmulatorPanel: React.FC = () => {
   };
 
   const onPause = () => {
+    const engine = useEmulatorStore.getState().activeEngine;
+    // The WASM simulator has no pause. Do not leave the debugger reading 'paused':
+    // F5 / Shift+F5 treat that as a 6809 debug session waiting to continue.
+    if (engine === 'sim') {
+      useDebugStore.getState().setState(simModulePath ? 'running' : 'stopped');
+      console.log('[EmulatorPanel] The WASM simulator has no pause (Stop ends it, Play restarts it)');
+      return;
+    }
+
     // PiTrex mode: gate the RAF loop by setting debugStore state to 'paused'
-    if (pitrexCoreRef.current) {
+    if (engine === 'pitrex') {
       useDebugStore.getState().setState('paused');
       setStatus('paused');
       console.log('[EmulatorPanel] PiTrex paused (RAF loop gated)');
+      return;
+    }
+
+    // rp2350 / uvm2: the loop skips frames while paused; the context is suspended so
+    // the last PSG state does not sustain as a note.
+    if (engine === 'rp2350' || engine === 'uvm2') {
+      useDebugStore.getState().setState('paused');
+      setStatus('paused');
+      setArmAudioSuspended(true);
+      console.log(`[EmulatorPanel] ${engine} paused`);
       return;
     }
 
@@ -2186,21 +2746,34 @@ export const EmulatorPanel: React.FC = () => {
   };
 
   const onStop = () => {
-    // PiTrex mode: gate the RAF loop and stop audio
-    if (pitrexCoreRef.current) {
+    const engine = useEmulatorStore.getState().activeEngine;
+    // WASM simulator: unmount it (its teardown ends the program and closes its audio).
+    if (engine === 'sim') {
+      if (simModulePath) {
+        stoppedSimRef.current = { path: simModulePath, romZip: useEmulatorStore.getState().simRomZip ?? null };
+        setSimModule(null);
+      }
       useDebugStore.getState().setState('stopped');
       setStatus('stopped');
       setEmulatorRunning(false);
-      pitrexCoreRef.current.stopAudio();
+      console.log('[EmulatorPanel] WASM simulator stopped');
+      return;
+    }
+
+    // PiTrex mode: gate the RAF loop and stop audio
+    if (engine === 'pitrex') {
+      useDebugStore.getState().setState('stopped');
+      setStatus('stopped');
+      setEmulatorRunning(false);
+      try { pitrexCoreRef.current?.stopAudio(); } catch {}
       console.log('[EmulatorPanel] PiTrex stopped');
       return;
     }
 
-    // rp2350 mode: cancel RAF loop and silence PSG. Without stopAudio() the
-    // ScriptProcessor keeps reading the last PSG state and the last note
-    // sustains forever after Stop is pressed.
-    const rp2350 = (emuCore as any)?._rp2350System;
-    if (rp2350LoopRef.current !== null || rp2350) {
+    // rp2350 / uvm2: cancel the rAF loop and close the system's audio. Without
+    // stopAudio() the ScriptProcessor keeps reading the last PSG state and the last
+    // note sustains forever after Stop is pressed. Play reloads the image.
+    if (engine === 'rp2350' || engine === 'uvm2') {
       if (rp2350LoopRef.current !== null) {
         cancelAnimationFrame(rp2350LoopRef.current);
         rp2350LoopRef.current = null;
@@ -2208,8 +2781,9 @@ export const EmulatorPanel: React.FC = () => {
       useDebugStore.getState().setState('stopped');
       setStatus('stopped');
       setEmulatorRunning(false);
-      try { rp2350?.stopAudio?.(); } catch {}
-      console.log('[EmulatorPanel] rp2350 stopped');
+      try { (emuCore as any)._rp2350System?.stopAudio?.(); } catch {}
+      try { (emuCore as any)._uvm2System?.stopAudio?.(); } catch {}
+      console.log(`[EmulatorPanel] ${engine} stopped`);
       return;
     }
 
@@ -2227,8 +2801,46 @@ export const EmulatorPanel: React.FC = () => {
   };
 
   const onReset = () => {
+    const engine = useEmulatorStore.getState().activeEngine;
+    // WASM simulator: remount it, which starts the program again.
+    if (engine === 'sim') {
+      const again = simModulePath
+        ? { path: simModulePath, romZip: useEmulatorStore.getState().simRomZip ?? null }
+        : stoppedSimRef.current;
+      stoppedSimRef.current = null;
+      if (again) {
+        setSimModule(again.path, again.romZip);
+        useDebugStore.getState().setState('running');
+        setStatus('running');
+      }
+      return;
+    }
+
+    // rp2350 / uvm2: reload the same image and run it from the beginning.
+    if (engine === 'rp2350' || engine === 'uvm2') {
+      if (!armReloadRef.current) { console.log(`[EmulatorPanel] ${engine}: nothing loaded — build again`); return; }
+      if (rp2350LoopRef.current !== null) {
+        cancelAnimationFrame(rp2350LoopRef.current);
+        rp2350LoopRef.current = null;
+      }
+      try { (emuCore as any)._rp2350System?.stopAudio?.(); } catch {}
+      try { (emuCore as any)._uvm2System?.stopAudio?.(); } catch {}
+      armReloadRef.current();
+      setArmAudioSuspended(!audioEnabled);
+      clearCanvas();
+      startArmRafLoop();
+      setStatus('running');
+      console.log(`[EmulatorPanel] ${engine} reset — image reloaded`);
+      return;
+    }
+
+    if (engine === 'pitrex' && !(pitrexCoreRef.current && pitrexSFileRef.current)) {
+      console.log('[EmulatorPanel] PiTrex: nothing loaded — build again');
+      return;
+    }
+
     // PiTrex mode: re-parse saved assembly and restart the RAF loop from the beginning
-    if (pitrexCoreRef.current && pitrexSFileRef.current) {
+    if (engine === 'pitrex' && pitrexCoreRef.current && pitrexSFileRef.current) {
       console.log('[EmulatorPanel] PiTrex reset — reloading assembly');
 
       // Stop current loop and audio
@@ -2241,7 +2853,7 @@ export const EmulatorPanel: React.FC = () => {
       // Re-parse assembly into a fresh core
       import('../../pitrex/PitrexCore.js').then(({ PitrexCore }) => {
         const core = new PitrexCore();
-        core.loadAssembly(pitrexSFileRef.current!);
+        core.loadAssembly(pitrexSFileRef.current!, pitrexLibvpyRef.current);
         pitrexCoreRef.current = core;
 
         if (!core.isReady()) {
@@ -2260,7 +2872,7 @@ export const EmulatorPanel: React.FC = () => {
 
         useDebugStore.getState().setState('running');
         setStatus('running');
-        core.startAudio();
+        if (audioEnabledRef.current) core.startAudio();
         startPitrexRafLoop();
         console.log('[EmulatorPanel] PiTrex reset complete — new loop started');
       }).catch(e => {
@@ -2269,6 +2881,11 @@ export const EmulatorPanel: React.FC = () => {
       return;
     }
 
+    // The 6809 (also with nothing loaded: Reset is an explicit start of the BIOS).
+    if (engine !== 'm6809') {
+      stopAllEngines('Reset (6809)');
+      setActiveEngine('m6809');
+    }
     const vecx = (window as any).vecx;
     if (vecx) {
       // Clear PSG log on reset
@@ -2331,6 +2948,18 @@ export const EmulatorPanel: React.FC = () => {
     }
   };
 
+  runControlRef.current = { play: onPlay, pause: onPause, stop: onStop };
+
+  // ARM: a breakpoint or a step pauses through the debug store (debug/armSourceDebug.ts,
+  // gdb), not through these controls: the panel follows it (status, silenced audio)
+  const armDebugState = useDebugStore(st => st.state);
+  useEffect(() => {
+    const engine = useEmulatorStore.getState().activeEngine;
+    if (engine !== 'rp2350' && engine !== 'uvm2') return;
+    if (armDebugState === 'paused') { setStatus('paused'); setArmAudioSuspended(true); }
+    else if (armDebugState === 'running') { setStatus('running'); setArmAudioSuspended(!audioEnabled); }
+  }, [armDebugState]);
+
   const onLoadROM = async () => {
     // Prefer the Electron native dialog: it gives us the absolute path, which we
     // need to locate the sibling .elf for rp2350 binaries. Fall back to the
@@ -2371,6 +3000,95 @@ export const EmulatorPanel: React.FC = () => {
         return;
       }
 
+      // A fresh ROM means a fresh run mode; the branches below set it if they
+      // take over, and the plain 6809 cartridge path correctly leaves it unset.
+      setRunMode(null);
+      // A new program: nothing else may keep running or sounding (the uvm2 / rp2350
+      // branches used to start a second rAF loop next to the old one).
+      stopAllEngines('Load File');
+      setShowPitrexOverlay(false);
+
+      // Auto-detect a UVM2 image by its "2CMU" header. It carries its own
+      // syscall handler and drives the VIA itself, so it goes to Uvm2System
+      // rather than the RP2350 one, which would implement those syscalls in JS.
+      const isUvm2 =
+        romData.length >= 20 &&
+        romData[0] === 0x32 && romData[1] === 0x43 &&
+        romData[2] === 0x4D && romData[3] === 0x55;
+
+      if (isUvm2) {
+        console.log('[EmulatorPanel] ✓ Detected UVM2 image (magic "2CMU") — routing to Uvm2System');
+        setRunMode('uvm2');
+        if (typeof emuCore.loadUvm2 !== 'function') {
+          console.error('[EmulatorPanel] emuCore.loadUvm2 not available — uvm2 target unsupported in this build');
+          return;
+        }
+        /* EL ELF Y LA TARJETA, igual que el camino del rp2350 justo debajo.
+         *
+         * Sin ELF no hay simbolos, y sin simbolos Uvm2System no puede atrapar las
+         * llamadas al lector de SD — las sirve en JS porque el driver de verdad
+         * habla SPI a pelo con unos pines que el emulador no modela. El sintoma
+         * no es un error: el juego arranca, dibuja perfecto, y todo lo que sale
+         * de la tarjeta (el romset, la musica del jack) simplemente no esta.
+         *
+         * Y el .elf de una imagen .um2 no siempre esta al lado: el recipe del
+         * pico-sdk lo deja en pico/, asi que se prueban los dos sitios. */
+        let elfUvm2: Uint8Array | undefined;
+        if (romPath && filesApi?.readFileBin) {
+          const base = romPath.replace(/\.um2$/i, '');
+          const dir  = base.replace(/[^/\\]*$/, '');
+          const name = base.slice(dir.length);
+          for (const cand of [`${base}.elf`, `${dir}pico/${name}.elf`]) {
+            try {
+              const r = await filesApi.readFileBin(cand);
+              if (r && !(r as any).error && (r as any).base64) {
+                elfUvm2 = Uint8Array.from(atob((r as any).base64), c => c.charCodeAt(0));
+                console.log(`[EmulatorPanel] ✓ ELF del .um2: ${cand} (${elfUvm2.length} bytes)`);
+                break;
+              }
+            } catch { /* el siguiente sitio */ }
+          }
+          if (!elfUvm2)
+            console.log('[EmulatorPanel] sin .elf junto al .um2 — sin simbolos no hay SD simulada');
+        }
+        /* THE SIMULATED CARD, the same one F5 hands over (leerSdSimulada): the small files
+         * with their bytes, the big ones (music tracks) by name and size, read when the game
+         * opens them. sdSimList only lists the .bin games of the menu, by name without
+         * extension, so it never served a single file here. */
+        let sdUvm2Files: Record<string, Uint8Array> | undefined;
+        let sdUvm2Deferred: Record<string, number> | undefined;
+        try {
+          const tarjeta = await (window as any).electronAPI?.sdSimFiles?.();
+          if (tarjeta?.ok && tarjeta.files) {
+            const out: Record<string, Uint8Array> = {};
+            for (const [k, v] of Object.entries(tarjeta.files as Record<string, string>)) {
+              if (/\.(um2|bin)$/i.test(k)) continue;   // the card's other games: no game reads them
+              out[k] = Uint8Array.from(atob(v), c => c.charCodeAt(0));
+            }
+            sdUvm2Files = out;
+            sdUvm2Deferred = tarjeta.deferred;
+            console.log(`[EmulatorPanel] SD simulada para uvm2: ${Object.keys(out).length} ficheros`);
+          }
+        } catch { /* sin tarjeta simulada */ }
+        const um2 = romData;
+        armReloadRef.current = () =>
+          emuCore.loadUvm2!(um2, canvasRef.current ?? undefined, elfUvm2, sdUvm2Files, undefined, sdUvm2Deferred);
+        armReloadRef.current();
+        setActiveEngine('uvm2');
+        setArmAudioSuspended(!audioEnabled);
+        clearCanvas();
+        // The image paces itself against the emulated bus clock, so the host loop
+        // only has to not outrun it.
+        startArmRafLoop();
+        setStatus('running');
+
+        setLoadedROM(`${romName} (${romData.length} bytes, uvm2)`);
+        setLastRom(null, romName);
+        setSelectedROM('');
+        window.dispatchEvent(new Event('programLoaded'));
+        return;
+      }
+
       // Auto-detect rp2350 binaries by magic header "VPy2" (0x56 0x50 0x79 0x32)
       const isRp2350 =
         romData.length >= 4 &&
@@ -2379,6 +3097,7 @@ export const EmulatorPanel: React.FC = () => {
 
       if (isRp2350) {
         console.log(`[EmulatorPanel] ✓ Detected rp2350 binary (magic "VPy2") — routing to Rp2350System`);
+        setRunMode('rp2350');   // show the "EMULATING RP2350 (ARM)" badge
         if (typeof emuCore.loadArm !== 'function') {
           console.error('[EmulatorPanel] emuCore.loadArm not available — rp2350 target unsupported in this build');
           return;
@@ -2404,31 +3123,20 @@ export const EmulatorPanel: React.FC = () => {
           }
         }
 
-        emuCore.loadArm(romData, elfData, canvasRef.current ?? undefined);
+        const sdSim1 = await (window as any).electronAPI?.sdSimList?.().catch(() => null);
+        const romZip1 = await loadSimRomZip(romPath);
+        const armBin = romData;
+        armReloadRef.current = () =>
+          emuCore.loadArm!(armBin, elfData, canvasRef.current ?? undefined, sdSim1?.files ?? [], sdSim1?.previews ?? {}, romZip1);
+        armReloadRef.current();
         console.log('[EmulatorPanel] ✓ ARM binary loaded into Rp2350System');
+        setActiveEngine('rp2350');
+        setArmAudioSuspended(!audioEnabled);
 
         // Clear the canvas before first rp2350 frame
-        if (canvasRef.current) {
-          const ctx = canvasRef.current.getContext('2d');
-          if (ctx) {
-            ctx.fillStyle = '#000000';
-            ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-          }
-        }
-
-        // Start rAF loop capped at 50 fps (Vectrex PAL rate; music compiled at 50 Hz)
-        const TARGET_MS = 1000 / 50;
-        let lastFrameTs = 0;
-        const rp2350Loop = (ts: number) => {
-          rp2350LoopRef.current = requestAnimationFrame(rp2350Loop);
-          const elapsed = ts - lastFrameTs;
-          if (elapsed < TARGET_MS) return;
-          lastFrameTs = ts - (elapsed % TARGET_MS);
-          if (useDebugStore.getState().state !== 'running') return;
-          emuCore.runFrame();
-        };
-        useDebugStore.getState().setState('running');
-        rp2350LoopRef.current = requestAnimationFrame(rp2350Loop);
+        clearCanvas();
+        startArmRafLoop();
+        setStatus('running');
 
         setLoadedROM(`${romName} (${romData.length} bytes, rp2350${elfData ? ' + elf' : ''})`);
         setLastRom(null, romName);
@@ -2438,6 +3146,8 @@ export const EmulatorPanel: React.FC = () => {
       }
 
       // ── M6809 cartridge path ────────────────────────────────────────────
+      setActiveEngine('m6809');
+      applyAudioState(audioEnabled);
       let cartDataString = '';
       for (let i = 0; i < romData.length; i++) {
         cartDataString += String.fromCharCode(romData[i]);
@@ -2589,28 +3299,26 @@ export const EmulatorPanel: React.FC = () => {
       }
       END DISABLED AUTO-LOAD */
       
-      // Skip loading compiled ROM - go straight to default Minestorm
-      // But only for the M6809 path — rp2350/pitrex have no use for a 6809 ROM.
-      if (useSettings.getState().buildTarget === 'rp2350' || useSettings.getState().buildTarget === 'pitrex' || useSettings.getState().buildTarget === 'uvm2') {
-        defaultOverlayLoaded.current = true;
-        return;
-      }
-
-      // Fallback: Cargar Minestorm
-      console.log('[EmulatorPanel] Loading default: Minestorm');
-      await loadOverlay('minestorm.bin');
-      setLoadedROM('BIOS - Minestorm');
-      
+      /* A MOUNT NEVER STARTS AN ENGINE. This used to call vecx.start() whenever the
+       * persisted `emulatorWasRunning` was true — and Play sets it for EVERY engine
+       * (simulator, rp2350, uvm2, PiTrex) while builds never clear it. The panel
+       * remounts each time the dock layout changes and at every IDE start, so the
+       * 6809 booted the BIOS with no cartridge (Minestorm) in the background, under
+       * whatever was really running. JSVecX runs only when a 6809 program is loaded
+       * or the user presses Play / Reset. */
+      const owner = useEmulatorStore.getState().activeEngine;
       const vecx = (window as any).vecx;
-      if (vecx) {
-        if (emulatorWasRunning) {
-          vecx.debugState = 'running';
-          vecx.start();
-          setStatus('running');
-        } else {
-          vecx.stop();
-          setStatus('stopped');
-        }
+      // A 6809 that is the active engine keeps running across the remount (its canvas
+      // is re-bound in initJSVecX); under any other engine it must not run at all.
+      if (vecx && owner !== 'm6809' && vecx.running) vecx.stop();
+
+      // Nothing loaded yet and the 6809 is the selected target: show the BIOS as the
+      // inserted "cartridge", stopped (Play starts it).
+      if (owner === null && useSettings.getState().buildTarget === 'm6809') {
+        console.log('[EmulatorPanel] Default: BIOS (Minestorm), stopped');
+        await loadOverlay('minestorm.bin');
+        setLoadedROM('BIOS - Minestorm');
+        setStatus('stopped');
       }
       
       defaultOverlayLoaded.current = true;
@@ -2674,8 +3382,24 @@ export const EmulatorPanel: React.FC = () => {
     const electronAPI: any = (window as any).electronAPI;
     if (!electronAPI?.onCompiledBin) return;
 
-    const handleCompiledBin = async (payload: { base64: string; size: number; binPath: string; pdbData?: any; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; elfBase64?: string | null; sFileText?: string | null }) => {
+    const handleCompiledBin = async (payload: { base64: string; size: number; binPath: string; pdbData?: any; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; elfBase64?: string | null; sFileText?: string | null; libvpyAsm?: string | null; sdFiles?: Record<string, string>; sdDeferred?: Record<string, number>; psramElfBase64?: string | null }) => {
+    /* LA PRIMERA TRAZA DE LA CADENA. Todo lo que hay de aqui en adelante ya estaba
+     * instrumentado —"uvm2: bin=…", "✓ .um2 image loaded", "[loadUvm2] START"— asi que si
+     * no sale NINGUNA, el problema no esta en el emulador sino en que este manejador no se
+     * llama, o llega con otro `target`. Distinguir esas dos cosas es lo unico que falta, y
+     * sin ella hoy he depurado tres veces el fichero equivocado. */
+    console.log('[EmulatorPanel] handleCompiledBin: target=', payload?.target,
+                'bytes=', payload?.base64?.length ?? 0, 'bin=', payload?.binPath);
+      // Clear the run-mode badge first: only the branch that handles THIS build
+      // may set it. Without this it survives into the next build and a project
+      // compiled for m6809 keeps claiming it is emulating whatever ran last.
+      setRunMode(null);
       console.log(`[EmulatorPanel] Loading compiled binary: ${payload.binPath} (${payload.size} bytes) target=${payload.target ?? 'm6809'}`);
+
+      // A new program is loading (any target, debug loads included): stop every engine
+      // and every audio path first — the WASM simulator too — so only the engine this
+      // load starts below runs and sounds.
+      stopAllEngines(`compiled ${payload.target ?? 'm6809'} binary`);
       
       // Guardar última ROM compilada con su proyecto
       const projectState = (window as any).__projectStore__?.getState?.();
@@ -2713,44 +3437,9 @@ export const EmulatorPanel: React.FC = () => {
         useDebugStore.getState().clearPdbData();
       }
       
-      // ── uvm2 path: hardware-only target, no in-browser emulation ──
-      if (payload.target === 'uvm2') {
-        console.log('[EmulatorPanel] uvm2 target — hardware only, no browser emulation');
-        setHardwareOverlayKind('uvm2');
-        setPitrexImgPath(payload.binPath);
-        setShowPitrexOverlay(true);
-        const romName = payload.binPath.split(/[/\\]/).pop()?.replace(/\.(bin|BIN)$/, '') || 'compiled';
-        loadOverlay(romName + '.bin');
-        return;
-      }
-
-      // ── Shared helper: stop ALL three emulators before switching targets ──
-      const stopAllEmulators = () => {
-        // 1. JSVecX (m6809) — stop its internal setInterval/setTimeout loop
-        const _vecx = (window as any).vecx;
-        if (_vecx) { try { _vecx.stop(); } catch {} }
-
-        // 2. PiTrex — cancel RAF loop and stop audio context
-        if (pitrexLoopRef.current !== null) {
-          cancelAnimationFrame(pitrexLoopRef.current);
-          pitrexLoopRef.current = null;
-        }
-        if (pitrexCoreRef.current) {
-          try { pitrexCoreRef.current.stopAudio?.(); } catch {}
-          pitrexCoreRef.current = null;
-        }
-
-        // 3. rp2350 — cancel RAF loop and stop audio context via emuCore
-        if (rp2350LoopRef.current !== null) {
-          cancelAnimationFrame(rp2350LoopRef.current);
-          rp2350LoopRef.current = null;
-        }
-        // stopAudio is called inside emuCore.loadProgram when _activeTarget==='rp2350';
-        // call it explicitly here too so switching pitrex→rp2350 also cleans up.
-        try { (emuCore as any)._rp2350System?.stopAudio?.(); } catch {}
-
-        console.log('[EmulatorPanel] ✓ All emulators stopped');
-      };
+      // Record the outcome of this load for tools that wait on it (MCP ide_run).
+      const noteLoad = (backend: 'm6809' | 'rp2350' | 'uvm2' | 'pitrex', ok: boolean, error?: string) =>
+        useEmulatorStore.getState().noteLoad({ backend, binPath: payload.binPath, ok, error });
 
       // ── pitrex path: ARM32 interpreter + vector renderer ──
       if (payload.target === 'pitrex') {
@@ -2760,20 +3449,23 @@ export const EmulatorPanel: React.FC = () => {
           console.warn('[EmulatorPanel] pitrex: no .s file text in payload — cannot start emulator');
           setPitrexImgPath(payload.binPath);
           setShowPitrexOverlay(true);
+          noteLoad('pitrex', false, 'no .s file next to the pitrex image: nothing to emulate');
           return;
         }
         try {
-          stopAllEmulators();
+          setActiveEngine('pitrex');
 
           // Dynamically import PitrexCore to avoid bundling it unless needed
           const { PitrexCore } = await import('../../pitrex/PitrexCore.js');
           const core = new PitrexCore();
-          core.loadAssembly(payload.sFileText);
+          core.loadAssembly(payload.sFileText, payload.libvpyAsm);
           pitrexCoreRef.current = core;
           pitrexSFileRef.current = payload.sFileText; // persist for reset
+          pitrexLibvpyRef.current = payload.libvpyAsm ?? null; // persist for reset
 
           if (!core.isReady()) {
             console.error('[EmulatorPanel] PitrexCore failed to load assembly');
+            noteLoad('pitrex', false, 'the PiTrex interpreter could not load the assembly');
             return;
           }
 
@@ -2787,71 +3479,94 @@ export const EmulatorPanel: React.FC = () => {
           }
 
           useDebugStore.getState().setState('running');
-          setPitrexAudioEnabled(true);
-          core.startAudio();
+          setStatus('running');
+          // Respect the panel's mute: the sound comes back with the engine, not over it.
+          setPitrexAudioEnabled(audioEnabledRef.current);
+          if (audioEnabledRef.current) core.startAudio();
           startPitrexRafLoop();
+          noteLoad('pitrex', true);
         } catch (e) {
           console.error('[EmulatorPanel] Failed to start pitrex emulator:', e);
+          noteLoad('pitrex', false, `failed to start the PiTrex emulator: ${(e as any)?.message || e}`);
         }
         const romName = payload.binPath.split(/[/\\]/).pop()?.replace(/\.(bin|BIN)$/, '') || 'compiled';
         loadOverlay(romName + '.bin');
         return;
       }
 
-      // ── rp2350 path: route through Rp2350System instead of M6809/JSVecX ──
-      if (payload.target === 'rp2350') {
+      // ── ARM paths: rp2350 (BIOS syscalls in JS) and uvm2 (the image's own
+      //    halt-mode runtime). Both drive the same rAF loop below, so they
+      //    share this branch and differ only in which loader they call. ──
+      if (payload.target === 'rp2350' || payload.target === 'uvm2') {
+        const isUvm2 = payload.target === 'uvm2';
         setShowPitrexOverlay(false);
+        setRunMode(isUvm2 ? 'uvm2' : 'rp2350');
         try {
-          stopAllEmulators();
+          setActiveEngine(isUvm2 ? 'uvm2' : 'rp2350');
 
           const bin = Uint8Array.from(atob(payload.base64), c => c.charCodeAt(0));
           const elf = payload.elfBase64
             ? Uint8Array.from(atob(payload.elfBase64), c => c.charCodeAt(0))
             : undefined;
-          console.log(`[EmulatorPanel] rp2350: bin=${bin.length}b elf=${elf?.length ?? 0}b canvas=${canvasRef.current ? `${canvasRef.current.width}x${canvasRef.current.height}` : 'null'}`);
-          if (typeof emuCore.loadArm === 'function') {
-            // Pass the shared canvas so Rp2350System renders directly to it
-            emuCore.loadArm(bin, elf, canvasRef.current ?? undefined);
-            console.log('[EmulatorPanel] ✓ ARM binary loaded into Rp2350System');
+          console.log(`[EmulatorPanel] ${payload.target}: bin=${bin.length}b elf=${elf?.length ?? 0}b canvas=${canvasRef.current ? `${canvasRef.current.width}x${canvasRef.current.height}` : 'null'}`);
+          const loaderAvailable = isUvm2
+            ? typeof emuCore.loadUvm2 === 'function'
+            : typeof emuCore.loadArm === 'function';
+          if (loaderAvailable) {
+            if (isUvm2) {
+              /* La SD simulada llega en base64 desde el proceso principal; se decodifica
+               * aqui porque el emulador quiere bytes. Ver leerSdSimulada en main.ts. */
+              const sdBytes: Record<string, Uint8Array> = {};
+              for (const [k, v] of Object.entries(payload.sdFiles ?? {})) {
+                sdBytes[k] = Uint8Array.from(atob(v), c => c.charCodeAt(0));
+              }
+              const psramElf = payload.psramElfBase64
+                ? Uint8Array.from(atob(payload.psramElfBase64), c => c.charCodeAt(0))
+                : undefined;
+              // The debugger's line table: the ELF next to the image (not handed to the
+              // system: see setArmDebugElf). A missing one only means no source debugging.
+              // A C project's uvm2 build (the pico-sdk recipe) leaves it in pico/.
+              let debugElf: Uint8Array | null = elf ?? null;
+              const base = String(payload.binPath || '').replace(/\.(bin|um2)$/i, '');
+              const dir = base.replace(/[^/\\]*$/, '');
+              for (const cand of [`${base}.elf`, `${dir}pico/${base.slice(dir.length)}.elf`]) {
+                if (debugElf || !base || !(window as any).files?.readFileBin) break;
+                try {
+                  const r = await (window as any).files.readFileBin(cand);
+                  if (r && !r.error && r.base64) debugElf = Uint8Array.from(atob(r.base64), c => c.charCodeAt(0));
+                } catch { /* not there */ }
+              }
+              (emuCore as any).setArmDebugElf?.(debugElf);
+              armReloadRef.current = () =>
+                emuCore.loadUvm2!(bin, canvasRef.current ?? undefined, elf, sdBytes, psramElf, payload.sdDeferred);
+              armReloadRef.current();
+              console.log('[EmulatorPanel] ✓ .um2 image loaded into Uvm2System');
+            } else {
+              // Pass the shared canvas so Rp2350System renders directly to it
+              const sdSim2 = await (electronAPI as any)?.sdSimList?.().catch(() => null);
+              const romZip2 = await loadSimRomZip(payload.binPath);
+              (emuCore as any).setArmDebugElf?.(null); // rp2350: the system's own ELF is the debugger's
+              armReloadRef.current = () =>
+                emuCore.loadArm!(bin, elf, canvasRef.current ?? undefined, sdSim2?.files ?? [], sdSim2?.previews ?? {}, romZip2);
+              armReloadRef.current();
+              console.log('[EmulatorPanel] ✓ ARM binary loaded into Rp2350System');
+            }
+            // The loader opened the system's audio; keep it asleep if the panel is muted.
+            setArmAudioSuspended(!audioEnabledRef.current);
 
             // Clear the canvas before first rp2350 frame (Minestorm may have drawn there)
-            if (canvasRef.current) {
-              const ctx = canvasRef.current.getContext('2d');
-              if (ctx) {
-                ctx.fillStyle = '#000000';
-                ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-              }
-            }
+            clearCanvas();
 
-            // Start our own requestAnimationFrame loop capped at 50 fps.
-            // RAF fires at the display refresh rate (120/144 Hz on many monitors).
-            // Without a cap the game logic would run proportionally faster than
-            // the M6809 path, which is driven by the Vectrex 50 Hz VIA timer.
-            const TARGET_MS = 1000 / 50;  // 20 ms per frame (Vectrex PAL; music compiled at 50 Hz)
-            let rp2350FrameCount = 0;
-            let lastFrameTs = 0;
-            const loop = (ts: number) => {
-              rp2350LoopRef.current = requestAnimationFrame(loop);
-              const elapsed = ts - lastFrameTs;
-              if (elapsed < TARGET_MS) return;          // too soon — skip
-              lastFrameTs = ts - (elapsed % TARGET_MS); // align to 50 Hz grid
-              // Honour pause/stop from debug controls
-              if (useDebugStore.getState().state !== 'running') return;
-              rp2350FrameCount++;
-              if ((window as any).RP2350_DEBUG && (rp2350FrameCount <= 5 || rp2350FrameCount % 120 === 0)) {
-                console.log(`[EmulatorPanel] rp2350 rAF loop frame ${rp2350FrameCount}`);
-              }
-              emuCore.runFrame();
-            };
-            // Mark as running so the RAF loop doesn't bail on the first check.
-            useDebugStore.getState().setState('running');
-            rp2350LoopRef.current = requestAnimationFrame(loop);
-            console.log('[EmulatorPanel] ✓ rp2350 rAF loop started');
+            startArmRafLoop();
+            setStatus('running');
+            noteLoad(isUvm2 ? 'uvm2' : 'rp2350', true);
           } else {
-            console.error('[EmulatorPanel] loadArm not available on emuCore');
+            console.error(`[EmulatorPanel] loader for ${payload.target} not available on emuCore`);
+            noteLoad(isUvm2 ? 'uvm2' : 'rp2350', false, `no ${payload.target} loader in this build of the emulator`);
           }
         } catch (e) {
           console.error('[EmulatorPanel] Failed to load ARM binary:', e);
+          noteLoad(isUvm2 ? 'uvm2' : 'rp2350', false, `failed to load the ARM binary: ${(e as any)?.message || e}`);
         }
         const romName = payload.binPath.split(/[/\\]/).pop()?.replace(/\.(bin|BIN)$/, '') || 'compiled';
         loadOverlay(romName + '.bin');
@@ -2868,11 +3583,13 @@ export const EmulatorPanel: React.FC = () => {
         
         if (!vecx) {
           console.error('[EmulatorPanel] JSVecX instance not available for loading binary');
+          noteLoad('m6809', false, 'the JSVecX emulator instance is not available');
           return;
         }
 
-        // Stop ALL emulators before loading m6809 ROM
-        stopAllEmulators();
+        setActiveEngine('m6809');
+        // The 6809's mute flag lives in its PSG (e8910.enabled): carry the panel's over.
+        applyAudioState(audioEnabledRef.current);
         
         // Cargar el binario en la instancia global Globals.cartdata
         const Globals = (window as any).Globals;
@@ -2957,7 +3674,10 @@ export const EmulatorPanel: React.FC = () => {
           vecx.debugState = 'paused';
           console.log('[EmulatorPanel] ✓ JSVecx debugState set to paused');
           
-          // DO NOT call vecx.start() yet - MonacoEditorWrapper will start after adding breakpoints
+          // DO NOT call vecx.start() here: the breakpoint sync starts it once the
+          // breakpoints are in (now, if this program's .pdb is already loaded)
+          vecx.waitingForBreakpoints = true;
+          syncEmulatorBreakpoints();
           console.log('[EmulatorPanel] ⏸️ Emulator ready in debug mode (waiting for breakpoint sync)');
           
           // NO resetear el flag aquí - mantenerlo activo durante toda la sesión de debug
@@ -2994,17 +3714,24 @@ export const EmulatorPanel: React.FC = () => {
         loadOverlay(romName + '.bin');
         
         console.log('[EmulatorPanel] ✓ Compiled binary loaded and emulator restarted');
-        
+        noteLoad('m6809', true);
+
       } catch (error) {
         console.error('[EmulatorPanel] Failed to load compiled binary:', error);
+        noteLoad('m6809', false, `failed to load the ROM: ${(error as any)?.message || error}`);
       }
     };
 
-    electronAPI.onCompiledBin(handleCompiledBin);
+    const unsubscribe = electronAPI.onCompiledBin(handleCompiledBin);
     console.log('[EmulatorPanel] ✓ Registered onCompiledBin listener');
-    
-    // No cleanup function needed - onCompiledBin typically doesn't return one
-  }, [loadOverlay, setLoadedROM, startPitrexRafLoop]);
+
+    // Unsubscribe on unmount. Without it every remount of the panel (dock layout
+    // changes) added one more listener that was never removed: each build was then
+    // loaded once per stale panel, and each stale copy started its own rAF loop or
+    // PiTrex core on refs nobody could reach any more — engines that kept running
+    // and sounding after Stop and after the next load.
+    return () => { if (typeof unsubscribe === 'function') unsubscribe(); };
+  }, [loadOverlay, setLoadedROM, startPitrexRafLoop, stopAllEngines, setActiveEngine, startArmRafLoop, setArmAudioSuspended, setStatus, clearCanvas, applyAudioState]);
 
   // Manejar cambio de ROM en dropdown
   const handleROMChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -3022,6 +3749,12 @@ export const EmulatorPanel: React.FC = () => {
     const newState = !overlayEnabled;
     setOverlayEnabled(newState);
   };
+
+  // What the mute button shows: the audio state of the engine that owns the panel.
+  const audioOn = simModulePath ? audioEnabled
+    : pitrexCoreRef.current ? pitrexAudioEnabled
+    : (activeEngine === 'rp2350' || activeEngine === 'uvm2') ? audioEnabled
+    : getCurrentAudioState();
 
   const btn: React.CSSProperties = { 
     background: '#1d1d1d', 
@@ -3099,8 +3832,59 @@ export const EmulatorPanel: React.FC = () => {
         }}
       >
         <div style={{ position: 'relative', display: 'inline-block' }}>
+          {/* Run-mode badge — SIMULATING (fast WASM, F5) vs EMULATING the RP2350
+              ARM binary (slow, HW-accurate, Shift+F5). Removes the ambiguity of
+              not knowing which backend a run used. */}
+          {(simModulePath || runMode === 'rp2350' || runMode === 'uvm2') && (
+            <div style={{
+              position: 'absolute', top: 4, right: 4, zIndex: 30,
+              padding: '2px 7px', borderRadius: 4, pointerEvents: 'none',
+              fontFamily: 'monospace', fontSize: 10, fontWeight: 'bold',
+              letterSpacing: '0.5px',
+              background: simModulePath ? 'rgba(30,90,40,0.85)' : 'rgba(110,70,20,0.9)',
+              color: simModulePath ? '#8f8' : '#fc9',
+              border: `1px solid ${simModulePath ? '#4a4' : '#c94'}`,
+            }}>
+              {simModulePath
+                ? '▶ SIMULATING (WASM)'
+                : runMode === 'uvm2'
+                  ? '🎯 EMULATING UVM2 (halt-mode bus · slow)'
+                  : '🎯 EMULATING RP2350 (ARM · slow)'}
+            </div>
+          )}
+          {/* Frames per second. `emuFps` is what the HOST manages to render (depends on
+              this machine); `emuDrawFps` is the refresh the frame's bus cycles would allow
+              on the real console, which is the number that actually matters. */}
+          {(runMode === 'rp2350' || runMode === 'uvm2') && emuFps > 0 && (
+            <div style={{
+              position: 'absolute', top: 24, right: 4, zIndex: 30,
+              padding: '2px 7px', borderRadius: 4, pointerEvents: 'none',
+              fontFamily: 'monospace', fontSize: 10,
+              background: 'rgba(20,20,20,0.85)', color: '#9cf', border: '1px solid #468',
+            }}>
+              {`host ${emuFps.toFixed(1)} fps`}
+              {emuDrawFps > 0 && ` · console ${emuDrawFps.toFixed(1)} Hz`}
+              {emuCiclos > 0 && ` · ${emuCiclos} cycles`}
+            </div>
+          )}
+          {/* External-project WASM simulator (runs any module speaking the
+              PiTrex host SDK contract). Overlays the Vectrex canvas. */}
+          {simModulePath && (
+            <div style={{ position: 'absolute', top: 0, left: 0, zIndex: 20 }}>
+              <PitrexSimView
+                key={simModuleNonce}
+                modulePath={simModulePath}
+                width={canvasSize.width}
+                height={canvasSize.height}
+                onLog={(line) => console.log(line)}
+                onCanvasReady={onSimCanvasReady}
+                onCaptureReady={onSimCaptureReady}
+                muted={!audioEnabled}
+              />
+            </div>
+          )}
           {/* PiTrex hardware-only overlay */}
-          {showPitrexOverlay && (
+          {showPitrexOverlay && !simModulePath && (
             <div style={{
               position: 'absolute',
               top: 0,
@@ -3203,7 +3987,7 @@ export const EmulatorPanel: React.FC = () => {
       </div>
 
       {/* Emulator Output - Información técnica del emulador */}
-      <EmulatorOutputInfo />
+      <EmulatorOutputInfo backend={runMode} />
 
       {/* Controles principales debajo del canvas - Estilo homogéneo */}
       <div style={{
@@ -3277,13 +4061,122 @@ export const EmulatorPanel: React.FC = () => {
         >
           🔄
         </button>
-        
+
+        {/* Botón Record vectores (.vrec) */}
+        <button
+          style={{
+            ...btn,
+            backgroundColor: isRecording ? '#5a2a2a' : '#3a3a3a',
+            color: isRecording ? '#f66' : '#aaa',
+            fontSize: '20px',
+            padding: '10px',
+            minWidth: '50px',
+            minHeight: '50px',
+            borderRadius: '6px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          onClick={onToggleRecording}
+          title={isRecording
+            ? 'Stop vector recording and save .vrec'
+            : `Record vectors to .vrec for game preview — stop when done (safety cap ${MAX_RECORD_SECONDS} s)`}
+        >
+          {isRecording ? '⏹' : '🔴'}
+        </button>
+
+        {/* Indicador de grabación: punto rojo + segundos transcurridos */}
+        {isRecording && (
+          <span style={{
+            color: '#f44',
+            fontFamily: 'monospace',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            minWidth: '54px'
+          }}>
+            <span style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: '#f00',
+              display: 'inline-block'
+            }} />
+            REC {recordElapsed.toFixed(1)}s
+          </span>
+        )}
+
+        {/* Botón Record video de gameplay (MP4 con audio) */}
+        <button
+          style={{
+            ...btn,
+            backgroundColor: isVideoRecording ? '#5a2a2a' : '#3a3a3a',
+            color: isVideoRecording ? '#f66' : '#aaa',
+            fontSize: '20px',
+            padding: '10px',
+            minWidth: '50px',
+            minHeight: '50px',
+            borderRadius: '6px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          onClick={onToggleVideoRecording}
+          disabled={videoStatus === 'transcoding'}
+          title={isVideoRecording
+            ? 'Stop gameplay recording and export MP4'
+            : 'Record gameplay video + audio to MP4 (for YouTube etc.)'}
+        >
+          {isVideoRecording ? '⏹' : '🎥'}
+        </button>
+
+        {/* Indicador de grabación de video: punto rojo + segundos / estado */}
+        {isVideoRecording && (
+          <span style={{
+            color: '#f44',
+            fontFamily: 'monospace',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            minWidth: '54px'
+          }}>
+            <span style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: '#f00',
+              display: 'inline-block'
+            }} />
+            VID {videoElapsed.toFixed(1)}s
+          </span>
+        )}
+        {!isVideoRecording && videoStatus !== 'idle' && videoMessage && (
+          <span style={{
+            color: videoStatus === 'error' ? '#f66' : videoStatus === 'saved' ? '#6f6' : '#ccc',
+            fontFamily: 'monospace',
+            fontSize: '11px',
+            display: 'flex',
+            alignItems: 'center',
+            maxWidth: '260px',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }} title={videoMessage}>
+            {videoStatus === 'transcoding' ? '⏳ ' : videoStatus === 'saved' ? '✅ ' : '⚠️ '}
+            {videoMessage}
+          </span>
+        )}
+
         {/* Botón Audio Mute/Unmute */}
         <button
           style={{
             ...btn,
-            backgroundColor: (pitrexCoreRef.current ? pitrexAudioEnabled : getCurrentAudioState()) ? '#2a4a2a' : '#4a2a2a',
-            color: (pitrexCoreRef.current ? pitrexAudioEnabled : getCurrentAudioState()) ? '#afa' : '#faa',
+            backgroundColor: audioOn ? '#2a4a2a' : '#4a2a2a',
+            color: audioOn ? '#afa' : '#faa',
             fontSize: '20px',
             padding: '10px',
             minWidth: '50px',
@@ -3294,6 +4187,19 @@ export const EmulatorPanel: React.FC = () => {
             justifyContent: 'center'
           }} 
           onClick={() => {
+            // ── WASM simulator: PitrexSimView follows `audioEnabled` (muted prop) ──
+            if (simModulePath) {
+              setAudioEnabled(!audioEnabled);
+              return;
+            }
+            // ── rp2350 / uvm2: suspend or resume the system's AudioContext ──────
+            if (activeEngine === 'rp2350' || activeEngine === 'uvm2') {
+              const next = !audioEnabled;
+              setAudioEnabled(next);
+              // A paused machine stays silent until Play.
+              if (!next || status === 'running') setArmAudioSuspended(!next);
+              return;
+            }
             // ── PiTrex audio path ────────────────────────────────────────────
             if (pitrexCoreRef.current) {
               const newEnabled = !pitrexAudioEnabled;
@@ -3347,9 +4253,9 @@ export const EmulatorPanel: React.FC = () => {
               console.warn('[EmulatorPanel] Could not control PSG audio:', e);
             }
           }}
-          title={(pitrexCoreRef.current ? pitrexAudioEnabled : getCurrentAudioState()) ? 'Mute audio' : 'Unmute audio'}
+          title={audioOn ? 'Mute audio' : 'Unmute audio'}
         >
-          {(pitrexCoreRef.current ? pitrexAudioEnabled : getCurrentAudioState()) ? '🔊' : '🔇'}
+          {audioOn ? '🔊' : '🔇'}
         </button>
         
         {/* Botón Toggle Overlay - Solo visible si hay overlay disponible */}

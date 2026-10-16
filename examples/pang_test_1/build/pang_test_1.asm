@@ -32,6 +32,8 @@ START:
     STA VIA_t1_cnt_lo
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -57,13 +59,16 @@ VLINE_DX             EQU $C880+$1D   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
 VLINE_DY             EQU $C880+$1E   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
 VLINE_DY_REMAINING   EQU $C880+$1F   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
 VLINE_DX_REMAINING   EQU $C880+$21   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-VAR_SCREEN           EQU $C880+$23   ; User variable: screen (2 bytes)
-VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_ARG0             EQU $C880+$23   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$25   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$27   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$29   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$2B   ; Function argument 4 (16-bit) (2 bytes)
+VAR_ARG5             EQU $C880+$2D   ; Function argument 5 (16-bit) (2 bytes)
+VAR_ARG6             EQU $C880+$2F   ; Function argument 6 (16-bit) (2 bytes)
+VAR_ARG7             EQU $C880+$31   ; Function argument 7 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$33   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_SCREEN           EQU $C880+$34   ; User variable: SCREEN (2 bytes)
 
 ;***************************************************************************
 ; MAIN PROGRAM
@@ -73,6 +78,7 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    CLR DRAW_VEC_INTENSITY ; 0 = use recorded/vector intensity (no override)
     LDD #0
     STD VAR_SCREEN
     ; === Initialize Joystick (one-time setup) ===
@@ -92,6 +98,7 @@ MAIN:
     ; Prime BIOS button state at startup
     JSR $F1BA    ; Read_Btns: reads PSG reg14 -> $C80F, $C811, $C80E
     ; Call main() for initialization
+; VPy_LINE:11
     LDD #0
     STD VAR_SCREEN
     CLR >$C811  ; Force-clear Vec_Buttons before first loop() frame
@@ -103,6 +110,7 @@ MAIN:
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
     JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
+; VPy_LINE:14
     ; TODO: Statement Pass { source_line: 14 }
     RTS
 

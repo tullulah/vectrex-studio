@@ -125,6 +125,8 @@ pub struct StructDef {
 pub struct FieldDef {
     pub name: String,
     pub type_annotation: Option<String>,
+    /// `= value` after the field: every instance starts with it (0 without one).
+    pub default: Option<Expr>,
     pub source_line: usize,
 }
 

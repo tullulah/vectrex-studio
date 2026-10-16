@@ -32,6 +32,8 @@ START:
     STA VIA_t1_cnt_lo
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -62,107 +64,88 @@ DRAW_VEC_Y           EQU $C880+$18   ; Vector draw Y offset (1 bytes)
 MIRROR_PAD           EQU $C880+$19   ; Safety padding to prevent MIRROR flag corruption (16 bytes)
 MIRROR_X             EQU $C880+$29   ; X mirror flag (0=normal, 1=flip) (1 bytes)
 MIRROR_Y             EQU $C880+$2A   ; Y mirror flag (0=normal, 1=flip) (1 bytes)
-DRAW_LINE_ARGS       EQU $C880+$2B   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$35   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$37   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$39   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$3A   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$3B   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$3D   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-TEXT_SCALE_H         EQU $C880+$3F   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
-TEXT_SCALE_W         EQU $C880+$40   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-DRAW_SCALE           EQU $C880+$41   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
-VAR_CARD_W           EQU $C880+$42   ; User variable: CARD_W (2 bytes)
-VAR_CARD_H           EQU $C880+$44   ; User variable: CARD_H (2 bytes)
-VAR_COL_DY           EQU $C880+$46   ; User variable: COL_DY (2 bytes)
-VAR_HALF_W           EQU $C880+$48   ; User variable: HALF_W (2 bytes)
-VAR_TOP_Y            EQU $C880+$4A   ; User variable: TOP_Y (2 bytes)
-VAR_TAB_Y            EQU $C880+$4C   ; User variable: TAB_Y (2 bytes)
-VAR_STK_X            EQU $C880+$4E   ; User variable: STK_X (2 bytes)
-VAR_WST_X            EQU $C880+$50   ; User variable: WST_X (2 bytes)
-VAR_F0_X             EQU $C880+$52   ; User variable: F0_X (2 bytes)
-VAR_F1_X             EQU $C880+$54   ; User variable: F1_X (2 bytes)
-VAR_F2_X             EQU $C880+$56   ; User variable: F2_X (2 bytes)
-VAR_F3_X             EQU $C880+$58   ; User variable: F3_X (2 bytes)
-VAR_TAB_X0           EQU $C880+$5A   ; User variable: TAB_X0 (2 bytes)
-VAR_TAB_X1           EQU $C880+$5C   ; User variable: TAB_X1 (2 bytes)
-VAR_TAB_X2           EQU $C880+$5E   ; User variable: TAB_X2 (2 bytes)
-VAR_TAB_X3           EQU $C880+$60   ; User variable: TAB_X3 (2 bytes)
-VAR_TAB_X4           EQU $C880+$62   ; User variable: TAB_X4 (2 bytes)
-VAR_TAB_X5           EQU $C880+$64   ; User variable: TAB_X5 (2 bytes)
-VAR_TAB_X6           EQU $C880+$66   ; User variable: TAB_X6 (2 bytes)
-VAR_INT_CARD         EQU $C880+$68   ; User variable: INT_CARD (2 bytes)
-VAR_INT_CURSOR       EQU $C880+$6A   ; User variable: INT_CURSOR (2 bytes)
-VAR_INT_FACEDN       EQU $C880+$6C   ; User variable: INT_FACEDN (2 bytes)
-VAR_INT_EMPTY        EQU $C880+$6E   ; User variable: INT_EMPTY (2 bytes)
-VAR_INT_HELD         EQU $C880+$70   ; User variable: INT_HELD (2 bytes)
-VAR_STATE_PLAY       EQU $C880+$72   ; User variable: STATE_PLAY (2 bytes)
-VAR_STATE_WIN        EQU $C880+$74   ; User variable: STATE_WIN (2 bytes)
-VAR_STK_SZ           EQU $C880+$76   ; User variable: stk_sz (2 bytes)
-VAR_WST_SZ           EQU $C880+$78   ; User variable: wst_sz (2 bytes)
-VAR_CURSOR           EQU $C880+$7A   ; User variable: cursor (2 bytes)
-VAR_SEL_CARD         EQU $C880+$7C   ; User variable: sel_card (2 bytes)
-VAR_SEL_SRC          EQU $C880+$7E   ; User variable: sel_src (2 bytes)
-VAR_GAME_STATE       EQU $C880+$80   ; User variable: game_state (2 bytes)
-VAR_WIN_BLINK        EQU $C880+$82   ; User variable: win_blink (2 bytes)
-VAR_PREV_BTN1        EQU $C880+$84   ; User variable: prev_btn1 (2 bytes)
-VAR_PREV_BTN2        EQU $C880+$86   ; User variable: prev_btn2 (2 bytes)
-VAR_BTN1_FIRE        EQU $C880+$88   ; User variable: btn1_fire (2 bytes)
-VAR_BTN2_FIRE        EQU $C880+$8A   ; User variable: btn2_fire (2 bytes)
-VAR_PREV_JX          EQU $C880+$8C   ; User variable: prev_jx (2 bytes)
-VAR_G_RESULT         EQU $C880+$8E   ; User variable: g_result (2 bytes)
-VAR_G_COL_X          EQU $C880+$90   ; User variable: g_col_x (2 bytes)
-VAR_G_CARD           EQU $C880+$92   ; User variable: g_card (2 bytes)
-VAR_G_RANK           EQU $C880+$94   ; User variable: g_rank (2 bytes)
-VAR_G_SUIT           EQU $C880+$96   ; User variable: g_suit (2 bytes)
-VAR_G_SZ             EQU $C880+$98   ; User variable: g_sz (2 bytes)
-VAR_G_HD             EQU $C880+$9A   ; User variable: g_hd (2 bytes)
-VAR_G_IDX            EQU $C880+$9C   ; User variable: g_idx (2 bytes)
-VAR_G_CY             EQU $C880+$9E   ; User variable: g_cy (2 bytes)
-VAR_G_TIDX           EQU $C880+$A0   ; User variable: g_tidx (2 bytes)
-VAR_G_TOP            EQU $C880+$A2   ; User variable: g_top (2 bytes)
-VAR_G_TR             EQU $C880+$A4   ; User variable: g_tr (2 bytes)
-VAR_G_TC             EQU $C880+$A6   ; User variable: g_tc (2 bytes)
-VAR_G_TOP_RED        EQU $C880+$A8   ; User variable: g_top_red (2 bytes)
-VAR_G_CARD_RED       EQU $C880+$AA   ; User variable: g_card_red (2 bytes)
-VAR_G_PLACED         EQU $C880+$AC   ; User variable: g_placed (2 bytes)
-VAR_DEAL_IDX         EQU $C880+$AE   ; User variable: deal_idx (2 bytes)
-VAR_G_ROW            EQU $C880+$B0   ; User variable: g_row (2 bytes)
-VAR_G_C              EQU $C880+$B2   ; User variable: g_c (2 bytes)
-VAR_G_CX             EQU $C880+$B4   ; User variable: g_cx (2 bytes)
-VAR_G_FC             EQU $C880+$B6   ; User variable: g_fc (2 bytes)
-VAR_G_WCARD          EQU $C880+$B8   ; User variable: g_wcard (2 bytes)
-VAR_G_FX             EQU $C880+$BA   ; User variable: g_fx (2 bytes)
-VAR_DECK             EQU $C880+$BC   ; User variable: deck (2 bytes)
-VAR_TAB_SZ           EQU $C880+$BE   ; User variable: tab_sz (2 bytes)
-VAR_TAB_HID          EQU $C880+$C0   ; User variable: tab_hid (2 bytes)
-VAR_FOUND_CNT        EQU $C880+$C2   ; User variable: found_cnt (2 bytes)
-VAR_TAB              EQU $C880+$C4   ; User variable: tab (2 bytes)
-VAR_STOCK            EQU $C880+$C6   ; User variable: stock (2 bytes)
-VAR_WASTE            EQU $C880+$C8   ; User variable: waste (2 bytes)
-VAR_CARD             EQU $C880+$CA   ; User variable: card (2 bytes)
-VAR_COL              EQU $C880+$CC   ; User variable: col (2 bytes)
-VAR_SUIT             EQU $C880+$CE   ; User variable: suit (2 bytes)
-VAR_FX               EQU $C880+$D0   ; User variable: fx (2 bytes)
-VAR_X                EQU $C880+$D2   ; User variable: x (2 bytes)
-VAR_Y                EQU $C880+$D4   ; User variable: y (2 bytes)
-VAR_INTENSITY        EQU $C880+$D6   ; User variable: intensity (2 bytes)
-VAR_N                EQU $C880+$D8   ; User variable: n (2 bytes)
-VAR_R                EQU $C880+$DA   ; User variable: r (2 bytes)
-VAR_S                EQU $C880+$DC   ; User variable: s (2 bytes)
-VAR_DECK_DATA        EQU $C880+$DE   ; Mutable array 'deck' data (52 elements x 2 bytes) (104 bytes)
-VAR_TAB_DATA         EQU $C880+$146   ; Mutable array 'tab' data (140 elements x 2 bytes) (280 bytes)
-VAR_TAB_SZ_DATA      EQU $C880+$25E   ; Mutable array 'tab_sz' data (7 elements x 2 bytes) (14 bytes)
-VAR_TAB_HID_DATA     EQU $C880+$26C   ; Mutable array 'tab_hid' data (7 elements x 2 bytes) (14 bytes)
-VAR_FOUND_CNT_DATA   EQU $C880+$27A   ; Mutable array 'found_cnt' data (4 elements x 2 bytes) (8 bytes)
-VAR_STOCK_DATA       EQU $C880+$282   ; Mutable array 'stock' data (24 elements x 2 bytes) (48 bytes)
-VAR_WASTE_DATA       EQU $C880+$2B2   ; Mutable array 'waste' data (24 elements x 2 bytes) (48 bytes)
-VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
+SLR_CUR_X            EQU $C880+$2B   ; DRAW_VECTOR: clamped (visible) beam X for clipping (1 bytes)
+SLR_TRUE_X           EQU $C880+$2C   ; DRAW_VECTOR: 16-bit unclamped abs_x for line clipping (2 bytes)
+DRAW_T1_SCALED       EQU $C880+$2E   ; DRAW_VECTOR: T1 scale ($7F default for non-SHOW_LEVEL) (1 bytes)
+SDCP_ABS_Y           EQU $C880+$2F   ; DRAW_VECTOR: abs_y temporary for SDCP (cannot share TMPVAL — would corrupt SHOW_LEVEL's top_screen between layers) (1 bytes)
+DRAW_LINE_ARGS       EQU $C880+$30   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$3A   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$3C   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$3E   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$3F   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$40   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$42   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+TEXT_SCALE_H         EQU $C880+$44   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
+TEXT_SCALE_W         EQU $C880+$45   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
+DRAW_SCALE           EQU $C880+$46   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
+VAR_ARG0             EQU $C880+$47   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$49   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$4B   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$4D   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$4F   ; Function argument 4 (16-bit) (2 bytes)
+VAR_ARG5             EQU $C880+$51   ; Function argument 5 (16-bit) (2 bytes)
+VAR_ARG6             EQU $C880+$53   ; Function argument 6 (16-bit) (2 bytes)
+VAR_ARG7             EQU $C880+$55   ; Function argument 7 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$57   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_STK_SZ           EQU $C880+$58   ; User variable: STK_SZ (2 bytes)
+VAR_WST_SZ           EQU $C880+$5A   ; User variable: WST_SZ (2 bytes)
+VAR_CURSOR           EQU $C880+$5C   ; User variable: CURSOR (2 bytes)
+VAR_SEL_CARD         EQU $C880+$5E   ; User variable: SEL_CARD (2 bytes)
+VAR_SEL_SRC          EQU $C880+$60   ; User variable: SEL_SRC (2 bytes)
+VAR_GAME_STATE       EQU $C880+$62   ; User variable: GAME_STATE (2 bytes)
+VAR_WIN_BLINK        EQU $C880+$64   ; User variable: WIN_BLINK (2 bytes)
+VAR_PREV_BTN1        EQU $C880+$66   ; User variable: PREV_BTN1 (2 bytes)
+VAR_PREV_BTN2        EQU $C880+$68   ; User variable: PREV_BTN2 (2 bytes)
+VAR_BTN1_FIRE        EQU $C880+$6A   ; User variable: BTN1_FIRE (2 bytes)
+VAR_BTN2_FIRE        EQU $C880+$6C   ; User variable: BTN2_FIRE (2 bytes)
+VAR_PREV_JX          EQU $C880+$6E   ; User variable: PREV_JX (2 bytes)
+VAR_G_RESULT         EQU $C880+$70   ; User variable: G_RESULT (2 bytes)
+VAR_G_COL_X          EQU $C880+$72   ; User variable: G_COL_X (2 bytes)
+VAR_G_CARD           EQU $C880+$74   ; User variable: G_CARD (2 bytes)
+VAR_G_RANK           EQU $C880+$76   ; User variable: G_RANK (2 bytes)
+VAR_G_SUIT           EQU $C880+$78   ; User variable: G_SUIT (2 bytes)
+VAR_G_SZ             EQU $C880+$7A   ; User variable: G_SZ (2 bytes)
+VAR_G_HD             EQU $C880+$7C   ; User variable: G_HD (2 bytes)
+VAR_G_IDX            EQU $C880+$7E   ; User variable: G_IDX (2 bytes)
+VAR_G_CY             EQU $C880+$80   ; User variable: G_CY (2 bytes)
+VAR_G_TIDX           EQU $C880+$82   ; User variable: G_TIDX (2 bytes)
+VAR_G_TOP            EQU $C880+$84   ; User variable: G_TOP (2 bytes)
+VAR_G_TR             EQU $C880+$86   ; User variable: G_TR (2 bytes)
+VAR_G_TC             EQU $C880+$88   ; User variable: G_TC (2 bytes)
+VAR_G_TOP_RED        EQU $C880+$8A   ; User variable: G_TOP_RED (2 bytes)
+VAR_G_CARD_RED       EQU $C880+$8C   ; User variable: G_CARD_RED (2 bytes)
+VAR_G_PLACED         EQU $C880+$8E   ; User variable: G_PLACED (2 bytes)
+VAR_DEAL_IDX         EQU $C880+$90   ; User variable: DEAL_IDX (2 bytes)
+VAR_G_ROW            EQU $C880+$92   ; User variable: G_ROW (2 bytes)
+VAR_G_C              EQU $C880+$94   ; User variable: G_C (2 bytes)
+VAR_G_CX             EQU $C880+$96   ; User variable: G_CX (2 bytes)
+VAR_G_FC             EQU $C880+$98   ; User variable: G_FC (2 bytes)
+VAR_G_WCARD          EQU $C880+$9A   ; User variable: G_WCARD (2 bytes)
+VAR_G_FX             EQU $C880+$9C   ; User variable: G_FX (2 bytes)
+VAR_DECK             EQU $C880+$9E   ; User variable: DECK (2 bytes)
+VAR_TAB_SZ           EQU $C880+$A0   ; User variable: TAB_SZ (2 bytes)
+VAR_TAB_HID          EQU $C880+$A2   ; User variable: TAB_HID (2 bytes)
+VAR_FOUND_CNT        EQU $C880+$A4   ; User variable: FOUND_CNT (2 bytes)
+VAR_TAB              EQU $C880+$A6   ; User variable: TAB (2 bytes)
+VAR_STOCK            EQU $C880+$A8   ; User variable: STOCK (2 bytes)
+VAR_WASTE            EQU $C880+$AA   ; User variable: WASTE (2 bytes)
+VAR_CARD             EQU $C880+$AC   ; User variable: card (2 bytes)
+VAR_COL              EQU $C880+$AE   ; User variable: col (2 bytes)
+VAR_SUIT             EQU $C880+$B0   ; User variable: suit (2 bytes)
+VAR_FX               EQU $C880+$B2   ; User variable: fx (2 bytes)
+VAR_X                EQU $C880+$B4   ; User variable: x (2 bytes)
+VAR_Y                EQU $C880+$B6   ; User variable: y (2 bytes)
+VAR_INTENSITY        EQU $C880+$B8   ; User variable: intensity (2 bytes)
+VAR_N                EQU $C880+$BA   ; User variable: n (2 bytes)
+VAR_R                EQU $C880+$BC   ; User variable: r (2 bytes)
+VAR_S                EQU $C880+$BE   ; User variable: s (2 bytes)
+VAR_DECK_DATA        EQU $C880+$C0   ; Mutable array 'DECK' data (52 elements x 2 bytes) (104 bytes)
+VAR_TAB_DATA         EQU $C880+$128   ; Mutable array 'TAB' data (140 elements x 2 bytes) (280 bytes)
+VAR_TAB_SZ_DATA      EQU $C880+$240   ; Mutable array 'TAB_SZ' data (7 elements x 2 bytes) (14 bytes)
+VAR_TAB_HID_DATA     EQU $C880+$24E   ; Mutable array 'TAB_HID' data (7 elements x 2 bytes) (14 bytes)
+VAR_FOUND_CNT_DATA   EQU $C880+$25C   ; Mutable array 'FOUND_CNT' data (4 elements x 2 bytes) (8 bytes)
+VAR_STOCK_DATA       EQU $C880+$264   ; Mutable array 'STOCK' data (24 elements x 2 bytes) (48 bytes)
+VAR_WASTE_DATA       EQU $C880+$294   ; Mutable array 'WASTE' data (24 elements x 2 bytes) (48 bytes)
 ; Array length constants
 ARRAY_DECK_LEN         EQU 52   ; 52 elements
 ARRAY_TAB_LEN         EQU 140   ; 140 elements
@@ -178,7 +161,7 @@ ARRAY_WASTE_LEN         EQU 24   ; 24 elements
 ; Arrays are stored in ROM and accessed via pointers
 ; At startup, main() initializes VAR_{name} to point to ARRAY_{name}_DATA
 
-; Array literal for variable 'deck' (52 elements, 2 bytes each)
+; Array literal for variable 'DECK' (52 elements, 2 bytes each)
 ARRAY_DECK_DATA:
     FDB 0   ; Element 0
     FDB 1   ; Element 1
@@ -233,7 +216,7 @@ ARRAY_DECK_DATA:
     FDB 50   ; Element 50
     FDB 51   ; Element 51
 
-; Array literal for variable 'tab' (140 elements, 2 bytes each)
+; Array literal for variable 'TAB' (140 elements, 2 bytes each)
 ARRAY_TAB_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -376,7 +359,7 @@ ARRAY_TAB_DATA:
     FDB 0   ; Element 138
     FDB 0   ; Element 139
 
-; Array literal for variable 'tab_sz' (7 elements, 2 bytes each)
+; Array literal for variable 'TAB_SZ' (7 elements, 2 bytes each)
 ARRAY_TAB_SZ_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -386,7 +369,7 @@ ARRAY_TAB_SZ_DATA:
     FDB 0   ; Element 5
     FDB 0   ; Element 6
 
-; Array literal for variable 'tab_hid' (7 elements, 2 bytes each)
+; Array literal for variable 'TAB_HID' (7 elements, 2 bytes each)
 ARRAY_TAB_HID_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -396,14 +379,14 @@ ARRAY_TAB_HID_DATA:
     FDB 0   ; Element 5
     FDB 0   ; Element 6
 
-; Array literal for variable 'found_cnt' (4 elements, 2 bytes each)
+; Array literal for variable 'FOUND_CNT' (4 elements, 2 bytes each)
 ARRAY_FOUND_CNT_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
     FDB 0   ; Element 2
     FDB 0   ; Element 3
 
-; Array literal for variable 'stock' (24 elements, 2 bytes each)
+; Array literal for variable 'STOCK' (24 elements, 2 bytes each)
 ARRAY_STOCK_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -430,7 +413,7 @@ ARRAY_STOCK_DATA:
     FDB 0   ; Element 22
     FDB 0   ; Element 23
 
-; Array literal for variable 'waste' (24 elements, 2 bytes each)
+; Array literal for variable 'WASTE' (24 elements, 2 bytes each)
 ARRAY_WASTE_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -466,13 +449,14 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    CLR DRAW_VEC_INTENSITY ; 0 = use recorded/vector intensity (no override)
     LDA #$F8
     STA TEXT_SCALE_H      ; Default height = -8 (normal size)
     LDA #$48
     STA TEXT_SCALE_W      ; Default width = 72 (normal size)
     LDA #$7F
     STA DRAW_SCALE        ; Default T1 scale = $7F (127 = full BIOS scale)
-    ; Copy array 'deck' from ROM to RAM (52 elements)
+    ; Copy array 'DECK' from ROM to RAM (52 elements)
     LDX #ARRAY_DECK_DATA       ; Source: ROM array data
     LDU #VAR_DECK_DATA       ; Dest: RAM array space
     LDD #52        ; Number of elements
@@ -483,7 +467,7 @@ MAIN:
     LBNE .COPY_LOOP_0 ; Loop until done (LBNE for long branch)
     LDX #VAR_DECK_DATA    ; Array now in RAM
     STX VAR_DECK
-    ; Copy array 'tab' from ROM to RAM (140 elements)
+    ; Copy array 'TAB' from ROM to RAM (140 elements)
     LDX #ARRAY_TAB_DATA       ; Source: ROM array data
     LDU #VAR_TAB_DATA       ; Dest: RAM array space
     LDD #140        ; Number of elements
@@ -494,7 +478,7 @@ MAIN:
     LBNE .COPY_LOOP_1 ; Loop until done (LBNE for long branch)
     LDX #VAR_TAB_DATA    ; Array now in RAM
     STX VAR_TAB
-    ; Copy array 'tab_sz' from ROM to RAM (7 elements)
+    ; Copy array 'TAB_SZ' from ROM to RAM (7 elements)
     LDX #ARRAY_TAB_SZ_DATA       ; Source: ROM array data
     LDU #VAR_TAB_SZ_DATA       ; Dest: RAM array space
     LDD #7        ; Number of elements
@@ -505,7 +489,7 @@ MAIN:
     LBNE .COPY_LOOP_2 ; Loop until done (LBNE for long branch)
     LDX #VAR_TAB_SZ_DATA    ; Array now in RAM
     STX VAR_TAB_SZ
-    ; Copy array 'tab_hid' from ROM to RAM (7 elements)
+    ; Copy array 'TAB_HID' from ROM to RAM (7 elements)
     LDX #ARRAY_TAB_HID_DATA       ; Source: ROM array data
     LDU #VAR_TAB_HID_DATA       ; Dest: RAM array space
     LDD #7        ; Number of elements
@@ -516,7 +500,7 @@ MAIN:
     LBNE .COPY_LOOP_3 ; Loop until done (LBNE for long branch)
     LDX #VAR_TAB_HID_DATA    ; Array now in RAM
     STX VAR_TAB_HID
-    ; Copy array 'found_cnt' from ROM to RAM (4 elements)
+    ; Copy array 'FOUND_CNT' from ROM to RAM (4 elements)
     LDX #ARRAY_FOUND_CNT_DATA       ; Source: ROM array data
     LDU #VAR_FOUND_CNT_DATA       ; Dest: RAM array space
     LDD #4        ; Number of elements
@@ -527,7 +511,7 @@ MAIN:
     LBNE .COPY_LOOP_4 ; Loop until done (LBNE for long branch)
     LDX #VAR_FOUND_CNT_DATA    ; Array now in RAM
     STX VAR_FOUND_CNT
-    ; Copy array 'stock' from ROM to RAM (24 elements)
+    ; Copy array 'STOCK' from ROM to RAM (24 elements)
     LDX #ARRAY_STOCK_DATA       ; Source: ROM array data
     LDU #VAR_STOCK_DATA       ; Dest: RAM array space
     LDD #24        ; Number of elements
@@ -540,7 +524,7 @@ MAIN:
     STX VAR_STOCK
     LDD #0
     STD VAR_STK_SZ
-    ; Copy array 'waste' from ROM to RAM (24 elements)
+    ; Copy array 'WASTE' from ROM to RAM (24 elements)
     LDX #ARRAY_WASTE_DATA       ; Source: ROM array data
     LDU #VAR_WASTE_DATA       ; Dest: RAM array space
     LDD #24        ; Number of elements
@@ -636,10 +620,13 @@ MAIN:
     ; Prime BIOS button state at startup
     JSR $F1BA    ; Read_Btns: reads PSG reg14 -> $C80F, $C811, $C80E
     ; Call main() for initialization
+; VPy_LINE:104
     LDD #0  ; const STATE_PLAY
     STD VAR_GAME_STATE
-    JSR shuffle
-    JSR deal
+; VPy_LINE:105
+    JSR SHUFFLE
+; VPy_LINE:106
+    JSR DEAL
     CLR >$C811  ; Force-clear Vec_Buttons before first loop() frame
 
 .MAIN_LOOP:
@@ -649,6 +636,12 @@ MAIN:
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
     JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
+    JSR $F1AA    ; DP_to_D0 (Joy_Analog requires DP=$D0)
+    JSR $F1F5    ; Joy_Analog: poll all 4 axes once → $C81B-$C81E
+    JSR Reset0Ref ; Restore beam state after Joy_Analog
+    JSR $F1AF    ; DP_to_C8 (restore DP for RAM access)
+; VPy_LINE:110
+; NATIVE_CALL: J1_BUTTON_1 at line 110
     LDA >$C80F   ; Vec_Btns_1: bit0=1 means btn1 pressed
     BITA #$01
     BNE .J1B1_0_ON
@@ -659,6 +652,8 @@ LOOP_BODY:
 .J1B1_0_END:
     STD RESULT
     STD VAR_G_CARD
+; VPy_LINE:111
+; NATIVE_CALL: J1_BUTTON_2 at line 111
     LDA >$C80F   ; Vec_Btns_1: bit1=1 means btn2 pressed
     BITA #$02
     BNE .J1B2_1_ON
@@ -669,10 +664,13 @@ LOOP_BODY:
 .J1B2_1_END:
     STD RESULT
     STD VAR_G_RANK
+; VPy_LINE:112
     LDD #0
     STD VAR_BTN1_FIRE
+; VPy_LINE:113
     LDD #0
     STD VAR_BTN2_FIRE
+; VPy_LINE:114
     LDD #1
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_CARD
@@ -701,11 +699,13 @@ LOOP_BODY:
     LDD #0
 .LOGIC_0_END:
     LBEQ IF_NEXT_1
+; VPy_LINE:115
     LDD #1
     STD VAR_BTN1_FIRE
     LBRA IF_END_0
 IF_NEXT_1:
 IF_END_0:
+; VPy_LINE:116
     LDD #1
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_RANK
@@ -734,51 +734,54 @@ IF_END_0:
     LDD #0
 .LOGIC_3_END:
     LBEQ IF_NEXT_3
+; VPy_LINE:117
     LDD #1
     STD VAR_BTN2_FIRE
     LBRA IF_END_2
 IF_NEXT_3:
 IF_END_2:
+; VPy_LINE:118
     LDD >VAR_G_CARD
     STD VAR_PREV_BTN1
+; VPy_LINE:119
     LDD >VAR_G_RANK
     STD VAR_PREV_BTN2
-    LDD #0  ; const STATE_PLAY
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+; VPy_LINE:121
     LDD >VAR_GAME_STATE
-    CMPD TMPVAL
-    LBEQ .CMP_6_TRUE
-    LDD #0
-    LBRA .CMP_6_END
-.CMP_6_TRUE:
-    LDD #1
-.CMP_6_END:
-    LBEQ IF_NEXT_5
-    JSR update_input
-    JSR draw_table
-    JSR check_win
+    CMPD #0
+    LBNE IF_NEXT_5
+; VPy_LINE:122
+    JSR UPDATE_INPUT
+; VPy_LINE:123
+    JSR DRAW_TABLE
+; VPy_LINE:124
+    JSR CHECK_WIN
     LBRA IF_END_4
 IF_NEXT_5:
-    JSR draw_win_screen
+; VPy_LINE:126
+    JSR DRAW_WIN_SCREEN
 IF_END_4:
     RTS
 
-; Function: shuffle
-shuffle:
+; Function: SHUFFLE
+SHUFFLE:
+; VPy_LINE:132
     LDD #51
     STD VAR_G_C
+; VPy_LINE:133
 WH_6: ; while start
     LDD #0
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_C
     CMPD TMPVAL
-    LBGT .CMP_7_TRUE
+    LBGT .CMP_6_TRUE
     LDD #0
-    LBRA .CMP_7_END
-.CMP_7_TRUE:
+    LBRA .CMP_6_END
+.CMP_6_TRUE:
     LDD #1
-.CMP_7_END:
+.CMP_6_END:
     LBEQ WH_END_7
+; VPy_LINE:134
     ; RAND_RANGE: Random in range [min, max]
     LDD #0
     STD TMPPTR     ; Save min
@@ -787,6 +790,7 @@ WH_6: ; while start
     JSR RAND_RANGE_HELPER
     STD RESULT
     STD VAR_G_IDX
+; VPy_LINE:135
     LDX #VAR_DECK_DATA  ; Array base
     LDD >VAR_G_C
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -796,6 +800,7 @@ WH_6: ; while start
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD VAR_G_CARD
+; VPy_LINE:136
     LDD >VAR_G_C
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -804,7 +809,7 @@ WH_6: ; while start
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDX #VAR_DECK_DATA  ; Array base
     LDD >VAR_G_IDX
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -813,8 +818,9 @@ WH_6: ; while start
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:137
     LDD >VAR_G_IDX
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -823,23 +829,23 @@ WH_6: ; while start
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDD >VAR_G_CARD
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
-    LDD >VAR_G_C
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:138
     LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_C
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_G_C
     LBRA WH_6
 WH_END_7: ; while end
     RTS
 
-; Function: deal
-deal:
+; Function: DEAL
+DEAL:
+; VPy_LINE:144
     LDD #0
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -848,10 +854,11 @@ deal:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDD #0
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:145
     LDD #1
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -860,10 +867,11 @@ deal:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDD #0
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:146
     LDD #2
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -872,10 +880,11 @@ deal:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDD #0
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:147
     LDD #3
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -884,10 +893,11 @@ deal:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDD #0
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:148
     LDD #4
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -896,10 +906,11 @@ deal:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDD #0
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:149
     LDD #5
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -908,10 +919,11 @@ deal:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDD #0
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:150
     LDD #6
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -920,10 +932,11 @@ deal:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDD #0
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:151
     LDD #0
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -932,10 +945,11 @@ deal:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDD #0
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:152
     LDD #1
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -944,10 +958,11 @@ deal:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDD #0
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:153
     LDD #2
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -956,10 +971,11 @@ deal:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDD #0
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:154
     LDD #3
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -968,10 +984,11 @@ deal:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDD #0
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:155
     LDD #4
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -980,10 +997,11 @@ deal:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDD #0
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:156
     LDD #5
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -992,10 +1010,11 @@ deal:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDD #0
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:157
     LDD #6
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -1004,10 +1023,11 @@ deal:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDD #0
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:158
     LDD #0
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -1016,10 +1036,11 @@ deal:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDD #0
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:159
     LDD #1
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -1028,10 +1049,11 @@ deal:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDD #0
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:160
     LDD #2
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -1040,10 +1062,11 @@ deal:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDD #0
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:161
     LDD #3
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -1052,59 +1075,72 @@ deal:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDD #0
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:162
     LDD #0
     STD VAR_STK_SZ
+; VPy_LINE:163
     LDD #0
     STD VAR_WST_SZ
+; VPy_LINE:164
     LDD #-1
     STD VAR_SEL_CARD
+; VPy_LINE:165
     LDD #-1
     STD VAR_SEL_SRC
+; VPy_LINE:166
     LDD #0
     STD VAR_CURSOR
+; VPy_LINE:168
     LDD #0
     STD VAR_DEAL_IDX
+; VPy_LINE:169
     LDD #0
     STD VAR_G_C
+; VPy_LINE:170
 WH_8: ; while start
     LDD #7
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_C
     CMPD TMPVAL
-    LBLT .CMP_8_TRUE
+    LBLT .CMP_7_TRUE
     LDD #0
-    LBRA .CMP_8_END
-.CMP_8_TRUE:
+    LBRA .CMP_7_END
+.CMP_7_TRUE:
     LDD #1
-.CMP_8_END:
+.CMP_7_END:
     LBEQ WH_END_9
+; VPy_LINE:171
     LDD #0
     STD VAR_G_ROW
+; VPy_LINE:172
 WH_10: ; while start
     LDD >VAR_G_C
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_ROW
     CMPD TMPVAL
-    LBLE .CMP_9_TRUE
+    LBLE .CMP_8_TRUE
     LDD #0
-    LBRA .CMP_9_END
-.CMP_9_TRUE:
+    LBRA .CMP_8_END
+.CMP_8_TRUE:
     LDD #1
-.CMP_9_END:
+.CMP_8_END:
     LBEQ WH_END_11
-    LDD >VAR_G_C
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:173
     LDD #20
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_C
+    TFR D,X             ; X = LEFT
+    LDD TMPVAL          ; D = RIGHT
+    JSR MUL16           ; D = X * D
+    STD TMPVAL          ; LEFT → TMPVAL (RIGHT simple, commutative)
     LDD >VAR_G_ROW
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_G_TIDX
+; VPy_LINE:174
     LDD >VAR_G_TIDX
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -1113,7 +1149,7 @@ WH_10: ; while start
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDX #VAR_DECK_DATA  ; Array base
     LDD >VAR_DEAL_IDX
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -1122,20 +1158,23 @@ WH_10: ; while start
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:175
+    LDD #1
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
     LDD >VAR_DEAL_IDX
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_DEAL_IDX
-    LDD >VAR_G_ROW
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:176
     LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_ROW
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_G_ROW
     LBRA WH_10
 WH_END_11: ; while end
+; VPy_LINE:177
     LDD >VAR_G_C
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -1144,13 +1183,14 @@ WH_END_11: ; while end
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD >VAR_G_C
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    LDX TMPPTR2     ; Load computed address
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_C
+    ADDD TMPVAL         ; D = LEFT + RIGHT
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:178
     LDD >VAR_G_C
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -1159,31 +1199,35 @@ WH_END_11: ; while end
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDD >VAR_G_C
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
-    LDD >VAR_G_C
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:179
     LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_C
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_G_C
     LBRA WH_8
 WH_END_9: ; while end
+; VPy_LINE:181
     LDD #0
     STD VAR_G_ROW
+; VPy_LINE:182
 WH_12: ; while start
     LDD #52
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_DEAL_IDX
     CMPD TMPVAL
-    LBLT .CMP_10_TRUE
+    LBLT .CMP_9_TRUE
     LDD #0
-    LBRA .CMP_10_END
-.CMP_10_TRUE:
+    LBRA .CMP_9_END
+.CMP_9_TRUE:
     LDD #1
-.CMP_10_END:
+.CMP_9_END:
     LBEQ WH_END_13
+; VPy_LINE:183
     LDD >VAR_G_ROW
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -1192,7 +1236,7 @@ WH_12: ; while start
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDX #VAR_DECK_DATA  ; Array base
     LDD >VAR_DEAL_IDX
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -1201,42 +1245,50 @@ WH_12: ; while start
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:184
+    LDD #1
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
     LDD >VAR_DEAL_IDX
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_DEAL_IDX
-    LDD >VAR_G_ROW
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:185
     LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_ROW
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_G_ROW
     LBRA WH_12
 WH_END_13: ; while end
+; VPy_LINE:186
     LDD >VAR_G_ROW
     STD VAR_STK_SZ
     RTS
 
-; Function: update_input
-update_input:
+; Function: UPDATE_INPUT
+UPDATE_INPUT:
+; VPy_LINE:192
+; NATIVE_CALL: J1_X at line 192
     JSR J1X_BUILTIN
     STD RESULT
     STD VAR_G_IDX
+; VPy_LINE:193
     LDD #0
     STD VAR_G_ROW
+; VPy_LINE:194
     LDD #40
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_IDX
     CMPD TMPVAL
-    LBGT .CMP_11_TRUE
+    LBGT .CMP_10_TRUE
     LDD #0
-    LBRA .CMP_11_END
-.CMP_11_TRUE:
+    LBRA .CMP_10_END
+.CMP_10_TRUE:
     LDD #1
-.CMP_11_END:
+.CMP_10_END:
     LBEQ IF_NEXT_15
+; VPy_LINE:195
     LDD #1
     STD VAR_G_ROW
     LBRA IF_END_14
@@ -1245,20 +1297,33 @@ IF_NEXT_15:
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_IDX
     CMPD TMPVAL
-    LBLT .CMP_12_TRUE
+    LBLT .CMP_11_TRUE
     LDD #0
-    LBRA .CMP_12_END
-.CMP_12_TRUE:
+    LBRA .CMP_11_END
+.CMP_11_TRUE:
     LDD #1
-.CMP_12_END:
+.CMP_11_END:
     LBEQ IF_END_14
+; VPy_LINE:197
     LDD #-1
     STD VAR_G_ROW
     LBRA IF_END_14
 IF_END_14:
+; VPy_LINE:198
     LDD #1
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_ROW
+    CMPD TMPVAL
+    LBEQ .CMP_13_TRUE
+    LDD #0
+    LBRA .CMP_13_END
+.CMP_13_TRUE:
+    LDD #1
+.CMP_13_END:
+    LBEQ .LOGIC_12_FALSE
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PREV_JX
     CMPD TMPVAL
     LBEQ .CMP_14_TRUE
     LDD #0
@@ -1266,40 +1331,32 @@ IF_END_14:
 .CMP_14_TRUE:
     LDD #1
 .CMP_14_END:
-    LBEQ .LOGIC_13_FALSE
+    LBEQ .LOGIC_12_FALSE
+    LDD #1
+    LBRA .LOGIC_12_END
+.LOGIC_12_FALSE:
     LDD #0
+.LOGIC_12_END:
+    LBEQ IF_NEXT_17
+; VPy_LINE:199
+    LDD #1
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_CURSOR
+    ADDD TMPVAL         ; D = LEFT + RIGHT
+    STD VAR_CURSOR
+; VPy_LINE:200
+    LDD #12
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_PREV_JX
+    LDD >VAR_CURSOR
     CMPD TMPVAL
-    LBEQ .CMP_15_TRUE
+    LBGT .CMP_15_TRUE
     LDD #0
     LBRA .CMP_15_END
 .CMP_15_TRUE:
     LDD #1
 .CMP_15_END:
-    LBEQ .LOGIC_13_FALSE
-    LDD #1
-    LBRA .LOGIC_13_END
-.LOGIC_13_FALSE:
-    LDD #0
-.LOGIC_13_END:
-    LBEQ IF_NEXT_17
-    LDD >VAR_CURSOR
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_CURSOR
-    LDD #12
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURSOR
-    CMPD TMPVAL
-    LBGT .CMP_16_TRUE
-    LDD #0
-    LBRA .CMP_16_END
-.CMP_16_TRUE:
-    LDD #1
-.CMP_16_END:
     LBEQ IF_NEXT_19
+; VPy_LINE:201
     LDD #0
     STD VAR_CURSOR
     LBRA IF_END_18
@@ -1311,48 +1368,49 @@ IF_NEXT_17:
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_ROW
     CMPD TMPVAL
+    LBEQ .CMP_17_TRUE
+    LDD #0
+    LBRA .CMP_17_END
+.CMP_17_TRUE:
+    LDD #1
+.CMP_17_END:
+    LBEQ .LOGIC_16_FALSE
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PREV_JX
+    CMPD TMPVAL
     LBEQ .CMP_18_TRUE
     LDD #0
     LBRA .CMP_18_END
 .CMP_18_TRUE:
     LDD #1
 .CMP_18_END:
-    LBEQ .LOGIC_17_FALSE
+    LBEQ .LOGIC_16_FALSE
+    LDD #1
+    LBRA .LOGIC_16_END
+.LOGIC_16_FALSE:
+    LDD #0
+.LOGIC_16_END:
+    LBEQ IF_END_16
+; VPy_LINE:203
+    LDD #1
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_CURSOR
+    SUBD TMPVAL         ; D = LEFT - RIGHT
+    STD VAR_CURSOR
+; VPy_LINE:204
     LDD #0
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_PREV_JX
+    LDD >VAR_CURSOR
     CMPD TMPVAL
-    LBEQ .CMP_19_TRUE
+    LBLT .CMP_19_TRUE
     LDD #0
     LBRA .CMP_19_END
 .CMP_19_TRUE:
     LDD #1
 .CMP_19_END:
-    LBEQ .LOGIC_17_FALSE
-    LDD #1
-    LBRA .LOGIC_17_END
-.LOGIC_17_FALSE:
-    LDD #0
-.LOGIC_17_END:
-    LBEQ IF_END_16
-    LDD >VAR_CURSOR
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_CURSOR
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURSOR
-    CMPD TMPVAL
-    LBLT .CMP_20_TRUE
-    LDD #0
-    LBRA .CMP_20_END
-.CMP_20_TRUE:
-    LDD #1
-.CMP_20_END:
     LBEQ IF_NEXT_21
+; VPy_LINE:205
     LDD #12
     STD VAR_CURSOR
     LBRA IF_END_20
@@ -1360,75 +1418,59 @@ IF_NEXT_21:
 IF_END_20:
     LBRA IF_END_16
 IF_END_16:
+; VPy_LINE:206
     LDD >VAR_G_ROW
     STD VAR_PREV_JX
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+; VPy_LINE:208
     LDD >VAR_BTN2_FIRE
-    CMPD TMPVAL
-    LBEQ .CMP_21_TRUE
-    LDD #0
-    LBRA .CMP_21_END
-.CMP_21_TRUE:
-    LDD #1
-.CMP_21_END:
-    LBEQ IF_NEXT_23
-    JSR do_deal_stock
+    CMPD #1
+    LBNE IF_NEXT_23
+; VPy_LINE:209
+    JSR DO_DEAL_STOCK
     LBRA IF_END_22
 IF_NEXT_23:
 IF_END_22:
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+; VPy_LINE:211
     LDD >VAR_BTN1_FIRE
-    CMPD TMPVAL
-    LBEQ .CMP_22_TRUE
-    LDD #0
-    LBRA .CMP_22_END
-.CMP_22_TRUE:
-    LDD #1
-.CMP_22_END:
-    LBEQ IF_NEXT_25
-    LDD #-1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    CMPD #1
+    LBNE IF_NEXT_25
+; VPy_LINE:212
     LDD >VAR_SEL_CARD
-    CMPD TMPVAL
-    LBEQ .CMP_23_TRUE
-    LDD #0
-    LBRA .CMP_23_END
-.CMP_23_TRUE:
-    LDD #1
-.CMP_23_END:
-    LBEQ IF_NEXT_27
-    JSR do_pick_up
+    CMPD #-1
+    LBNE IF_NEXT_27
+; VPy_LINE:213
+    JSR DO_PICK_UP
     LBRA IF_END_26
 IF_NEXT_27:
-    JSR do_place
+; VPy_LINE:215
+    JSR DO_PLACE
 IF_END_26:
     LBRA IF_END_24
 IF_NEXT_25:
 IF_END_24:
     RTS
 
-; Function: do_deal_stock
-do_deal_stock:
+; Function: DO_DEAL_STOCK
+DO_DEAL_STOCK:
+; VPy_LINE:218
     LDD #0
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_STK_SZ
     CMPD TMPVAL
-    LBGT .CMP_24_TRUE
+    LBGT .CMP_20_TRUE
     LDD #0
-    LBRA .CMP_24_END
-.CMP_24_TRUE:
+    LBRA .CMP_20_END
+.CMP_20_TRUE:
     LDD #1
-.CMP_24_END:
+.CMP_20_END:
     LBEQ IF_NEXT_29
-    LDD >VAR_STK_SZ
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:219
     LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_STK_SZ
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_STK_SZ
+; VPy_LINE:220
     LDD >VAR_WST_SZ
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -1437,7 +1479,7 @@ do_deal_stock:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDX #VAR_STOCK_DATA  ; Array base
     LDD >VAR_STK_SZ
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -1446,29 +1488,33 @@ do_deal_stock:
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
-    LDD >VAR_WST_SZ
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:221
     LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_WST_SZ
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_WST_SZ
     LBRA IF_END_28
 IF_NEXT_29:
+; VPy_LINE:223
     LDD #0
     STD VAR_G_ROW
+; VPy_LINE:224
 WH_30: ; while start
     LDD >VAR_WST_SZ
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_ROW
     CMPD TMPVAL
-    LBLT .CMP_25_TRUE
+    LBLT .CMP_21_TRUE
     LDD #0
-    LBRA .CMP_25_END
-.CMP_25_TRUE:
+    LBRA .CMP_21_END
+.CMP_21_TRUE:
     LDD #1
-.CMP_25_END:
+.CMP_21_END:
     LBEQ WH_END_31
+; VPy_LINE:225
     LDD >VAR_G_ROW
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -1477,7 +1523,7 @@ WH_30: ; while start
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDX #VAR_WASTE_DATA  ; Array base
     LDD >VAR_G_ROW
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -1486,37 +1532,43 @@ WH_30: ; while start
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
-    LDD >VAR_G_ROW
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:226
     LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_ROW
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_G_ROW
     LBRA WH_30
 WH_END_31: ; while end
+; VPy_LINE:227
     LDD >VAR_WST_SZ
     STD VAR_STK_SZ
+; VPy_LINE:228
     LDD #0
     STD VAR_WST_SZ
 IF_END_28:
     RTS
 
-; Function: do_pick_up
-do_pick_up:
+; Function: DO_PICK_UP
+DO_PICK_UP:
+; VPy_LINE:231
     LDD #6
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_CURSOR
     CMPD TMPVAL
-    LBLE .CMP_26_TRUE
+    LBLE .CMP_22_TRUE
     LDD #0
-    LBRA .CMP_26_END
-.CMP_26_TRUE:
+    LBRA .CMP_22_END
+.CMP_22_TRUE:
     LDD #1
-.CMP_26_END:
+.CMP_22_END:
     LBEQ IF_NEXT_33
+; VPy_LINE:232
     LDD >VAR_CURSOR
     STD VAR_G_C
+; VPy_LINE:233
     LDX #VAR_TAB_SZ_DATA  ; Array base
     LDD >VAR_G_C
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -1526,6 +1578,7 @@ do_pick_up:
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD VAR_G_SZ
+; VPy_LINE:234
     LDX #VAR_TAB_HID_DATA  ; Array base
     LDD >VAR_G_C
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -1535,48 +1588,52 @@ do_pick_up:
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD VAR_G_HD
+; VPy_LINE:235
     LDD #0
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_SZ
     CMPD TMPVAL
-    LBGT .CMP_28_TRUE
+    LBGT .CMP_24_TRUE
     LDD #0
-    LBRA .CMP_28_END
-.CMP_28_TRUE:
+    LBRA .CMP_24_END
+.CMP_24_TRUE:
     LDD #1
-.CMP_28_END:
-    LBEQ .LOGIC_27_FALSE
+.CMP_24_END:
+    LBEQ .LOGIC_23_FALSE
     LDD >VAR_G_HD
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_SZ
     CMPD TMPVAL
-    LBGT .CMP_29_TRUE
+    LBGT .CMP_25_TRUE
     LDD #0
-    LBRA .CMP_29_END
-.CMP_29_TRUE:
+    LBRA .CMP_25_END
+.CMP_25_TRUE:
     LDD #1
-.CMP_29_END:
-    LBEQ .LOGIC_27_FALSE
+.CMP_25_END:
+    LBEQ .LOGIC_23_FALSE
     LDD #1
-    LBRA .LOGIC_27_END
-.LOGIC_27_FALSE:
+    LBRA .LOGIC_23_END
+.LOGIC_23_FALSE:
     LDD #0
-.LOGIC_27_END:
+.LOGIC_23_END:
     LBEQ IF_NEXT_35
-    LDD >VAR_G_C
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:236
     LDD #20
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_C
+    TFR D,X             ; X = LEFT
+    LDD TMPVAL          ; D = RIGHT
+    JSR MUL16           ; D = X * D
+    STD TMPVAL          ; LEFT → TMPVAL (RIGHT simple, commutative)
     LDD >VAR_G_SZ
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    ADDD TMPVAL         ; D = LEFT + RIGHT
+    PSHS D              ; save LEFT on stack (nested RIGHT)
     LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL
+    PULS D              ; restore LEFT into D
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_G_TIDX
+; VPy_LINE:237
     LDX #VAR_TAB_DATA  ; Array base
     LDD >VAR_G_TIDX
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -1586,8 +1643,10 @@ do_pick_up:
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD VAR_SEL_CARD
+; VPy_LINE:238
     LDD >VAR_CURSOR
     STD VAR_SEL_SRC
+; VPy_LINE:239
     LDD >VAR_G_C
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -1596,15 +1655,14 @@ do_pick_up:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD >VAR_G_SZ
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    LDX TMPPTR2     ; Load computed address
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_SZ
+    SUBD TMPVAL         ; D = LEFT - RIGHT
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:240
     LDD #0
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDX #VAR_TAB_SZ_DATA  ; Array base
@@ -1616,13 +1674,13 @@ do_pick_up:
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     CMPD TMPVAL
-    LBGT .CMP_31_TRUE
+    LBGT .CMP_27_TRUE
     LDD #0
-    LBRA .CMP_31_END
-.CMP_31_TRUE:
+    LBRA .CMP_27_END
+.CMP_27_TRUE:
     LDD #1
-.CMP_31_END:
-    LBEQ .LOGIC_30_FALSE
+.CMP_27_END:
+    LBEQ .LOGIC_26_FALSE
     LDX #VAR_TAB_HID_DATA  ; Array base
     LDD >VAR_G_C
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -1641,19 +1699,20 @@ do_pick_up:
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     CMPD TMPVAL
-    LBLE .CMP_32_TRUE
+    LBLE .CMP_28_TRUE
     LDD #0
-    LBRA .CMP_32_END
-.CMP_32_TRUE:
+    LBRA .CMP_28_END
+.CMP_28_TRUE:
     LDD #1
-.CMP_32_END:
-    LBEQ .LOGIC_30_FALSE
+.CMP_28_END:
+    LBEQ .LOGIC_26_FALSE
     LDD #1
-    LBRA .LOGIC_30_END
-.LOGIC_30_FALSE:
+    LBRA .LOGIC_26_END
+.LOGIC_26_FALSE:
     LDD #0
-.LOGIC_30_END:
+.LOGIC_26_END:
     LBEQ IF_NEXT_37
+; VPy_LINE:241
     LDD >VAR_G_C
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -1662,7 +1721,7 @@ do_pick_up:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDX #VAR_TAB_HID_DATA  ; Array base
     LDD >VAR_G_C
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -1671,12 +1730,12 @@ do_pick_up:
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    PSHS D              ; save LEFT on stack (nested RIGHT)
     LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    LDX TMPPTR2     ; Load computed address
+    STD TMPVAL          ; RIGHT → TMPVAL
+    PULS D              ; restore LEFT into D
+    SUBD TMPVAL         ; D = LEFT - RIGHT
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
     LBRA IF_END_36
 IF_NEXT_37:
@@ -1686,35 +1745,27 @@ IF_NEXT_35:
 IF_END_34:
     LBRA IF_END_32
 IF_NEXT_33:
-    LDD #8
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_CURSOR
-    CMPD TMPVAL
-    LBEQ .CMP_33_TRUE
-    LDD #0
-    LBRA .CMP_33_END
-.CMP_33_TRUE:
-    LDD #1
-.CMP_33_END:
-    LBEQ IF_END_32
+    CMPD #8
+    LBNE IF_END_32
+; VPy_LINE:243
     LDD #0
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_WST_SZ
     CMPD TMPVAL
-    LBGT .CMP_34_TRUE
+    LBGT .CMP_29_TRUE
     LDD #0
-    LBRA .CMP_34_END
-.CMP_34_TRUE:
+    LBRA .CMP_29_END
+.CMP_29_TRUE:
     LDD #1
-.CMP_34_END:
+.CMP_29_END:
     LBEQ IF_NEXT_39
+; VPy_LINE:244
     LDX #VAR_WASTE_DATA  ; Array base
-    LDD >VAR_WST_SZ
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_WST_SZ
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
@@ -1722,14 +1773,14 @@ IF_NEXT_33:
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD VAR_SEL_CARD
+; VPy_LINE:245
     LDD #8
     STD VAR_SEL_SRC
-    LDD >VAR_WST_SZ
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:246
     LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_WST_SZ
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_WST_SZ
     LBRA IF_END_38
 IF_NEXT_39:
@@ -1738,43 +1789,41 @@ IF_END_38:
 IF_END_32:
     RTS
 
-; Function: do_place
-do_place:
+; Function: DO_PLACE
+DO_PLACE:
+; VPy_LINE:249
     LDD #0
     STD VAR_G_PLACED
+; VPy_LINE:250
     LDD #6
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_CURSOR
     CMPD TMPVAL
-    LBLE .CMP_35_TRUE
+    LBLE .CMP_30_TRUE
     LDD #0
-    LBRA .CMP_35_END
-.CMP_35_TRUE:
+    LBRA .CMP_30_END
+.CMP_30_TRUE:
     LDD #1
-.CMP_35_END:
+.CMP_30_END:
     LBEQ IF_NEXT_41
+; VPy_LINE:251
     LDD >VAR_SEL_CARD
     STD VAR_ARG0
     LDD >VAR_CURSOR
     STD VAR_ARG1
-    JSR can_move_to_tab
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    JSR CAN_MOVE_TO_TAB
+; VPy_LINE:252
     LDD >VAR_G_RESULT
-    CMPD TMPVAL
-    LBEQ .CMP_36_TRUE
-    LDD #0
-    LBRA .CMP_36_END
-.CMP_36_TRUE:
-    LDD #1
-.CMP_36_END:
-    LBEQ IF_NEXT_43
-    LDD >VAR_CURSOR
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    CMPD #1
+    LBNE IF_NEXT_43
+; VPy_LINE:253
     LDD #20
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_CURSOR
+    TFR D,X             ; X = LEFT
+    LDD TMPVAL          ; D = RIGHT
+    JSR MUL16           ; D = X * D
+    PSHS D              ; save LEFT on stack (nested RIGHT)
     LDX #VAR_TAB_SZ_DATA  ; Array base
     LDD >VAR_CURSOR
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -1783,8 +1832,11 @@ do_place:
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL
+    PULS D              ; restore LEFT into D
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_G_TIDX
+; VPy_LINE:254
     LDD >VAR_G_TIDX
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -1793,10 +1845,11 @@ do_place:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDD >VAR_SEL_CARD
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:255
     LDD >VAR_CURSOR
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -1805,7 +1858,7 @@ do_place:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDX #VAR_TAB_SZ_DATA  ; Array base
     LDD >VAR_CURSOR
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -1814,11 +1867,12 @@ do_place:
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    STD TMPVAL          ; LEFT → TMPVAL (RIGHT simple, commutative)
     LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    LDX TMPPTR2     ; Load computed address
+    ADDD TMPVAL         ; D = LEFT + RIGHT
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:256
     LDD #1
     STD VAR_G_PLACED
     LBRA IF_END_42
@@ -1830,18 +1884,166 @@ IF_NEXT_41:
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_CURSOR
     CMPD TMPVAL
-    LBGE .CMP_38_TRUE
+    LBGE .CMP_32_TRUE
+    LDD #0
+    LBRA .CMP_32_END
+.CMP_32_TRUE:
+    LDD #1
+.CMP_32_END:
+    LBEQ .LOGIC_31_FALSE
+    LDD #12
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURSOR
+    CMPD TMPVAL
+    LBLE .CMP_33_TRUE
+    LDD #0
+    LBRA .CMP_33_END
+.CMP_33_TRUE:
+    LDD #1
+.CMP_33_END:
+    LBEQ .LOGIC_31_FALSE
+    LDD #1
+    LBRA .LOGIC_31_END
+.LOGIC_31_FALSE:
+    LDD #0
+.LOGIC_31_END:
+    LBEQ IF_END_40
+; VPy_LINE:258
+    LDD #9
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_CURSOR
+    SUBD TMPVAL         ; D = LEFT - RIGHT
+    STD VAR_G_SUIT
+; VPy_LINE:259
+    LDD >VAR_SEL_CARD
+    STD VAR_ARG0
+    LDD >VAR_G_SUIT
+    STD VAR_ARG1
+    JSR CAN_MOVE_TO_FOUND
+; VPy_LINE:260
+    LDD >VAR_G_RESULT
+    CMPD #1
+    LBNE IF_NEXT_45
+; VPy_LINE:261
+    LDD >VAR_G_SUIT
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_FOUND_CNT_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    PSHS X          ; Save computed address (stack-safe across function calls)
+    LDX #VAR_FOUND_CNT_DATA  ; Array base
+    LDD >VAR_G_SUIT
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD TMPVAL          ; LEFT → TMPVAL (RIGHT simple, commutative)
+    LDD #1
+    ADDD TMPVAL         ; D = LEFT + RIGHT
+    PULS X          ; Restore computed address
+    STD ,X          ; Store 16-bit value
+; VPy_LINE:262
+    LDD #1
+    STD VAR_G_PLACED
+    LBRA IF_END_44
+IF_NEXT_45:
+IF_END_44:
+    LBRA IF_END_40
+IF_END_40:
+; VPy_LINE:264
+    LDD >VAR_G_PLACED
+    CMPD #1
+    LBNE IF_NEXT_47
+; VPy_LINE:265
+    LDD #-1
+    STD VAR_SEL_CARD
+; VPy_LINE:266
+    LDD #-1
+    STD VAR_SEL_SRC
+    LBRA IF_END_46
+IF_NEXT_47:
+; VPy_LINE:268
+    JSR RETURN_CARD_TO_SRC
+IF_END_46:
+    RTS
+
+; Function: RETURN_CARD_TO_SRC
+RETURN_CARD_TO_SRC:
+; VPy_LINE:271
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SEL_SRC
+    CMPD TMPVAL
+    LBGE .CMP_35_TRUE
+    LDD #0
+    LBRA .CMP_35_END
+.CMP_35_TRUE:
+    LDD #1
+.CMP_35_END:
+    LBEQ .LOGIC_34_FALSE
+    LDD #6
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SEL_SRC
+    CMPD TMPVAL
+    LBLE .CMP_36_TRUE
+    LDD #0
+    LBRA .CMP_36_END
+.CMP_36_TRUE:
+    LDD #1
+.CMP_36_END:
+    LBEQ .LOGIC_34_FALSE
+    LDD #1
+    LBRA .LOGIC_34_END
+.LOGIC_34_FALSE:
+    LDD #0
+.LOGIC_34_END:
+    LBEQ IF_NEXT_49
+; VPy_LINE:272
+    LDD >VAR_SEL_SRC
+    STD VAR_G_C
+; VPy_LINE:273
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_TAB_SZ_DATA  ; Array base
+    LDD >VAR_G_C
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    CMPD TMPVAL
+    LBGT .CMP_38_TRUE
     LDD #0
     LBRA .CMP_38_END
 .CMP_38_TRUE:
     LDD #1
 .CMP_38_END:
     LBEQ .LOGIC_37_FALSE
-    LDD #12
+    LDX #VAR_TAB_HID_DATA  ; Array base
+    LDD >VAR_G_C
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURSOR
+    LDX #VAR_TAB_SZ_DATA  ; Array base
+    LDD >VAR_G_C
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     CMPD TMPVAL
-    LBLE .CMP_39_TRUE
+    LBEQ .CMP_39_TRUE
     LDD #0
     LBRA .CMP_39_END
 .CMP_39_TRUE:
@@ -1853,161 +2055,8 @@ IF_NEXT_41:
 .LOGIC_37_FALSE:
     LDD #0
 .LOGIC_37_END:
-    LBEQ IF_END_40
-    LDD >VAR_CURSOR
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #9
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_G_SUIT
-    LDD >VAR_SEL_CARD
-    STD VAR_ARG0
-    LDD >VAR_G_SUIT
-    STD VAR_ARG1
-    JSR can_move_to_found
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_RESULT
-    CMPD TMPVAL
-    LBEQ .CMP_40_TRUE
-    LDD #0
-    LBRA .CMP_40_END
-.CMP_40_TRUE:
-    LDD #1
-.CMP_40_END:
-    LBEQ IF_NEXT_45
-    LDD >VAR_G_SUIT
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_FOUND_CNT_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDX #VAR_FOUND_CNT_DATA  ; Array base
-    LDD >VAR_G_SUIT
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD #1
-    STD VAR_G_PLACED
-    LBRA IF_END_44
-IF_NEXT_45:
-IF_END_44:
-    LBRA IF_END_40
-IF_END_40:
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_PLACED
-    CMPD TMPVAL
-    LBEQ .CMP_41_TRUE
-    LDD #0
-    LBRA .CMP_41_END
-.CMP_41_TRUE:
-    LDD #1
-.CMP_41_END:
-    LBEQ IF_NEXT_47
-    LDD #-1
-    STD VAR_SEL_CARD
-    LDD #-1
-    STD VAR_SEL_SRC
-    LBRA IF_END_46
-IF_NEXT_47:
-    JSR return_card_to_src
-IF_END_46:
-    RTS
-
-; Function: return_card_to_src
-return_card_to_src:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SEL_SRC
-    CMPD TMPVAL
-    LBGE .CMP_43_TRUE
-    LDD #0
-    LBRA .CMP_43_END
-.CMP_43_TRUE:
-    LDD #1
-.CMP_43_END:
-    LBEQ .LOGIC_42_FALSE
-    LDD #6
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SEL_SRC
-    CMPD TMPVAL
-    LBLE .CMP_44_TRUE
-    LDD #0
-    LBRA .CMP_44_END
-.CMP_44_TRUE:
-    LDD #1
-.CMP_44_END:
-    LBEQ .LOGIC_42_FALSE
-    LDD #1
-    LBRA .LOGIC_42_END
-.LOGIC_42_FALSE:
-    LDD #0
-.LOGIC_42_END:
-    LBEQ IF_NEXT_49
-    LDD >VAR_SEL_SRC
-    STD VAR_G_C
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDX #VAR_TAB_SZ_DATA  ; Array base
-    LDD >VAR_G_C
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    CMPD TMPVAL
-    LBGT .CMP_46_TRUE
-    LDD #0
-    LBRA .CMP_46_END
-.CMP_46_TRUE:
-    LDD #1
-.CMP_46_END:
-    LBEQ .LOGIC_45_FALSE
-    LDX #VAR_TAB_HID_DATA  ; Array base
-    LDD >VAR_G_C
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDX #VAR_TAB_SZ_DATA  ; Array base
-    LDD >VAR_G_C
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    CMPD TMPVAL
-    LBEQ .CMP_47_TRUE
-    LDD #0
-    LBRA .CMP_47_END
-.CMP_47_TRUE:
-    LDD #1
-.CMP_47_END:
-    LBEQ .LOGIC_45_FALSE
-    LDD #1
-    LBRA .LOGIC_45_END
-.LOGIC_45_FALSE:
-    LDD #0
-.LOGIC_45_END:
     LBEQ IF_NEXT_51
+; VPy_LINE:274
     LDD >VAR_G_C
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -2016,7 +2065,7 @@ return_card_to_src:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDX #VAR_TAB_HID_DATA  ; Array base
     LDD >VAR_G_C
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -2025,20 +2074,22 @@ return_card_to_src:
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    STD TMPVAL          ; LEFT → TMPVAL (RIGHT simple, commutative)
     LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    LDX TMPPTR2     ; Load computed address
+    ADDD TMPVAL         ; D = LEFT + RIGHT
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
     LBRA IF_END_50
 IF_NEXT_51:
 IF_END_50:
-    LDD >VAR_G_C
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:275
     LDD #20
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_C
+    TFR D,X             ; X = LEFT
+    LDD TMPVAL          ; D = RIGHT
+    JSR MUL16           ; D = X * D
+    PSHS D              ; save LEFT on stack (nested RIGHT)
     LDX #VAR_TAB_SZ_DATA  ; Array base
     LDD >VAR_G_C
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -2047,8 +2098,11 @@ IF_END_50:
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL
+    PULS D              ; restore LEFT into D
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_G_TIDX
+; VPy_LINE:276
     LDD >VAR_G_TIDX
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -2057,10 +2111,11 @@ IF_END_50:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDD >VAR_SEL_CARD
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:277
     LDD >VAR_G_C
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -2069,7 +2124,7 @@ IF_END_50:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDX #VAR_TAB_SZ_DATA  ; Array base
     LDD >VAR_G_C
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -2078,24 +2133,17 @@ IF_END_50:
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    STD TMPVAL          ; LEFT → TMPVAL (RIGHT simple, commutative)
     LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    LDX TMPPTR2     ; Load computed address
+    ADDD TMPVAL         ; D = LEFT + RIGHT
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
     LBRA IF_END_48
 IF_NEXT_49:
-    LDD #8
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_SEL_SRC
-    CMPD TMPVAL
-    LBEQ .CMP_48_TRUE
-    LDD #0
-    LBRA .CMP_48_END
-.CMP_48_TRUE:
-    LDD #1
-.CMP_48_END:
-    LBEQ IF_END_48
+    CMPD #8
+    LBNE IF_END_48
+; VPy_LINE:279
     LDD >VAR_WST_SZ
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -2104,25 +2152,29 @@ IF_NEXT_49:
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
+    PSHS X          ; Save computed address (stack-safe across function calls)
     LDD >VAR_SEL_CARD
-    LDX TMPPTR2     ; Load computed address
+    PULS X          ; Restore computed address
     STD ,X          ; Store 16-bit value
-    LDD >VAR_WST_SZ
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:280
     LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_WST_SZ
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_WST_SZ
     LBRA IF_END_48
 IF_END_48:
+; VPy_LINE:281
     LDD #-1
     STD VAR_SEL_CARD
+; VPy_LINE:282
     LDD #-1
     STD VAR_SEL_SRC
     RTS
 
-; Function: can_move_to_tab
-can_move_to_tab:
+; Function: CAN_MOVE_TO_TAB
+CAN_MOVE_TO_TAB:
+; VPy_LINE:288
     LDX #VAR_TAB_SZ_DATA  ; Array base
     LDD >VAR_ARG1
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -2132,59 +2184,53 @@ can_move_to_tab:
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD VAR_G_SZ
-    LDD >VAR_ARG0
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:289
     LDD #4
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR DIV16       ; D = X / D
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_ARG0
+    TFR D,X             ; X = LEFT (dividend)
+    LDD TMPVAL          ; D = RIGHT (divisor)
+    JSR DIV16           ; D = X / D
     STD VAR_G_RANK
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+; VPy_LINE:290
     LDD >VAR_G_SZ
-    CMPD TMPVAL
-    LBEQ .CMP_49_TRUE
-    LDD #0
-    LBRA .CMP_49_END
-.CMP_49_TRUE:
-    LDD #1
-.CMP_49_END:
-    LBEQ IF_NEXT_53
-    LDD #12
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    CMPD #0
+    LBNE IF_NEXT_53
+; VPy_LINE:291
     LDD >VAR_G_RANK
-    CMPD TMPVAL
-    LBEQ .CMP_50_TRUE
-    LDD #0
-    LBRA .CMP_50_END
-.CMP_50_TRUE:
-    LDD #1
-.CMP_50_END:
-    LBEQ IF_NEXT_55
+    CMPD #12
+    LBNE IF_NEXT_55
+; VPy_LINE:292
     LDD #1
     STD VAR_G_RESULT
     LBRA IF_END_54
 IF_NEXT_55:
+; VPy_LINE:294
     LDD #0
     STD VAR_G_RESULT
 IF_END_54:
+; VPy_LINE:295
     RTS
     LBRA IF_END_52
 IF_NEXT_53:
 IF_END_52:
-    LDD >VAR_ARG1
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:296
     LDD #20
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_ARG1
+    TFR D,X             ; X = LEFT
+    LDD TMPVAL          ; D = RIGHT
+    JSR MUL16           ; D = X * D
+    STD TMPVAL          ; LEFT → TMPVAL (RIGHT simple, commutative)
     LDD >VAR_G_SZ
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    ADDD TMPVAL         ; D = LEFT + RIGHT
+    PSHS D              ; save LEFT on stack (nested RIGHT)
     LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL
+    PULS D              ; restore LEFT into D
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_G_TIDX
+; VPy_LINE:297
     LDX #VAR_TAB_DATA  ; Array base
     LDD >VAR_G_TIDX
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -2194,182 +2240,200 @@ IF_END_52:
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD VAR_G_TOP
-    LDD >VAR_G_TOP
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:298
     LDD #4
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR DIV16       ; D = X / D
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_TOP
+    TFR D,X             ; X = LEFT (dividend)
+    LDD TMPVAL          ; D = RIGHT (divisor)
+    JSR DIV16           ; D = X / D
     STD VAR_G_TR
-    LDD >VAR_G_TOP
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:299
+    LDD #4
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
     LDD >VAR_G_TR
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #4
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    TFR D,X             ; X = LEFT
+    LDD TMPVAL          ; D = RIGHT
+    JSR MUL16           ; D = X * D
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_TOP
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_G_TC
-    LDD >VAR_ARG0
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_RANK
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:300
     LDD #4
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_RANK
+    TFR D,X             ; X = LEFT
+    LDD TMPVAL          ; D = RIGHT
+    JSR MUL16           ; D = X * D
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_ARG0
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_G_SUIT
+; VPy_LINE:301
     LDD #0
     STD VAR_G_TOP_RED
+; VPy_LINE:302
     LDD #1
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_TC
     CMPD TMPVAL
-    LBEQ .CMP_52_TRUE
+    LBEQ .CMP_41_TRUE
     LDD #0
-    LBRA .CMP_52_END
-.CMP_52_TRUE:
+    LBRA .CMP_41_END
+.CMP_41_TRUE:
     LDD #1
-.CMP_52_END:
-    LBNE .LOGIC_51_TRUE
+.CMP_41_END:
+    LBNE .LOGIC_40_TRUE
     LDD #2
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_TC
     CMPD TMPVAL
-    LBEQ .CMP_53_TRUE
+    LBEQ .CMP_42_TRUE
     LDD #0
-    LBRA .CMP_53_END
-.CMP_53_TRUE:
+    LBRA .CMP_42_END
+.CMP_42_TRUE:
     LDD #1
-.CMP_53_END:
-    LBNE .LOGIC_51_TRUE
+.CMP_42_END:
+    LBNE .LOGIC_40_TRUE
     LDD #0
-    LBRA .LOGIC_51_END
-.LOGIC_51_TRUE:
+    LBRA .LOGIC_40_END
+.LOGIC_40_TRUE:
     LDD #1
-.LOGIC_51_END:
+.LOGIC_40_END:
     LBEQ IF_NEXT_57
+; VPy_LINE:303
     LDD #1
     STD VAR_G_TOP_RED
     LBRA IF_END_56
 IF_NEXT_57:
 IF_END_56:
+; VPy_LINE:304
     LDD #0
     STD VAR_G_CARD_RED
+; VPy_LINE:305
     LDD #1
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_SUIT
     CMPD TMPVAL
-    LBEQ .CMP_55_TRUE
+    LBEQ .CMP_44_TRUE
     LDD #0
-    LBRA .CMP_55_END
-.CMP_55_TRUE:
+    LBRA .CMP_44_END
+.CMP_44_TRUE:
     LDD #1
-.CMP_55_END:
-    LBNE .LOGIC_54_TRUE
+.CMP_44_END:
+    LBNE .LOGIC_43_TRUE
     LDD #2
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_SUIT
     CMPD TMPVAL
-    LBEQ .CMP_56_TRUE
+    LBEQ .CMP_45_TRUE
     LDD #0
-    LBRA .CMP_56_END
-.CMP_56_TRUE:
+    LBRA .CMP_45_END
+.CMP_45_TRUE:
     LDD #1
-.CMP_56_END:
-    LBNE .LOGIC_54_TRUE
+.CMP_45_END:
+    LBNE .LOGIC_43_TRUE
     LDD #0
-    LBRA .LOGIC_54_END
-.LOGIC_54_TRUE:
+    LBRA .LOGIC_43_END
+.LOGIC_43_TRUE:
     LDD #1
-.LOGIC_54_END:
+.LOGIC_43_END:
     LBEQ IF_NEXT_59
+; VPy_LINE:306
     LDD #1
     STD VAR_G_CARD_RED
     LBRA IF_END_58
 IF_NEXT_59:
 IF_END_58:
+; VPy_LINE:307
     LDD >VAR_G_CARD_RED
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_TOP_RED
     CMPD TMPVAL
-    LBEQ .CMP_57_TRUE
+    LBEQ .CMP_46_TRUE
     LDD #0
-    LBRA .CMP_57_END
-.CMP_57_TRUE:
+    LBRA .CMP_46_END
+.CMP_46_TRUE:
     LDD #1
-.CMP_57_END:
+.CMP_46_END:
     LBEQ IF_NEXT_61
+; VPy_LINE:308
     LDD #0
     STD VAR_G_RESULT
+; VPy_LINE:309
     RTS
     LBRA IF_END_60
 IF_NEXT_61:
 IF_END_60:
-    LDD >VAR_G_TR
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:310
     LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_TR
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_RANK
     CMPD TMPVAL
-    LBEQ .CMP_58_TRUE
+    LBEQ .CMP_47_TRUE
     LDD #0
-    LBRA .CMP_58_END
-.CMP_58_TRUE:
+    LBRA .CMP_47_END
+.CMP_47_TRUE:
     LDD #1
-.CMP_58_END:
+.CMP_47_END:
     LBEQ IF_NEXT_63
+; VPy_LINE:311
     LDD #1
     STD VAR_G_RESULT
     LBRA IF_END_62
 IF_NEXT_63:
+; VPy_LINE:313
     LDD #0
     STD VAR_G_RESULT
 IF_END_62:
     RTS
 
-; Function: can_move_to_found
-can_move_to_found:
-    LDD >VAR_ARG0
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; Function: CAN_MOVE_TO_FOUND
+CAN_MOVE_TO_FOUND:
+; VPy_LINE:316
     LDD #4
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR DIV16       ; D = X / D
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_ARG0
+    TFR D,X             ; X = LEFT (dividend)
+    LDD TMPVAL          ; D = RIGHT (divisor)
+    JSR DIV16           ; D = X / D
     STD VAR_G_RANK
-    LDD >VAR_ARG0
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_RANK
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:317
     LDD #4
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_RANK
+    TFR D,X             ; X = LEFT
+    LDD TMPVAL          ; D = RIGHT
+    JSR MUL16           ; D = X * D
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_ARG0
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_G_SUIT
+; VPy_LINE:318
     LDD >VAR_ARG1
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_SUIT
     CMPD TMPVAL
-    LBNE .CMP_59_TRUE
+    LBNE .CMP_48_TRUE
     LDD #0
-    LBRA .CMP_59_END
-.CMP_59_TRUE:
+    LBRA .CMP_48_END
+.CMP_48_TRUE:
     LDD #1
-.CMP_59_END:
+.CMP_48_END:
     LBEQ IF_NEXT_65
+; VPy_LINE:319
     LDD #0
     STD VAR_G_RESULT
+; VPy_LINE:320
     RTS
     LBRA IF_END_64
 IF_NEXT_65:
 IF_END_64:
+; VPy_LINE:321
     LDX #VAR_FOUND_CNT_DATA  ; Array base
     LDD >VAR_ARG1
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -2379,9 +2443,164 @@ IF_END_64:
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD VAR_G_FC
+; VPy_LINE:322
     LDD #0
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_FC
+    CMPD TMPVAL
+    LBEQ .CMP_50_TRUE
+    LDD #0
+    LBRA .CMP_50_END
+.CMP_50_TRUE:
+    LDD #1
+.CMP_50_END:
+    LBEQ .LOGIC_49_FALSE
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_G_RANK
+    CMPD TMPVAL
+    LBEQ .CMP_51_TRUE
+    LDD #0
+    LBRA .CMP_51_END
+.CMP_51_TRUE:
+    LDD #1
+.CMP_51_END:
+    LBEQ .LOGIC_49_FALSE
+    LDD #1
+    LBRA .LOGIC_49_END
+.LOGIC_49_FALSE:
+    LDD #0
+.LOGIC_49_END:
+    LBEQ IF_NEXT_67
+; VPy_LINE:323
+    LDD #1
+    STD VAR_G_RESULT
+; VPy_LINE:324
+    RTS
+    LBRA IF_END_66
+IF_NEXT_67:
+IF_END_66:
+; VPy_LINE:325
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_G_FC
+    CMPD TMPVAL
+    LBGT .CMP_53_TRUE
+    LDD #0
+    LBRA .CMP_53_END
+.CMP_53_TRUE:
+    LDD #1
+.CMP_53_END:
+    LBEQ .LOGIC_52_FALSE
+    LDD >VAR_G_FC
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_G_RANK
+    CMPD TMPVAL
+    LBEQ .CMP_54_TRUE
+    LDD #0
+    LBRA .CMP_54_END
+.CMP_54_TRUE:
+    LDD #1
+.CMP_54_END:
+    LBEQ .LOGIC_52_FALSE
+    LDD #1
+    LBRA .LOGIC_52_END
+.LOGIC_52_FALSE:
+    LDD #0
+.LOGIC_52_END:
+    LBEQ IF_NEXT_69
+; VPy_LINE:326
+    LDD #1
+    STD VAR_G_RESULT
+; VPy_LINE:327
+    RTS
+    LBRA IF_END_68
+IF_NEXT_69:
+IF_END_68:
+; VPy_LINE:328
+    LDD #0
+    STD VAR_G_RESULT
+    RTS
+
+; Function: CHECK_WIN
+CHECK_WIN:
+; VPy_LINE:334
+    LDD #13
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_FOUND_CNT_DATA  ; Array base
+    LDD #0
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    CMPD TMPVAL
+    LBEQ .CMP_58_TRUE
+    LDD #0
+    LBRA .CMP_58_END
+.CMP_58_TRUE:
+    LDD #1
+.CMP_58_END:
+    LBEQ .LOGIC_57_FALSE
+    LDD #13
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_FOUND_CNT_DATA  ; Array base
+    LDD #1
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    CMPD TMPVAL
+    LBEQ .CMP_59_TRUE
+    LDD #0
+    LBRA .CMP_59_END
+.CMP_59_TRUE:
+    LDD #1
+.CMP_59_END:
+    LBEQ .LOGIC_57_FALSE
+    LDD #1
+    LBRA .LOGIC_57_END
+.LOGIC_57_FALSE:
+    LDD #0
+.LOGIC_57_END:
+    LBEQ .LOGIC_56_FALSE
+    LDD #13
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_FOUND_CNT_DATA  ; Array base
+    LDD #2
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    CMPD TMPVAL
+    LBEQ .CMP_60_TRUE
+    LDD #0
+    LBRA .CMP_60_END
+.CMP_60_TRUE:
+    LDD #1
+.CMP_60_END:
+    LBEQ .LOGIC_56_FALSE
+    LDD #1
+    LBRA .LOGIC_56_END
+.LOGIC_56_FALSE:
+    LDD #0
+.LOGIC_56_END:
+    LBEQ .LOGIC_55_FALSE
+    LDD #13
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_FOUND_CNT_DATA  ; Array base
+    LDD #3
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     CMPD TMPVAL
     LBEQ .CMP_61_TRUE
     LDD #0
@@ -2389,160 +2608,14 @@ IF_END_64:
 .CMP_61_TRUE:
     LDD #1
 .CMP_61_END:
-    LBEQ .LOGIC_60_FALSE
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_RANK
-    CMPD TMPVAL
-    LBEQ .CMP_62_TRUE
-    LDD #0
-    LBRA .CMP_62_END
-.CMP_62_TRUE:
+    LBEQ .LOGIC_55_FALSE
     LDD #1
-.CMP_62_END:
-    LBEQ .LOGIC_60_FALSE
-    LDD #1
-    LBRA .LOGIC_60_END
-.LOGIC_60_FALSE:
+    LBRA .LOGIC_55_END
+.LOGIC_55_FALSE:
     LDD #0
-.LOGIC_60_END:
-    LBEQ IF_NEXT_67
-    LDD #1
-    STD VAR_G_RESULT
-    RTS
-    LBRA IF_END_66
-IF_NEXT_67:
-IF_END_66:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_FC
-    CMPD TMPVAL
-    LBGT .CMP_64_TRUE
-    LDD #0
-    LBRA .CMP_64_END
-.CMP_64_TRUE:
-    LDD #1
-.CMP_64_END:
-    LBEQ .LOGIC_63_FALSE
-    LDD >VAR_G_FC
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_RANK
-    CMPD TMPVAL
-    LBEQ .CMP_65_TRUE
-    LDD #0
-    LBRA .CMP_65_END
-.CMP_65_TRUE:
-    LDD #1
-.CMP_65_END:
-    LBEQ .LOGIC_63_FALSE
-    LDD #1
-    LBRA .LOGIC_63_END
-.LOGIC_63_FALSE:
-    LDD #0
-.LOGIC_63_END:
-    LBEQ IF_NEXT_69
-    LDD #1
-    STD VAR_G_RESULT
-    RTS
-    LBRA IF_END_68
-IF_NEXT_69:
-IF_END_68:
-    LDD #0
-    STD VAR_G_RESULT
-    RTS
-
-; Function: check_win
-check_win:
-    LDD #13
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDX #VAR_FOUND_CNT_DATA  ; Array base
-    LDD #0
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    CMPD TMPVAL
-    LBEQ .CMP_69_TRUE
-    LDD #0
-    LBRA .CMP_69_END
-.CMP_69_TRUE:
-    LDD #1
-.CMP_69_END:
-    LBEQ .LOGIC_68_FALSE
-    LDD #13
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDX #VAR_FOUND_CNT_DATA  ; Array base
-    LDD #1
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    CMPD TMPVAL
-    LBEQ .CMP_70_TRUE
-    LDD #0
-    LBRA .CMP_70_END
-.CMP_70_TRUE:
-    LDD #1
-.CMP_70_END:
-    LBEQ .LOGIC_68_FALSE
-    LDD #1
-    LBRA .LOGIC_68_END
-.LOGIC_68_FALSE:
-    LDD #0
-.LOGIC_68_END:
-    LBEQ .LOGIC_67_FALSE
-    LDD #13
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDX #VAR_FOUND_CNT_DATA  ; Array base
-    LDD #2
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    CMPD TMPVAL
-    LBEQ .CMP_71_TRUE
-    LDD #0
-    LBRA .CMP_71_END
-.CMP_71_TRUE:
-    LDD #1
-.CMP_71_END:
-    LBEQ .LOGIC_67_FALSE
-    LDD #1
-    LBRA .LOGIC_67_END
-.LOGIC_67_FALSE:
-    LDD #0
-.LOGIC_67_END:
-    LBEQ .LOGIC_66_FALSE
-    LDD #13
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDX #VAR_FOUND_CNT_DATA  ; Array base
-    LDD #3
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    CMPD TMPVAL
-    LBEQ .CMP_72_TRUE
-    LDD #0
-    LBRA .CMP_72_END
-.CMP_72_TRUE:
-    LDD #1
-.CMP_72_END:
-    LBEQ .LOGIC_66_FALSE
-    LDD #1
-    LBRA .LOGIC_66_END
-.LOGIC_66_FALSE:
-    LDD #0
-.LOGIC_66_END:
+.LOGIC_55_END:
     LBEQ IF_NEXT_71
+; VPy_LINE:335
     LDD #1  ; const STATE_WIN
     STD VAR_GAME_STATE
     LBRA IF_END_70
@@ -2550,203 +2623,212 @@ IF_NEXT_71:
 IF_END_70:
     RTS
 
-; Function: draw_table
-draw_table:
-    JSR draw_stock
-    JSR draw_waste
-    JSR draw_foundations
-    JSR draw_tableau
-    JSR draw_held_label
-    JSR draw_cursor
+; Function: DRAW_TABLE
+DRAW_TABLE:
+; VPy_LINE:341
+    JSR DRAW_STOCK
+; VPy_LINE:342
+    JSR DRAW_WASTE
+; VPy_LINE:343
+    JSR DRAW_FOUNDATIONS
+; VPy_LINE:344
+    JSR DRAW_TABLEAU
+; VPy_LINE:345
+    JSR DRAW_HELD_LABEL
+; VPy_LINE:346
+    JSR DRAW_CURSOR
     RTS
 
-; Function: get_col_x
-get_col_x:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+; Function: GET_COL_X
+GET_COL_X:
+; VPy_LINE:349
     LDD >VAR_ARG0
-    CMPD TMPVAL
-    LBEQ .CMP_73_TRUE
-    LDD #0
-    LBRA .CMP_73_END
-.CMP_73_TRUE:
-    LDD #1
-.CMP_73_END:
-    LBEQ IF_NEXT_73
+    CMPD #0
+    LBNE IF_NEXT_73
+; VPy_LINE:350
     LDD #-102  ; const TAB_X0
     STD VAR_G_COL_X
     LBRA IF_END_72
 IF_NEXT_73:
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG0
-    CMPD TMPVAL
-    LBEQ .CMP_74_TRUE
-    LDD #0
-    LBRA .CMP_74_END
-.CMP_74_TRUE:
-    LDD #1
-.CMP_74_END:
-    LBEQ IF_NEXT_74
+    CMPD #1
+    LBNE IF_NEXT_74
+; VPy_LINE:352
     LDD #-68  ; const TAB_X1
     STD VAR_G_COL_X
     LBRA IF_END_72
 IF_NEXT_74:
-    LDD #2
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG0
-    CMPD TMPVAL
-    LBEQ .CMP_75_TRUE
-    LDD #0
-    LBRA .CMP_75_END
-.CMP_75_TRUE:
-    LDD #1
-.CMP_75_END:
-    LBEQ IF_NEXT_75
+    CMPD #2
+    LBNE IF_NEXT_75
+; VPy_LINE:354
     LDD #-34  ; const TAB_X2
     STD VAR_G_COL_X
     LBRA IF_END_72
 IF_NEXT_75:
-    LDD #3
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG0
-    CMPD TMPVAL
-    LBEQ .CMP_76_TRUE
-    LDD #0
-    LBRA .CMP_76_END
-.CMP_76_TRUE:
-    LDD #1
-.CMP_76_END:
-    LBEQ IF_NEXT_76
+    CMPD #3
+    LBNE IF_NEXT_76
+; VPy_LINE:356
     LDD #0  ; const TAB_X3
     STD VAR_G_COL_X
     LBRA IF_END_72
 IF_NEXT_76:
-    LDD #4
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG0
-    CMPD TMPVAL
-    LBEQ .CMP_77_TRUE
-    LDD #0
-    LBRA .CMP_77_END
-.CMP_77_TRUE:
-    LDD #1
-.CMP_77_END:
-    LBEQ IF_NEXT_77
+    CMPD #4
+    LBNE IF_NEXT_77
+; VPy_LINE:358
     LDD #34  ; const TAB_X4
     STD VAR_G_COL_X
     LBRA IF_END_72
 IF_NEXT_77:
-    LDD #5
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG0
-    CMPD TMPVAL
-    LBEQ .CMP_78_TRUE
-    LDD #0
-    LBRA .CMP_78_END
-.CMP_78_TRUE:
-    LDD #1
-.CMP_78_END:
-    LBEQ IF_NEXT_78
+    CMPD #5
+    LBNE IF_NEXT_78
+; VPy_LINE:360
     LDD #68  ; const TAB_X5
     STD VAR_G_COL_X
     LBRA IF_END_72
 IF_NEXT_78:
+; VPy_LINE:362
     LDD #102  ; const TAB_X6
     STD VAR_G_COL_X
 IF_END_72:
     RTS
 
-; Function: draw_stock
-draw_stock:
+; Function: DRAW_STOCK
+DRAW_STOCK:
+; VPy_LINE:365
     LDD #0
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_STK_SZ
     CMPD TMPVAL
-    LBGT .CMP_79_TRUE
+    LBGT .CMP_62_TRUE
     LDD #0
-    LBRA .CMP_79_END
-.CMP_79_TRUE:
+    LBRA .CMP_62_END
+.CMP_62_TRUE:
     LDD #1
-.CMP_79_END:
+.CMP_62_END:
     LBEQ IF_NEXT_80
-    ; ERROR: DRAW_RECT with variables requires expressions module access
-    ; Use constant values for now
+; VPy_LINE:366
+; NATIVE_CALL: DRAW_RECT at line 366
+    ; DRAW_RECT: x, y, width, height[, intensity] (variable args)
+    LDD #-102  ; const STK_X
+    TFR B,A
+    STA DRAW_RECT_X
+    LDD #85  ; const TOP_Y
+    TFR B,A
+    STA DRAW_RECT_Y
+    LDD #26  ; const CARD_W
+    TFR B,A
+    STA DRAW_RECT_WIDTH
+    LDD #32  ; const CARD_H
+    TFR B,A
+    STA DRAW_RECT_HEIGHT
+    LDD #40  ; const INT_FACEDN
+    TFR B,A
+    STA DRAW_RECT_INTENSITY
+    JSR DRAW_RECT_RUNTIME
     LDD #0
     STD RESULT
+; VPy_LINE:367
+; NATIVE_CALL: SET_INTENSITY at line 367
     ; SET_INTENSITY: Set drawing intensity
     LDD #40  ; const INT_FACEDN
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
     STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
+; VPy_LINE:368
+; NATIVE_CALL: PRINT_TEXT at line 368
     ; PRINT_TEXT: Print text at position
-    LDD #-102  ; const STK_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #4
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG0
-    LDD #85  ; const TOP_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #-102  ; const STK_X
+    ADDD TMPVAL         ; D = LEFT + RIGHT
+    STD >VAR_ARG0
     LDD #10
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG1
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #85  ; const TOP_Y
+    ADDD TMPVAL         ; D = LEFT + RIGHT
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_1120      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     LBRA IF_END_79
 IF_NEXT_80:
-    ; ERROR: DRAW_RECT with variables requires expressions module access
-    ; Use constant values for now
+; VPy_LINE:370
+; NATIVE_CALL: DRAW_RECT at line 370
+    ; DRAW_RECT: x, y, width, height[, intensity] (variable args)
+    LDD #-102  ; const STK_X
+    TFR B,A
+    STA DRAW_RECT_X
+    LDD #85  ; const TOP_Y
+    TFR B,A
+    STA DRAW_RECT_Y
+    LDD #26  ; const CARD_W
+    TFR B,A
+    STA DRAW_RECT_WIDTH
+    LDD #32  ; const CARD_H
+    TFR B,A
+    STA DRAW_RECT_HEIGHT
+    LDD #25  ; const INT_EMPTY
+    TFR B,A
+    STA DRAW_RECT_INTENSITY
+    JSR DRAW_RECT_RUNTIME
     LDD #0
     STD RESULT
+; VPy_LINE:371
+; NATIVE_CALL: SET_INTENSITY at line 371
     ; SET_INTENSITY: Set drawing intensity
     LDD #25  ; const INT_EMPTY
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
     STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
+; VPy_LINE:372
+; NATIVE_CALL: PRINT_TEXT at line 372
     ; PRINT_TEXT: Print text at position
-    LDD #-102  ; const STK_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #4
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG0
-    LDD #85  ; const TOP_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #-102  ; const STK_X
+    ADDD TMPVAL         ; D = LEFT + RIGHT
+    STD >VAR_ARG0
     LDD #10
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG1
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #85  ; const TOP_Y
+    ADDD TMPVAL         ; D = LEFT + RIGHT
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2657      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
 IF_END_79:
     RTS
 
-; Function: draw_waste
-draw_waste:
+; Function: DRAW_WASTE
+DRAW_WASTE:
+; VPy_LINE:375
     LDD #0
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_WST_SZ
     CMPD TMPVAL
-    LBGT .CMP_80_TRUE
+    LBGT .CMP_63_TRUE
     LDD #0
-    LBRA .CMP_80_END
-.CMP_80_TRUE:
+    LBRA .CMP_63_END
+.CMP_63_TRUE:
     LDD #1
-.CMP_80_END:
+.CMP_63_END:
     LBEQ IF_NEXT_82
+; VPy_LINE:376
     LDX #VAR_WASTE_DATA  ; Array base
-    LDD >VAR_WST_SZ
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_WST_SZ
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
@@ -2754,6 +2836,7 @@ draw_waste:
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD VAR_G_WCARD
+; VPy_LINE:377
     LDD #-68  ; const WST_X
     STD VAR_ARG0
     LDD #85  ; const TOP_Y
@@ -2762,72 +2845,102 @@ draw_waste:
     STD VAR_ARG2
     LDD #70  ; const INT_CARD
     STD VAR_ARG3
-    JSR draw_card
+    JSR DRAW_CARD
     LBRA IF_END_81
 IF_NEXT_82:
-    ; ERROR: DRAW_RECT with variables requires expressions module access
-    ; Use constant values for now
+; VPy_LINE:379
+; NATIVE_CALL: DRAW_RECT at line 379
+    ; DRAW_RECT: x, y, width, height[, intensity] (variable args)
+    LDD #-68  ; const WST_X
+    TFR B,A
+    STA DRAW_RECT_X
+    LDD #85  ; const TOP_Y
+    TFR B,A
+    STA DRAW_RECT_Y
+    LDD #26  ; const CARD_W
+    TFR B,A
+    STA DRAW_RECT_WIDTH
+    LDD #32  ; const CARD_H
+    TFR B,A
+    STA DRAW_RECT_HEIGHT
+    LDD #25  ; const INT_EMPTY
+    TFR B,A
+    STA DRAW_RECT_INTENSITY
+    JSR DRAW_RECT_RUNTIME
     LDD #0
     STD RESULT
+; VPy_LINE:380
+; NATIVE_CALL: SET_INTENSITY at line 380
     ; SET_INTENSITY: Set drawing intensity
     LDD #25  ; const INT_EMPTY
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
     STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
+; VPy_LINE:381
+; NATIVE_CALL: PRINT_TEXT at line 381
     ; PRINT_TEXT: Print text at position
-    LDD #-68  ; const WST_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #4
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG0
-    LDD #85  ; const TOP_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #-68  ; const WST_X
+    ADDD TMPVAL         ; D = LEFT + RIGHT
+    STD >VAR_ARG0
     LDD #10
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG1
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #85  ; const TOP_Y
+    ADDD TMPVAL         ; D = LEFT + RIGHT
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2780      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
 IF_END_81:
     RTS
 
-; Function: draw_foundations
-draw_foundations:
+; Function: DRAW_FOUNDATIONS
+DRAW_FOUNDATIONS:
+; VPy_LINE:384
     LDD #0  ; const F0_X
     STD VAR_G_FX
+; VPy_LINE:385
     LDD >VAR_G_FX
     STD VAR_ARG0
     LDD #0
     STD VAR_ARG1
-    JSR draw_one_foundation
+    JSR DRAW_ONE_FOUNDATION
+; VPy_LINE:386
     LDD #34  ; const F1_X
     STD VAR_G_FX
+; VPy_LINE:387
     LDD >VAR_G_FX
     STD VAR_ARG0
     LDD #1
     STD VAR_ARG1
-    JSR draw_one_foundation
+    JSR DRAW_ONE_FOUNDATION
+; VPy_LINE:388
     LDD #68  ; const F2_X
     STD VAR_G_FX
+; VPy_LINE:389
     LDD >VAR_G_FX
     STD VAR_ARG0
     LDD #2
     STD VAR_ARG1
-    JSR draw_one_foundation
+    JSR DRAW_ONE_FOUNDATION
+; VPy_LINE:390
     LDD #102  ; const F3_X
     STD VAR_G_FX
+; VPy_LINE:391
     LDD >VAR_G_FX
     STD VAR_ARG0
     LDD #3
     STD VAR_ARG1
-    JSR draw_one_foundation
+    JSR DRAW_ONE_FOUNDATION
     RTS
 
-; Function: draw_one_foundation
-draw_one_foundation:
+; Function: DRAW_ONE_FOUNDATION
+DRAW_ONE_FOUNDATION:
+; VPy_LINE:394
     LDX #VAR_FOUND_CNT_DATA  ; Array base
     LDD >VAR_ARG1
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -2837,52 +2950,65 @@ draw_one_foundation:
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD VAR_G_FC
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+; VPy_LINE:395
     LDD >VAR_G_FC
-    CMPD TMPVAL
-    LBEQ .CMP_81_TRUE
-    LDD #0
-    LBRA .CMP_81_END
-.CMP_81_TRUE:
-    LDD #1
-.CMP_81_END:
-    LBEQ IF_NEXT_84
-    ; ERROR: DRAW_RECT with variables requires expressions module access
-    ; Use constant values for now
+    CMPD #0
+    LBNE IF_NEXT_84
+; VPy_LINE:396
+; NATIVE_CALL: DRAW_RECT at line 396
+    ; DRAW_RECT: x, y, width, height[, intensity] (variable args)
+    LDD >VAR_ARG0
+    TFR B,A
+    STA DRAW_RECT_X
+    LDD #85  ; const TOP_Y
+    TFR B,A
+    STA DRAW_RECT_Y
+    LDD #26  ; const CARD_W
+    TFR B,A
+    STA DRAW_RECT_WIDTH
+    LDD #32  ; const CARD_H
+    TFR B,A
+    STA DRAW_RECT_HEIGHT
+    LDD #25  ; const INT_EMPTY
+    TFR B,A
+    STA DRAW_RECT_INTENSITY
+    JSR DRAW_RECT_RUNTIME
     LDD #0
     STD RESULT
+; VPy_LINE:397
+    LDD #13  ; const HALF_W
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
     LDD >VAR_ARG0
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #13  ; const HALF_W
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_ARG0
-    LDD #85  ; const TOP_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #13  ; const HALF_W
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #85  ; const TOP_Y
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_ARG1
     LDD >VAR_ARG1
     STD VAR_ARG2
-    JSR draw_suit_at
+    JSR DRAW_SUIT_AT
     LBRA IF_END_83
 IF_NEXT_84:
-    LDD >VAR_G_FC
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:399
     LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_FC
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_G_RANK
-    LDD >VAR_G_RANK
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:400
     LDD #4
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_RANK
+    TFR D,X             ; X = LEFT
+    LDD TMPVAL          ; D = RIGHT
+    JSR MUL16           ; D = X * D
+    STD TMPVAL          ; LEFT → TMPVAL (RIGHT simple, commutative)
     LDD >VAR_ARG1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_G_CARD
+; VPy_LINE:401
     LDD >VAR_ARG0
     STD VAR_ARG0
     LDD #85  ; const TOP_Y
@@ -2891,31 +3017,36 @@ IF_NEXT_84:
     STD VAR_ARG2
     LDD #70  ; const INT_CARD
     STD VAR_ARG3
-    JSR draw_card
+    JSR DRAW_CARD
 IF_END_83:
     RTS
 
-; Function: draw_tableau
-draw_tableau:
+; Function: DRAW_TABLEAU
+DRAW_TABLEAU:
+; VPy_LINE:404
     LDD #0
     STD VAR_G_C
+; VPy_LINE:405
 WH_85: ; while start
     LDD #7
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_C
     CMPD TMPVAL
-    LBLT .CMP_82_TRUE
+    LBLT .CMP_64_TRUE
     LDD #0
-    LBRA .CMP_82_END
-.CMP_82_TRUE:
+    LBRA .CMP_64_END
+.CMP_64_TRUE:
     LDD #1
-.CMP_82_END:
+.CMP_64_END:
     LBEQ WH_END_86
+; VPy_LINE:406
     LDD >VAR_G_C
     STD VAR_ARG0
-    JSR get_col_x
+    JSR GET_COL_X
+; VPy_LINE:407
     LDD >VAR_G_COL_X
     STD VAR_G_CX
+; VPy_LINE:408
     LDX #VAR_TAB_SZ_DATA  ; Array base
     LDD >VAR_G_C
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -2925,6 +3056,7 @@ WH_85: ; while start
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD VAR_G_SZ
+; VPy_LINE:409
     LDX #VAR_TAB_HID_DATA  ; Array base
     LDD >VAR_G_C
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -2934,138 +3066,198 @@ WH_85: ; while start
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD VAR_G_HD
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+; VPy_LINE:410
     LDD >VAR_G_SZ
-    CMPD TMPVAL
-    LBEQ .CMP_83_TRUE
-    LDD #0
-    LBRA .CMP_83_END
-.CMP_83_TRUE:
-    LDD #1
-.CMP_83_END:
-    LBEQ IF_NEXT_88
-    ; ERROR: DRAW_RECT with variables requires expressions module access
-    ; Use constant values for now
+    CMPD #0
+    LBNE IF_NEXT_88
+; VPy_LINE:411
+; NATIVE_CALL: DRAW_RECT at line 411
+    ; DRAW_RECT: x, y, width, height[, intensity] (variable args)
+    LDD >VAR_G_CX
+    TFR B,A
+    STA DRAW_RECT_X
+    LDD #30  ; const TAB_Y
+    TFR B,A
+    STA DRAW_RECT_Y
+    LDD #26  ; const CARD_W
+    TFR B,A
+    STA DRAW_RECT_WIDTH
+    LDD #32  ; const CARD_H
+    TFR B,A
+    STA DRAW_RECT_HEIGHT
+    LDD #25  ; const INT_EMPTY
+    TFR B,A
+    STA DRAW_RECT_INTENSITY
+    JSR DRAW_RECT_RUNTIME
     LDD #0
     STD RESULT
     LBRA IF_END_87
 IF_NEXT_88:
+; VPy_LINE:414
     LDD #0
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_HD
     CMPD TMPVAL
-    LBGT .CMP_84_TRUE
+    LBGT .CMP_65_TRUE
     LDD #0
-    LBRA .CMP_84_END
-.CMP_84_TRUE:
+    LBRA .CMP_65_END
+.CMP_65_TRUE:
     LDD #1
-.CMP_84_END:
+.CMP_65_END:
     LBEQ IF_NEXT_90
-    ; ERROR: DRAW_RECT with variables requires expressions module access
-    ; Use constant values for now
+; VPy_LINE:415
+; NATIVE_CALL: DRAW_RECT at line 415
+    ; DRAW_RECT: x, y, width, height[, intensity] (variable args)
+    LDD >VAR_G_CX
+    TFR B,A
+    STA DRAW_RECT_X
+    LDD #30  ; const TAB_Y
+    TFR B,A
+    STA DRAW_RECT_Y
+    LDD #26  ; const CARD_W
+    TFR B,A
+    STA DRAW_RECT_WIDTH
+    LDD #32  ; const CARD_H
+    TFR B,A
+    STA DRAW_RECT_HEIGHT
+    LDD #40  ; const INT_FACEDN
+    TFR B,A
+    STA DRAW_RECT_INTENSITY
+    JSR DRAW_RECT_RUNTIME
     LDD #0
     STD RESULT
-    ; ERROR: DRAW_RECT with variables requires expressions module access
-    ; Use constant values for now
+; VPy_LINE:416
+; NATIVE_CALL: DRAW_RECT at line 416
+    ; DRAW_RECT: x, y, width, height[, intensity] (variable args)
+    LDD #3
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_CX
+    ADDD TMPVAL         ; D = LEFT + RIGHT
+    TFR B,A
+    STA DRAW_RECT_X
+    LDD #4
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #30  ; const TAB_Y
+    ADDD TMPVAL         ; D = LEFT + RIGHT
+    TFR B,A
+    STA DRAW_RECT_Y
+    LDD #6
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #26  ; const CARD_W
+    SUBD TMPVAL         ; D = LEFT - RIGHT
+    TFR B,A
+    STA DRAW_RECT_WIDTH
+    LDD #8
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #32  ; const CARD_H
+    SUBD TMPVAL         ; D = LEFT - RIGHT
+    TFR B,A
+    STA DRAW_RECT_HEIGHT
+    LDD #40  ; const INT_FACEDN
+    TFR B,A
+    STA DRAW_RECT_INTENSITY
+    JSR DRAW_RECT_RUNTIME
     LDD #0
     STD RESULT
     LBRA IF_END_89
 IF_NEXT_90:
 IF_END_89:
+; VPy_LINE:418
     LDD >VAR_G_HD
     STD VAR_G_ROW
+; VPy_LINE:419
     LDD #0
     STD VAR_G_IDX
+; VPy_LINE:420
 WH_91: ; while start
     LDD >VAR_G_SZ
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_ROW
     CMPD TMPVAL
-    LBLT .CMP_86_TRUE
+    LBLT .CMP_67_TRUE
     LDD #0
-    LBRA .CMP_86_END
-.CMP_86_TRUE:
+    LBRA .CMP_67_END
+.CMP_67_TRUE:
     LDD #1
-.CMP_86_END:
-    LBEQ .LOGIC_85_FALSE
+.CMP_67_END:
+    LBEQ .LOGIC_66_FALSE
     LDD #4
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_IDX
     CMPD TMPVAL
-    LBLT .CMP_87_TRUE
+    LBLT .CMP_68_TRUE
     LDD #0
-    LBRA .CMP_87_END
-.CMP_87_TRUE:
+    LBRA .CMP_68_END
+.CMP_68_TRUE:
     LDD #1
-.CMP_87_END:
-    LBEQ .LOGIC_85_FALSE
+.CMP_68_END:
+    LBEQ .LOGIC_66_FALSE
     LDD #1
-    LBRA .LOGIC_85_END
-.LOGIC_85_FALSE:
+    LBRA .LOGIC_66_END
+.LOGIC_66_FALSE:
     LDD #0
-.LOGIC_85_END:
+.LOGIC_66_END:
     LBEQ WH_END_92
+; VPy_LINE:421
     LDD #0
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_HD
     CMPD TMPVAL
-    LBGT .CMP_88_TRUE
+    LBGT .CMP_69_TRUE
     LDD #0
-    LBRA .CMP_88_END
-.CMP_88_TRUE:
+    LBRA .CMP_69_END
+.CMP_69_TRUE:
     LDD #1
-.CMP_88_END:
+.CMP_69_END:
     LBEQ IF_NEXT_94
-    LDD #30  ; const TAB_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:422
     LDD #32  ; const CARD_H
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_ROW
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #30  ; const TAB_Y
+    SUBD TMPVAL         ; D = LEFT - RIGHT
+    PSHS D              ; save LEFT on stack (nested RIGHT)
     LDD >VAR_G_HD
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_ROW
+    SUBD TMPVAL         ; D = LEFT - RIGHT
+    STD TMPVAL          ; LEFT → TMPVAL (RIGHT simple, commutative)
     LDD #14  ; const COL_DY
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    TFR D,X             ; X = LEFT
+    LDD TMPVAL          ; D = RIGHT
+    JSR MUL16           ; D = X * D
+    STD TMPVAL          ; RIGHT → TMPVAL
+    PULS D              ; restore LEFT into D
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_G_CY
     LBRA IF_END_93
 IF_NEXT_94:
-    LDD #30  ; const TAB_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_ROW
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:424
     LDD >VAR_G_HD
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_ROW
+    SUBD TMPVAL         ; D = LEFT - RIGHT
+    STD TMPVAL          ; LEFT → TMPVAL (RIGHT simple, commutative)
     LDD #14  ; const COL_DY
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    TFR D,X             ; X = LEFT
+    LDD TMPVAL          ; D = RIGHT
+    JSR MUL16           ; D = X * D
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #30  ; const TAB_Y
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_G_CY
 IF_END_93:
-    LDD >VAR_G_C
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:425
     LDD #20
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_C
+    TFR D,X             ; X = LEFT
+    LDD TMPVAL          ; D = RIGHT
+    JSR MUL16           ; D = X * D
+    STD TMPVAL          ; LEFT → TMPVAL (RIGHT simple, commutative)
     LDD >VAR_G_ROW
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_G_TIDX
+; VPy_LINE:426
     LDX #VAR_TAB_DATA  ; Array base
     LDD >VAR_G_TIDX
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -3075,6 +3267,7 @@ IF_END_93:
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD VAR_G_CARD
+; VPy_LINE:427
     LDD >VAR_G_CX
     STD VAR_ARG0
     LDD >VAR_G_CY
@@ -3083,195 +3276,163 @@ IF_END_93:
     STD VAR_ARG2
     LDD #70  ; const INT_CARD
     STD VAR_ARG3
-    JSR draw_card
+    JSR DRAW_CARD
+; VPy_LINE:428
+    LDD #1
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
     LDD >VAR_G_ROW
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_G_ROW
-    LDD >VAR_G_IDX
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:429
     LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_IDX
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_G_IDX
     LBRA WH_91
 WH_END_92: ; while end
 IF_END_87:
-    LDD >VAR_G_C
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:430
     LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_C
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_G_C
     LBRA WH_85
 WH_END_86: ; while end
     RTS
 
-; Function: draw_held_label
-draw_held_label:
-    LDD #-1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+; Function: DRAW_HELD_LABEL
+DRAW_HELD_LABEL:
+; VPy_LINE:433
     LDD >VAR_SEL_CARD
-    CMPD TMPVAL
-    LBNE .CMP_89_TRUE
-    LDD #0
-    LBRA .CMP_89_END
-.CMP_89_TRUE:
-    LDD #1
-.CMP_89_END:
+    CMPD #-1
     LBEQ IF_NEXT_96
+; VPy_LINE:434
+; NATIVE_CALL: SET_INTENSITY at line 434
     ; SET_INTENSITY: Set drawing intensity
     LDD #100  ; const INT_HELD
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
     STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
+; VPy_LINE:435
+; NATIVE_CALL: PRINT_TEXT at line 435
     ; PRINT_TEXT: Print text at position
     LDD #-60
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #-100
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_68624293      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
-    LDD >VAR_SEL_CARD
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:436
     LDD #4
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR DIV16       ; D = X / D
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_SEL_CARD
+    TFR D,X             ; X = LEFT (dividend)
+    LDD TMPVAL          ; D = RIGHT (divisor)
+    JSR DIV16           ; D = X / D
     STD VAR_G_RANK
-    LDD >VAR_SEL_CARD
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_RANK
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:437
     LDD #4
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_RANK
+    TFR D,X             ; X = LEFT
+    LDD TMPVAL          ; D = RIGHT
+    JSR MUL16           ; D = X * D
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_SEL_CARD
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_G_SUIT
+; VPy_LINE:438
     LDD #-15
     STD VAR_ARG0
     LDD #-100
     STD VAR_ARG1
     LDD >VAR_G_RANK
     STD VAR_ARG2
-    JSR draw_rank_at
+    JSR DRAW_RANK_AT
+; VPy_LINE:439
     LDD #0
     STD VAR_ARG0
     LDD #-100
     STD VAR_ARG1
     LDD >VAR_G_SUIT
     STD VAR_ARG2
-    JSR draw_suit_at
+    JSR DRAW_SUIT_AT
     LBRA IF_END_95
 IF_NEXT_96:
 IF_END_95:
     RTS
 
-; Function: draw_cursor
-draw_cursor:
+; Function: DRAW_CURSOR
+DRAW_CURSOR:
+; VPy_LINE:442
     LDD #0
     STD VAR_G_CX
+; VPy_LINE:443
     LDD #85  ; const TOP_Y
     STD VAR_G_CY
-    LDD #7
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+; VPy_LINE:444
     LDD >VAR_CURSOR
-    CMPD TMPVAL
-    LBEQ .CMP_90_TRUE
-    LDD #0
-    LBRA .CMP_90_END
-.CMP_90_TRUE:
-    LDD #1
-.CMP_90_END:
-    LBEQ IF_NEXT_98
+    CMPD #7
+    LBNE IF_NEXT_98
+; VPy_LINE:445
     LDD #-102  ; const STK_X
     STD VAR_G_CX
     LBRA IF_END_97
 IF_NEXT_98:
-    LDD #8
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_CURSOR
-    CMPD TMPVAL
-    LBEQ .CMP_91_TRUE
-    LDD #0
-    LBRA .CMP_91_END
-.CMP_91_TRUE:
-    LDD #1
-.CMP_91_END:
-    LBEQ IF_NEXT_99
+    CMPD #8
+    LBNE IF_NEXT_99
+; VPy_LINE:447
     LDD #-68  ; const WST_X
     STD VAR_G_CX
     LBRA IF_END_97
 IF_NEXT_99:
-    LDD #9
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_CURSOR
-    CMPD TMPVAL
-    LBEQ .CMP_92_TRUE
-    LDD #0
-    LBRA .CMP_92_END
-.CMP_92_TRUE:
-    LDD #1
-.CMP_92_END:
-    LBEQ IF_NEXT_100
+    CMPD #9
+    LBNE IF_NEXT_100
+; VPy_LINE:449
     LDD #0  ; const F0_X
     STD VAR_G_CX
     LBRA IF_END_97
 IF_NEXT_100:
-    LDD #10
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_CURSOR
-    CMPD TMPVAL
-    LBEQ .CMP_93_TRUE
-    LDD #0
-    LBRA .CMP_93_END
-.CMP_93_TRUE:
-    LDD #1
-.CMP_93_END:
-    LBEQ IF_NEXT_101
+    CMPD #10
+    LBNE IF_NEXT_101
+; VPy_LINE:451
     LDD #34  ; const F1_X
     STD VAR_G_CX
     LBRA IF_END_97
 IF_NEXT_101:
-    LDD #11
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_CURSOR
-    CMPD TMPVAL
-    LBEQ .CMP_94_TRUE
-    LDD #0
-    LBRA .CMP_94_END
-.CMP_94_TRUE:
-    LDD #1
-.CMP_94_END:
-    LBEQ IF_NEXT_102
+    CMPD #11
+    LBNE IF_NEXT_102
+; VPy_LINE:453
     LDD #68  ; const F2_X
     STD VAR_G_CX
     LBRA IF_END_97
 IF_NEXT_102:
-    LDD #12
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_CURSOR
-    CMPD TMPVAL
-    LBEQ .CMP_95_TRUE
-    LDD #0
-    LBRA .CMP_95_END
-.CMP_95_TRUE:
-    LDD #1
-.CMP_95_END:
-    LBEQ IF_NEXT_103
+    CMPD #12
+    LBNE IF_NEXT_103
+; VPy_LINE:455
     LDD #102  ; const F3_X
     STD VAR_G_CX
     LBRA IF_END_97
 IF_NEXT_103:
+; VPy_LINE:457
     LDD >VAR_CURSOR
     STD VAR_ARG0
-    JSR get_col_x
+    JSR GET_COL_X
+; VPy_LINE:458
     LDD >VAR_G_COL_X
     STD VAR_G_CX
+; VPy_LINE:459
     LDX #VAR_TAB_SZ_DATA  ; Array base
     LDD >VAR_CURSOR
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -3281,6 +3442,7 @@ IF_NEXT_103:
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD VAR_G_SZ
+; VPy_LINE:460
     LDX #VAR_TAB_HID_DATA  ; Array base
     LDD >VAR_CURSOR
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -3290,687 +3452,610 @@ IF_NEXT_103:
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD VAR_G_HD
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+; VPy_LINE:461
     LDD >VAR_G_SZ
-    CMPD TMPVAL
-    LBEQ .CMP_96_TRUE
-    LDD #0
-    LBRA .CMP_96_END
-.CMP_96_TRUE:
-    LDD #1
-.CMP_96_END:
-    LBEQ IF_NEXT_105
+    CMPD #0
+    LBNE IF_NEXT_105
+; VPy_LINE:462
     LDD #30  ; const TAB_Y
     STD VAR_G_CY
     LBRA IF_END_104
 IF_NEXT_105:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_G_HD
-    CMPD TMPVAL
-    LBEQ .CMP_97_TRUE
-    LDD #0
-    LBRA .CMP_97_END
-.CMP_97_TRUE:
+    CMPD #0
+    LBNE IF_NEXT_106
+; VPy_LINE:464
     LDD #1
-.CMP_97_END:
-    LBEQ IF_NEXT_106
-    LDD #30  ; const TAB_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
     LDD >VAR_G_SZ
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    SUBD TMPVAL         ; D = LEFT - RIGHT
+    STD TMPVAL          ; LEFT → TMPVAL (RIGHT simple, commutative)
     LDD #14  ; const COL_DY
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    TFR D,X             ; X = LEFT
+    LDD TMPVAL          ; D = RIGHT
+    JSR MUL16           ; D = X * D
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #30  ; const TAB_Y
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_G_CY
     LBRA IF_END_104
 IF_NEXT_106:
-    LDD #30  ; const TAB_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:466
     LDD #32  ; const CARD_H
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_SZ
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #30  ; const TAB_Y
+    SUBD TMPVAL         ; D = LEFT - RIGHT
+    PSHS D              ; save LEFT on stack (nested RIGHT)
     LDD >VAR_G_HD
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_SZ
+    SUBD TMPVAL         ; D = LEFT - RIGHT
+    PSHS D              ; save LEFT on stack (nested RIGHT)
     LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    STD TMPVAL          ; RIGHT → TMPVAL
+    PULS D              ; restore LEFT into D
+    SUBD TMPVAL         ; D = LEFT - RIGHT
+    STD TMPVAL          ; LEFT → TMPVAL (RIGHT simple, commutative)
     LDD #14  ; const COL_DY
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    TFR D,X             ; X = LEFT
+    LDD TMPVAL          ; D = RIGHT
+    JSR MUL16           ; D = X * D
+    STD TMPVAL          ; RIGHT → TMPVAL
+    PULS D              ; restore LEFT into D
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_G_CY
 IF_END_104:
 IF_END_97:
+; VPy_LINE:467
+; NATIVE_CALL: SET_INTENSITY at line 467
     ; SET_INTENSITY: Set drawing intensity
     LDD #127  ; const INT_CURSOR
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
     STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
-    ; ERROR: DRAW_RECT with variables requires expressions module access
-    ; Use constant values for now
+; VPy_LINE:468
+; NATIVE_CALL: DRAW_RECT at line 468
+    ; DRAW_RECT: x, y, width, height[, intensity] (variable args)
+    LDD #1
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_CX
+    SUBD TMPVAL         ; D = LEFT - RIGHT
+    TFR B,A
+    STA DRAW_RECT_X
+    LDD #1
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_CY
+    ADDD TMPVAL         ; D = LEFT + RIGHT
+    TFR B,A
+    STA DRAW_RECT_Y
+    LDD #2
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #26  ; const CARD_W
+    ADDD TMPVAL         ; D = LEFT + RIGHT
+    TFR B,A
+    STA DRAW_RECT_WIDTH
+    LDD #2
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #32  ; const CARD_H
+    ADDD TMPVAL         ; D = LEFT + RIGHT
+    TFR B,A
+    STA DRAW_RECT_HEIGHT
+    LDD #127  ; const INT_CURSOR
+    TFR B,A
+    STA DRAW_RECT_INTENSITY
+    JSR DRAW_RECT_RUNTIME
     LDD #0
     STD RESULT
     RTS
 
-; Function: draw_card
-draw_card:
-    ; ERROR: DRAW_RECT with variables requires expressions module access
-    ; Use constant values for now
+; Function: DRAW_CARD
+DRAW_CARD:
+; VPy_LINE:472
+; NATIVE_CALL: DRAW_RECT at line 472
+    ; DRAW_RECT: x, y, width, height[, intensity] (variable args)
+    LDD >VAR_ARG0
+    TFR B,A
+    STA DRAW_RECT_X
+    LDD >VAR_ARG1
+    TFR B,A
+    STA DRAW_RECT_Y
+    LDD #26  ; const CARD_W
+    TFR B,A
+    STA DRAW_RECT_WIDTH
+    LDD #32  ; const CARD_H
+    TFR B,A
+    STA DRAW_RECT_HEIGHT
+    LDD >VAR_ARG3
+    TFR B,A
+    STA DRAW_RECT_INTENSITY
+    JSR DRAW_RECT_RUNTIME
     LDD #0
     STD RESULT
+; VPy_LINE:473
+; NATIVE_CALL: SET_INTENSITY at line 473
     ; SET_INTENSITY: Set drawing intensity
     LDD >VAR_ARG3
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
     STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
-    LDD >VAR_ARG2
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:474
     LDD #4
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR DIV16       ; D = X / D
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_ARG2
+    TFR D,X             ; X = LEFT (dividend)
+    LDD TMPVAL          ; D = RIGHT (divisor)
+    JSR DIV16           ; D = X / D
     STD VAR_G_RANK
-    LDD >VAR_ARG2
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_RANK
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:475
     LDD #4
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_G_RANK
+    TFR D,X             ; X = LEFT
+    LDD TMPVAL          ; D = RIGHT
+    JSR MUL16           ; D = X * D
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_ARG2
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_G_SUIT
-    LDD >VAR_ARG0
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:476
     LDD #3
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_ARG0
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #26
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_ARG1
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_ARG1
     LDD >VAR_G_RANK
     STD VAR_ARG2
-    JSR draw_rank_at
-    LDD >VAR_ARG0
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    JSR DRAW_RANK_AT
+; VPy_LINE:477
     LDD #13  ; const HALF_W
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_ARG0
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #12
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_ARG1
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_ARG1
     LDD >VAR_G_SUIT
     STD VAR_ARG2
-    JSR draw_suit_at
+    JSR DRAW_SUIT_AT
     RTS
 
-; Function: draw_small_count
-draw_small_count:
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+; Function: DRAW_SMALL_COUNT
+DRAW_SMALL_COUNT:
+; VPy_LINE:480
     LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_98_TRUE
-    LDD #0
-    LBRA .CMP_98_END
-.CMP_98_TRUE:
-    LDD #1
-.CMP_98_END:
-    LBEQ IF_NEXT_108
+    CMPD #1
+    LBNE IF_NEXT_108
+; VPy_LINE:481
+; NATIVE_CALL: PRINT_TEXT at line 481
     ; PRINT_TEXT: Print text at position
     LDD >VAR_ARG0
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD >VAR_ARG1
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_49      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     LBRA IF_END_107
 IF_NEXT_108:
-    LDD #2
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_99_TRUE
-    LDD #0
-    LBRA .CMP_99_END
-.CMP_99_TRUE:
-    LDD #1
-.CMP_99_END:
-    LBEQ IF_NEXT_109
+    CMPD #2
+    LBNE IF_NEXT_109
+; VPy_LINE:483
+; NATIVE_CALL: PRINT_TEXT at line 483
     ; PRINT_TEXT: Print text at position
     LDD >VAR_ARG0
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD >VAR_ARG1
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_50      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     LBRA IF_END_107
 IF_NEXT_109:
-    LDD #3
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_100_TRUE
-    LDD #0
-    LBRA .CMP_100_END
-.CMP_100_TRUE:
-    LDD #1
-.CMP_100_END:
-    LBEQ IF_NEXT_110
+    CMPD #3
+    LBNE IF_NEXT_110
+; VPy_LINE:485
+; NATIVE_CALL: PRINT_TEXT at line 485
     ; PRINT_TEXT: Print text at position
     LDD >VAR_ARG0
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD >VAR_ARG1
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_51      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     LBRA IF_END_107
 IF_NEXT_110:
-    LDD #4
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_101_TRUE
-    LDD #0
-    LBRA .CMP_101_END
-.CMP_101_TRUE:
-    LDD #1
-.CMP_101_END:
-    LBEQ IF_NEXT_111
+    CMPD #4
+    LBNE IF_NEXT_111
+; VPy_LINE:487
+; NATIVE_CALL: PRINT_TEXT at line 487
     ; PRINT_TEXT: Print text at position
     LDD >VAR_ARG0
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD >VAR_ARG1
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_52      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     LBRA IF_END_107
 IF_NEXT_111:
-    LDD #5
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_102_TRUE
-    LDD #0
-    LBRA .CMP_102_END
-.CMP_102_TRUE:
-    LDD #1
-.CMP_102_END:
-    LBEQ IF_NEXT_112
+    CMPD #5
+    LBNE IF_NEXT_112
+; VPy_LINE:489
+; NATIVE_CALL: PRINT_TEXT at line 489
     ; PRINT_TEXT: Print text at position
     LDD >VAR_ARG0
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD >VAR_ARG1
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_53      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     LBRA IF_END_107
 IF_NEXT_112:
-    LDD #6
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_103_TRUE
-    LDD #0
-    LBRA .CMP_103_END
-.CMP_103_TRUE:
-    LDD #1
-.CMP_103_END:
-    LBEQ IF_NEXT_113
+    CMPD #6
+    LBNE IF_NEXT_113
+; VPy_LINE:491
+; NATIVE_CALL: PRINT_TEXT at line 491
     ; PRINT_TEXT: Print text at position
     LDD >VAR_ARG0
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD >VAR_ARG1
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_54      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     LBRA IF_END_107
 IF_NEXT_113:
-    LDD #7
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_104_TRUE
-    LDD #0
-    LBRA .CMP_104_END
-.CMP_104_TRUE:
-    LDD #1
-.CMP_104_END:
-    LBEQ IF_NEXT_114
+    CMPD #7
+    LBNE IF_NEXT_114
+; VPy_LINE:493
+; NATIVE_CALL: PRINT_TEXT at line 493
     ; PRINT_TEXT: Print text at position
     LDD >VAR_ARG0
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD >VAR_ARG1
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_55      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     LBRA IF_END_107
 IF_NEXT_114:
-    LDD #8
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_105_TRUE
-    LDD #0
-    LBRA .CMP_105_END
-.CMP_105_TRUE:
-    LDD #1
-.CMP_105_END:
-    LBEQ IF_NEXT_115
+    CMPD #8
+    LBNE IF_NEXT_115
+; VPy_LINE:495
+; NATIVE_CALL: PRINT_TEXT at line 495
     ; PRINT_TEXT: Print text at position
     LDD >VAR_ARG0
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD >VAR_ARG1
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_56      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     LBRA IF_END_107
 IF_NEXT_115:
-    LDD #9
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_106_TRUE
-    LDD #0
-    LBRA .CMP_106_END
-.CMP_106_TRUE:
-    LDD #1
-.CMP_106_END:
-    LBEQ IF_NEXT_116
+    CMPD #9
+    LBNE IF_NEXT_116
+; VPy_LINE:497
+; NATIVE_CALL: PRINT_TEXT at line 497
     ; PRINT_TEXT: Print text at position
     LDD >VAR_ARG0
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD >VAR_ARG1
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_57      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     LBRA IF_END_107
 IF_NEXT_116:
+; VPy_LINE:499
+; NATIVE_CALL: PRINT_TEXT at line 499
     ; PRINT_TEXT: Print text at position
     LDD >VAR_ARG0
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD >VAR_ARG1
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_43      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
 IF_END_107:
     RTS
 
-; Function: draw_rank_at
-draw_rank_at:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+; Function: DRAW_RANK_AT
+DRAW_RANK_AT:
+; VPy_LINE:502
     LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_107_TRUE
-    LDD #0
-    LBRA .CMP_107_END
-.CMP_107_TRUE:
-    LDD #1
-.CMP_107_END:
-    LBEQ IF_NEXT_118
+    CMPD #0
+    LBNE IF_NEXT_118
+; VPy_LINE:503
+; NATIVE_CALL: PRINT_TEXT at line 503
     ; PRINT_TEXT: Print text at position
     LDD >VAR_ARG0
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD >VAR_ARG1
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_65      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     LBRA IF_END_117
 IF_NEXT_118:
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_108_TRUE
-    LDD #0
-    LBRA .CMP_108_END
-.CMP_108_TRUE:
-    LDD #1
-.CMP_108_END:
-    LBEQ IF_NEXT_119
+    CMPD #1
+    LBNE IF_NEXT_119
+; VPy_LINE:505
+; NATIVE_CALL: PRINT_TEXT at line 505
     ; PRINT_TEXT: Print text at position
     LDD >VAR_ARG0
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD >VAR_ARG1
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_50      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     LBRA IF_END_117
 IF_NEXT_119:
-    LDD #2
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_109_TRUE
-    LDD #0
-    LBRA .CMP_109_END
-.CMP_109_TRUE:
-    LDD #1
-.CMP_109_END:
-    LBEQ IF_NEXT_120
+    CMPD #2
+    LBNE IF_NEXT_120
+; VPy_LINE:507
+; NATIVE_CALL: PRINT_TEXT at line 507
     ; PRINT_TEXT: Print text at position
     LDD >VAR_ARG0
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD >VAR_ARG1
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_51      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     LBRA IF_END_117
 IF_NEXT_120:
-    LDD #3
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_110_TRUE
-    LDD #0
-    LBRA .CMP_110_END
-.CMP_110_TRUE:
-    LDD #1
-.CMP_110_END:
-    LBEQ IF_NEXT_121
+    CMPD #3
+    LBNE IF_NEXT_121
+; VPy_LINE:509
+; NATIVE_CALL: PRINT_TEXT at line 509
     ; PRINT_TEXT: Print text at position
     LDD >VAR_ARG0
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD >VAR_ARG1
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_52      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     LBRA IF_END_117
 IF_NEXT_121:
-    LDD #4
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_111_TRUE
-    LDD #0
-    LBRA .CMP_111_END
-.CMP_111_TRUE:
-    LDD #1
-.CMP_111_END:
-    LBEQ IF_NEXT_122
+    CMPD #4
+    LBNE IF_NEXT_122
+; VPy_LINE:511
+; NATIVE_CALL: PRINT_TEXT at line 511
     ; PRINT_TEXT: Print text at position
     LDD >VAR_ARG0
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD >VAR_ARG1
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_53      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     LBRA IF_END_117
 IF_NEXT_122:
-    LDD #5
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_112_TRUE
-    LDD #0
-    LBRA .CMP_112_END
-.CMP_112_TRUE:
-    LDD #1
-.CMP_112_END:
-    LBEQ IF_NEXT_123
+    CMPD #5
+    LBNE IF_NEXT_123
+; VPy_LINE:513
+; NATIVE_CALL: PRINT_TEXT at line 513
     ; PRINT_TEXT: Print text at position
     LDD >VAR_ARG0
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD >VAR_ARG1
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_54      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     LBRA IF_END_117
 IF_NEXT_123:
-    LDD #6
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_113_TRUE
-    LDD #0
-    LBRA .CMP_113_END
-.CMP_113_TRUE:
-    LDD #1
-.CMP_113_END:
-    LBEQ IF_NEXT_124
+    CMPD #6
+    LBNE IF_NEXT_124
+; VPy_LINE:515
+; NATIVE_CALL: PRINT_TEXT at line 515
     ; PRINT_TEXT: Print text at position
     LDD >VAR_ARG0
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD >VAR_ARG1
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_55      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     LBRA IF_END_117
 IF_NEXT_124:
-    LDD #7
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_114_TRUE
-    LDD #0
-    LBRA .CMP_114_END
-.CMP_114_TRUE:
-    LDD #1
-.CMP_114_END:
-    LBEQ IF_NEXT_125
+    CMPD #7
+    LBNE IF_NEXT_125
+; VPy_LINE:517
+; NATIVE_CALL: PRINT_TEXT at line 517
     ; PRINT_TEXT: Print text at position
     LDD >VAR_ARG0
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD >VAR_ARG1
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_56      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     LBRA IF_END_117
 IF_NEXT_125:
-    LDD #8
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_115_TRUE
-    LDD #0
-    LBRA .CMP_115_END
-.CMP_115_TRUE:
-    LDD #1
-.CMP_115_END:
-    LBEQ IF_NEXT_126
+    CMPD #8
+    LBNE IF_NEXT_126
+; VPy_LINE:519
+; NATIVE_CALL: PRINT_TEXT at line 519
     ; PRINT_TEXT: Print text at position
     LDD >VAR_ARG0
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD >VAR_ARG1
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_57      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     LBRA IF_END_117
 IF_NEXT_126:
-    LDD #9
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_116_TRUE
-    LDD #0
-    LBRA .CMP_116_END
-.CMP_116_TRUE:
-    LDD #1
-.CMP_116_END:
-    LBEQ IF_NEXT_127
+    CMPD #9
+    LBNE IF_NEXT_127
+; VPy_LINE:521
+; NATIVE_CALL: PRINT_TEXT at line 521
     ; PRINT_TEXT: Print text at position
     LDD >VAR_ARG0
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD >VAR_ARG1
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_1567      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     LBRA IF_END_117
 IF_NEXT_127:
-    LDD #10
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_117_TRUE
-    LDD #0
-    LBRA .CMP_117_END
-.CMP_117_TRUE:
-    LDD #1
-.CMP_117_END:
-    LBEQ IF_NEXT_128
+    CMPD #10
+    LBNE IF_NEXT_128
+; VPy_LINE:523
+; NATIVE_CALL: PRINT_TEXT at line 523
     ; PRINT_TEXT: Print text at position
     LDD >VAR_ARG0
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD >VAR_ARG1
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_74      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     LBRA IF_END_117
 IF_NEXT_128:
-    LDD #11
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_118_TRUE
-    LDD #0
-    LBRA .CMP_118_END
-.CMP_118_TRUE:
-    LDD #1
-.CMP_118_END:
-    LBEQ IF_NEXT_129
+    CMPD #11
+    LBNE IF_NEXT_129
+; VPy_LINE:525
+; NATIVE_CALL: PRINT_TEXT at line 525
     ; PRINT_TEXT: Print text at position
     LDD >VAR_ARG0
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD >VAR_ARG1
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_81      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     LBRA IF_END_117
 IF_NEXT_129:
+; VPy_LINE:527
+; NATIVE_CALL: PRINT_TEXT at line 527
     ; PRINT_TEXT: Print text at position
     LDD >VAR_ARG0
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD >VAR_ARG1
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_75      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
 IF_END_117:
     RTS
 
-; Function: draw_suit_at
-draw_suit_at:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+; Function: DRAW_SUIT_AT
+DRAW_SUIT_AT:
+; VPy_LINE:530
     LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_119_TRUE
-    LDD #0
-    LBRA .CMP_119_END
-.CMP_119_TRUE:
-    LDD #1
-.CMP_119_END:
-    LBEQ IF_NEXT_131
+    CMPD #0
+    LBNE IF_NEXT_131
+; VPy_LINE:531
+; NATIVE_CALL: DRAW_VECTOR at line 531
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: suit_clubs (index=0, 5 paths)
     LDD >VAR_ARG0
-    TFR B,A       ; X position (low byte) — B already holds it
-    STA TMPPTR    ; Save X to temporary storage
+    STA TMPPTR2      ; save high byte of 16-bit screen_x
+    TFR B,A
+    SEX              ; A = sign-extend of B (0x00 or 0xFF)
+    CMPA TMPPTR2     ; vs actual high byte
+    LBNE DRVEC_SKIP_2          ; out of 8-bit range — skip draw
+    TFR B,A
+    STA TMPPTR       ; save 8-bit x
     LDD >VAR_ARG1
-    TFR B,A       ; Y position (low byte) — B already holds it
-    STA TMPPTR+1  ; Save Y to temporary storage
-    LDA TMPPTR    ; X position
+    TFR B,A          ; Y position (8-bit signed in A)
+    STA TMPPTR+1     ; Save Y to temporary storage
+    LDA TMPPTR       ; X position (8-bit signed, was cull-checked)
     STA DRAW_VEC_X
-    LDA TMPPTR+1  ; Y position
+    LDB #0
+    TSTA
+    BPL .sx_pos_2
+    LDB #$FF
+.sx_pos_2:
+    STB DRAW_VEC_X_HI
+    LDA TMPPTR+1     ; Y position
     STA DRAW_VEC_Y
     CLR MIRROR_X
     CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities (not SHOW_LEVEL leftovers)
     JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
     LDX #_SUIT_CLUBS_PATH0  ; Load path 0
     JSR Draw_Sync_List_At_With_Mirrors
@@ -3983,93 +4068,119 @@ draw_suit_at:
     LDX #_SUIT_CLUBS_PATH4  ; Load path 4
     JSR Draw_Sync_List_At_With_Mirrors
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
-    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
+DRVEC_SKIP_2:
     LDD #0
     STD RESULT
     LBRA IF_END_130
 IF_NEXT_131:
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_120_TRUE
-    LDD #0
-    LBRA .CMP_120_END
-.CMP_120_TRUE:
-    LDD #1
-.CMP_120_END:
-    LBEQ IF_NEXT_132
+    CMPD #1
+    LBNE IF_NEXT_132
+; VPy_LINE:533
+; NATIVE_CALL: DRAW_VECTOR at line 533
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: suit_diamonds (index=1, 1 paths)
     LDD >VAR_ARG0
-    TFR B,A       ; X position (low byte) — B already holds it
-    STA TMPPTR    ; Save X to temporary storage
+    STA TMPPTR2      ; save high byte of 16-bit screen_x
+    TFR B,A
+    SEX              ; A = sign-extend of B (0x00 or 0xFF)
+    CMPA TMPPTR2     ; vs actual high byte
+    LBNE DRVEC_SKIP_3          ; out of 8-bit range — skip draw
+    TFR B,A
+    STA TMPPTR       ; save 8-bit x
     LDD >VAR_ARG1
-    TFR B,A       ; Y position (low byte) — B already holds it
-    STA TMPPTR+1  ; Save Y to temporary storage
-    LDA TMPPTR    ; X position
+    TFR B,A          ; Y position (8-bit signed in A)
+    STA TMPPTR+1     ; Save Y to temporary storage
+    LDA TMPPTR       ; X position (8-bit signed, was cull-checked)
     STA DRAW_VEC_X
-    LDA TMPPTR+1  ; Y position
+    LDB #0
+    TSTA
+    BPL .sx_pos_3
+    LDB #$FF
+.sx_pos_3:
+    STB DRAW_VEC_X_HI
+    LDA TMPPTR+1     ; Y position
     STA DRAW_VEC_Y
     CLR MIRROR_X
     CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities (not SHOW_LEVEL leftovers)
     JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
     LDX #_SUIT_DIAMONDS_PATH0  ; Load path 0
     JSR Draw_Sync_List_At_With_Mirrors
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
-    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
+DRVEC_SKIP_3:
     LDD #0
     STD RESULT
     LBRA IF_END_130
 IF_NEXT_132:
-    LDD #2
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_121_TRUE
-    LDD #0
-    LBRA .CMP_121_END
-.CMP_121_TRUE:
-    LDD #1
-.CMP_121_END:
-    LBEQ IF_NEXT_133
+    CMPD #2
+    LBNE IF_NEXT_133
+; VPy_LINE:535
+; NATIVE_CALL: DRAW_VECTOR at line 535
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: suit_hearts (index=2, 1 paths)
     LDD >VAR_ARG0
-    TFR B,A       ; X position (low byte) — B already holds it
-    STA TMPPTR    ; Save X to temporary storage
+    STA TMPPTR2      ; save high byte of 16-bit screen_x
+    TFR B,A
+    SEX              ; A = sign-extend of B (0x00 or 0xFF)
+    CMPA TMPPTR2     ; vs actual high byte
+    LBNE DRVEC_SKIP_4          ; out of 8-bit range — skip draw
+    TFR B,A
+    STA TMPPTR       ; save 8-bit x
     LDD >VAR_ARG1
-    TFR B,A       ; Y position (low byte) — B already holds it
-    STA TMPPTR+1  ; Save Y to temporary storage
-    LDA TMPPTR    ; X position
+    TFR B,A          ; Y position (8-bit signed in A)
+    STA TMPPTR+1     ; Save Y to temporary storage
+    LDA TMPPTR       ; X position (8-bit signed, was cull-checked)
     STA DRAW_VEC_X
-    LDA TMPPTR+1  ; Y position
+    LDB #0
+    TSTA
+    BPL .sx_pos_4
+    LDB #$FF
+.sx_pos_4:
+    STB DRAW_VEC_X_HI
+    LDA TMPPTR+1     ; Y position
     STA DRAW_VEC_Y
     CLR MIRROR_X
     CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities (not SHOW_LEVEL leftovers)
     JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
     LDX #_SUIT_HEARTS_PATH0  ; Load path 0
     JSR Draw_Sync_List_At_With_Mirrors
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
-    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
+DRVEC_SKIP_4:
     LDD #0
     STD RESULT
     LBRA IF_END_130
 IF_NEXT_133:
+; VPy_LINE:537
+; NATIVE_CALL: DRAW_VECTOR at line 537
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: suit_spades (index=3, 3 paths)
     LDD >VAR_ARG0
-    TFR B,A       ; X position (low byte) — B already holds it
-    STA TMPPTR    ; Save X to temporary storage
+    STA TMPPTR2      ; save high byte of 16-bit screen_x
+    TFR B,A
+    SEX              ; A = sign-extend of B (0x00 or 0xFF)
+    CMPA TMPPTR2     ; vs actual high byte
+    LBNE DRVEC_SKIP_5          ; out of 8-bit range — skip draw
+    TFR B,A
+    STA TMPPTR       ; save 8-bit x
     LDD >VAR_ARG1
-    TFR B,A       ; Y position (low byte) — B already holds it
-    STA TMPPTR+1  ; Save Y to temporary storage
-    LDA TMPPTR    ; X position
+    TFR B,A          ; Y position (8-bit signed in A)
+    STA TMPPTR+1     ; Save Y to temporary storage
+    LDA TMPPTR       ; X position (8-bit signed, was cull-checked)
     STA DRAW_VEC_X
-    LDA TMPPTR+1  ; Y position
+    LDB #0
+    TSTA
+    BPL .sx_pos_5
+    LDB #$FF
+.sx_pos_5:
+    STB DRAW_VEC_X_HI
+    LDA TMPPTR+1     ; Y position
     STA DRAW_VEC_Y
     CLR MIRROR_X
     CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities (not SHOW_LEVEL leftovers)
     JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
     LDX #_SUIT_SPADES_PATH0  ; Load path 0
     JSR Draw_Sync_List_At_With_Mirrors
@@ -4078,112 +4189,124 @@ IF_NEXT_133:
     LDX #_SUIT_SPADES_PATH2  ; Load path 2
     JSR Draw_Sync_List_At_With_Mirrors
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
-    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
+DRVEC_SKIP_5:
     LDD #0
     STD RESULT
 IF_END_130:
     RTS
 
-; Function: draw_win_screen
-draw_win_screen:
-    LDD >VAR_WIN_BLINK
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; Function: DRAW_WIN_SCREEN
+DRAW_WIN_SCREEN:
+; VPy_LINE:541
     LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_WIN_BLINK
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_WIN_BLINK
+; VPy_LINE:542
+; NATIVE_CALL: SET_INTENSITY at line 542
     ; SET_INTENSITY: Set drawing intensity
     LDD #127
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
     STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
+; VPy_LINE:543
+; NATIVE_CALL: PRINT_TEXT at line 543
     ; PRINT_TEXT: Print text at position
     LDD #-42
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #30
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2521201141606      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:544
+; NATIVE_CALL: SET_INTENSITY at line 544
     ; SET_INTENSITY: Set drawing intensity
     LDD #80
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
     STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
+; VPy_LINE:545
+; NATIVE_CALL: PRINT_TEXT at line 545
     ; PRINT_TEXT: Print text at position
     LDD #-63
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #0
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_3321124269434895794      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:546
     LDD #30
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_WIN_BLINK
     CMPD TMPVAL
-    LBLT .CMP_122_TRUE
+    LBLT .CMP_70_TRUE
     LDD #0
-    LBRA .CMP_122_END
-.CMP_122_TRUE:
+    LBRA .CMP_70_END
+.CMP_70_TRUE:
     LDD #1
-.CMP_122_END:
+.CMP_70_END:
     LBEQ IF_NEXT_135
+; VPy_LINE:547
+; NATIVE_CALL: SET_INTENSITY at line 547
     ; SET_INTENSITY: Set drawing intensity
     LDD #60
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
     STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
+; VPy_LINE:548
+; NATIVE_CALL: PRINT_TEXT at line 548
     ; PRINT_TEXT: Print text at position
     LDD #-63
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #-30
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2487248696027089637      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     LBRA IF_END_134
 IF_NEXT_135:
 IF_END_134:
+; VPy_LINE:549
     LDD #60
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_WIN_BLINK
     CMPD TMPVAL
-    LBGE .CMP_123_TRUE
+    LBGE .CMP_71_TRUE
     LDD #0
-    LBRA .CMP_123_END
-.CMP_123_TRUE:
+    LBRA .CMP_71_END
+.CMP_71_TRUE:
     LDD #1
-.CMP_123_END:
+.CMP_71_END:
     LBEQ IF_NEXT_137
+; VPy_LINE:550
     LDD #0
     STD VAR_WIN_BLINK
     LBRA IF_END_136
 IF_NEXT_137:
 IF_END_136:
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+; VPy_LINE:551
     LDD >VAR_BTN1_FIRE
-    CMPD TMPVAL
-    LBEQ .CMP_124_TRUE
-    LDD #0
-    LBRA .CMP_124_END
-.CMP_124_TRUE:
-    LDD #1
-.CMP_124_END:
-    LBEQ IF_NEXT_139
+    CMPD #1
+    LBNE IF_NEXT_139
+; VPy_LINE:552
     LDD #0  ; const STATE_PLAY
     STD VAR_GAME_STATE
-    JSR shuffle
-    JSR deal
+; VPy_LINE:553
+    JSR SHUFFLE
+; VPy_LINE:554
+    JSR DEAL
     LBRA IF_END_138
 IF_NEXT_139:
 IF_END_138:
@@ -4206,7 +4329,7 @@ _SUIT_CLUBS_CENTER_X EQU 0
 _SUIT_CLUBS_CENTER_Y EQU 0
 
 _SUIT_CLUBS_VECTORS:  ; Main entry (header + 5 path(s))
-    FDB 5               ; path_count (runtime metadata, 2 bytes)
+    FDB 5               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
     FDB _SUIT_CLUBS_PATH0        ; pointer to path 0
     FDB _SUIT_CLUBS_PATH1        ; pointer to path 1
     FDB _SUIT_CLUBS_PATH2        ; pointer to path 2
@@ -4270,7 +4393,7 @@ _SUIT_DIAMONDS_CENTER_X EQU 0
 _SUIT_DIAMONDS_CENTER_Y EQU 0
 
 _SUIT_DIAMONDS_VECTORS:  ; Main entry (header + 1 path(s))
-    FDB 1               ; path_count (runtime metadata, 2 bytes)
+    FDB 1               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
     FDB _SUIT_DIAMONDS_PATH0        ; pointer to path 0
 
 _SUIT_DIAMONDS_PATH0:    ; Path 0
@@ -4294,7 +4417,7 @@ _SUIT_HEARTS_CENTER_X EQU 0
 _SUIT_HEARTS_CENTER_Y EQU 0
 
 _SUIT_HEARTS_VECTORS:  ; Main entry (header + 1 path(s))
-    FDB 1               ; path_count (runtime metadata, 2 bytes)
+    FDB 1               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
     FDB _SUIT_HEARTS_PATH0        ; pointer to path 0
 
 _SUIT_HEARTS_PATH0:    ; Path 0
@@ -4303,10 +4426,7 @@ _SUIT_HEARTS_PATH0:    ; Path 0
     FCB $FF,$05,$05          ; flag=-1, dy=5, dx=5
     FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
     FCB $FF,$04,$FE          ; flag=-1, dy=4, dx=-2
-    FCB $FF,$01,$FD          ; flag=-1, dy=1, dx=-3
-    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
-    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
-    FCB $FF,$FF,$FD          ; flag=-1, dy=-1, dx=-3
+    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
     FCB $FF,$FC,$FE          ; flag=-1, dy=-4, dx=-2
     FCB $FF,$FD,$01          ; flag=-1, dy=-3, dx=1
     FCB $FF,$FB,$05          ; flag=-1, dy=-5, dx=5
@@ -4324,7 +4444,7 @@ _SUIT_SPADES_CENTER_X EQU 0
 _SUIT_SPADES_CENTER_Y EQU 0
 
 _SUIT_SPADES_VECTORS:  ; Main entry (header + 3 path(s))
-    FDB 3               ; path_count (runtime metadata, 2 bytes)
+    FDB 3               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
     FDB _SUIT_SPADES_PATH0        ; pointer to path 0
     FDB _SUIT_SPADES_PATH1        ; pointer to path 1
     FDB _SUIT_SPADES_PATH2        ; pointer to path 2
@@ -4346,13 +4466,9 @@ _SUIT_SPADES_PATH2:    ; Path 2
     FCB $02,$FB,0,0        ; path2: header (y=2, x=-5)
     FCB $FF,$FD,$FF          ; flag=-1, dy=-3, dx=-1
     FCB $FF,$FC,$02          ; flag=-1, dy=-4, dx=2
-    FCB $FF,$FF,$03          ; flag=-1, dy=-1, dx=3
-    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
-    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
-    FCB $FF,$01,$03          ; flag=-1, dy=1, dx=3
+    FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
     FCB $FF,$04,$02          ; flag=-1, dy=4, dx=2
-    FCB $FF,$03,$FF          ; flag=-1, dy=3, dx=-1
-    FCB $FF,$05,$FB          ; flag=-1, dy=5, dx=-5
+    FCB $FF,$08,$FA          ; flag=-1, dy=8, dx=-6
     FCB $FF,$FB,$FB          ; flag=-1, dy=-5, dx=-5
     FCB 2                ; End marker (path complete)
 ;***************************************************************************
@@ -4362,41 +4478,56 @@ _SUIT_SPADES_PATH2:    ; Path 2
 VECTREX_PRINT_TEXT:
     ; VPy signature: PRINT_TEXT(x, y, string)
     ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
-    ; NOTE: Do NOT set VIA_cntl=$98 here - would release /ZERO prematurely
-    ;       causing integrators to drift toward joystick DAC value.
-    ;       Moveto_d_7F (called by Print_Str_d) handles VIA_cntl via $CE.
     LDA #$D0
-    TFR A,DP       ; Set Direct Page to $D0 for BIOS
-    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
-    JSR Reset0Ref   ; Reset beam to center before positioning text
-    LDU VAR_ARG2   ; string pointer
-    LDA >TEXT_SCALE_H ; height (signed byte, e.g. $F8=-8)
-    STA >$C82A      ; Vec_Text_Height: controls character Y scale
-    LDA >TEXT_SCALE_W ; width (unsigned byte, e.g. 72)
-    STA >$C82B      ; Vec_Text_Width: controls character X spacing
-    LDA >VAR_ARG1+1 ; Y coordinate
-    LDB >VAR_ARG0+1 ; X coordinate
+    TFR A,DP
+    JSR Intensity_5F
+    JSR Reset0Ref
+    LDU >VAR_ARG2
+    LDA >TEXT_SCALE_H
+    STA >$C82A          ; Vec_Text_Height
+    LDA >TEXT_SCALE_W
+    STA >$C82B          ; Vec_Text_Width
+    LDA >VAR_ARG1+1
+    LDB >VAR_ARG0+1
+    LDX >$C82C
+    PSHS X
     JSR Print_Str_d
+    PULS X
+    STX >$C82C
     LDA #$F8
-    STA >$C82A      ; Restore Vec_Text_Height to normal (-8)
+    STA >$C82A
     LDA #$48
-    STA >$C82B      ; Restore Vec_Text_Width to normal (72)
-    JSR $F1AF      ; DP_to_C8 - restore DP before return
+    STA >$C82B
+    JSR $F1AF
     RTS
 
 MUL16:
-    ; Multiply 16-bit X * D -> D
-    ; Simple implementation (can be optimized)
+    ; Signed 16x16->16 multiply: D = X * D (lower 16 bits, sign-correct)
+    ; Uses 6809 MUL (8x8->16) for constant-time execution.
+    ; Stack after PSHS X,B,A: [SP+0]=A=D_hi=b_hi, [SP+1]=B=D_lo=b_lo,
+    ;                         [SP+2]=X_hi=a_hi,  [SP+3]=X_lo=a_lo
+    ; Result = a_lo*b_lo + (a_hi*b_lo + a_lo*b_hi)*256  (mod 65536)
     PSHS X,B,A
-    LDD #0         ; Result accumulator
-    LDX 2,S        ; Multiplier
-.MUL16_LOOP:
-    BEQ .MUL16_END
-    ADDD ,S        ; Add multiplicand
-    LEAX -1,X
-    BRA .MUL16_LOOP
-.MUL16_END:
-    LEAS 4,S
+    ; Step 1: a_lo * b_lo -> 16-bit partial product
+    LDA 3,S         ; A = a_lo (X low byte)
+    LDB 1,S         ; B = b_lo (D low byte)
+    MUL             ; D = a_lo * b_lo (unsigned 16-bit)
+    STA TMPPTR      ; TMPPTR   = P0_hi (carry into result bits [15:8])
+    STB TMPPTR+1    ; TMPPTR+1 = P0_lo (result bits [7:0])
+    ; Step 2: a_hi * b_lo -> only low byte adds to result[15:8]
+    LDA 2,S         ; A = a_hi (X high byte)
+    LDB 1,S         ; B = b_lo (D low byte)
+    MUL             ; D = a_hi * b_lo
+    ADDB TMPPTR     ; B += P0_hi (ignore carry = mod 256)
+    STB TMPPTR      ; TMPPTR = accumulated result[15:8]
+    ; Step 3: a_lo * b_hi -> only low byte adds to result[15:8]
+    LDA 3,S         ; A = a_lo (X low byte)
+    LDB 0,S         ; B = b_hi (D high byte)
+    MUL             ; D = a_lo * b_hi
+    ADDB TMPPTR     ; B += accumulated result[15:8] (mod 256)
+    TFR B,A         ; A = result_hi
+    LDB TMPPTR+1    ; B = result_lo
+    LEAS 4,S        ; restore stack
     RTS
 
 DIV16:
@@ -4528,19 +4659,12 @@ RRH_MOD:
     ADDD TMPPTR            ; Add min -> D in [min, max]
     RTS
 
-; === JOYSTICK BUILTIN SUBROUTINES ===
-; J1_X() - Read Joystick 1 X axis (INCREMENTAL - with state preservation)
-; Returns: D = raw value from $C81B after Joy_Analog call
+; === JOYSTICK BUILTIN SUBROUTINES (cached, Joy_Analog runs once per frame) ===
+; J1_X() - Read Joystick 1 X axis from cached BIOS value at $C81B
 J1X_BUILTIN:
-    PSHS X       ; Save X (Joy_Analog uses it)
-    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
-    JSR $F1F5    ; Joy_Analog (updates $C81B from hardware)
-    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
-    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81B)
-    LDB $C81B    ; Vec_Joy_1_X (BIOS writes ~$FE at center)
+    LDB >$C81B   ; Vec_Joy_1_X (populated each frame by auto-injected Joy_Analog)
     SEX          ; Sign-extend B to D
     ADDD #2      ; Calibrate center offset
-    PULS X       ; Restore X
     RTS
 
 DRAW_RECT_RUNTIME:
@@ -4595,10 +4719,9 @@ DRAW_RECT_RUNTIME:
     NEGB                ; -width
     JSR Draw_Line_d
     
-    ; Draw up side
+    ; Draw up side (close rectangle: +height closes the -height of down side)
     CLR Vec_Misc_Count
-    LDA 2,S             ; height
-    NEGA                ; -height
+    LDA 3,S             ; +height
     LDB #0
     JSR Draw_Line_d
     
@@ -4610,27 +4733,15 @@ DRAW_RECT_RUNTIME:
 Draw_Sync_List_At_With_Mirrors:
 ; Unified mirror support using flags: MIRROR_X and MIRROR_Y
 ; Conditionally negates X and/or Y coordinates and deltas
-; NOTE: Caller must ensure DP=$D0 for VIA access
-; Z-axis intensity: use exact BIOS Intensity_a sequence (PB=$05->$04, PA=val, PB=$00->$01)
-; Caller (DRAW_ANIM_RUNTIME, DRAW_VECTOR) ensures DP=$D0 before JSR here.
-LDA ,X+                 ; Read per-path intensity from vector data
+; NOTE: Caller has DP=$D0 for VIA access — RAM vars need '>' extended addressing
+LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
+BNE DSWM_USE_OVERRIDE   ; If non-zero, use override
+LDA ,X+                 ; Otherwise, read intensity from vector data
+BRA DSWM_SET_INTENSITY
+DSWM_USE_OVERRIDE:
+LEAX 1,X                ; Skip intensity byte in vector data
 DSWM_SET_INTENSITY:
-TST >DRAW_VEC_INTENSITY  ; 0 = no override, use FCB value
-BEQ DSWM_USE_FCB_INT
-LDA >DRAW_VEC_INTENSITY  ; non-zero override (from SET_INTENSITY)
-DSWM_USE_FCB_INT:
-STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
-PSHS A                  ; save brightness
-LDA #$05
-STA >$D000              ; PB=$05: pre-condition Z-axis (mirrors BIOS Intensity_a)
-LDA #$04
-STA >$D000              ; PB=$04: select Z-axis channel
-PULS A                  ; restore brightness
-STA >$D001              ; PA=brightness while Z-axis selected -> charges S/H
-LDA #$00
-STA >$D000              ; PB=$00: deselect all channels
-LDA #$01
-STA >$D000              ; PB=$01: restore X-integrator channel
+STA >$C832              ; Vec_Misc_Count (direct, DP-safe — JSR Intensity_a corrupts DDRB with DP=$D0)
 LDB ,X+                 ; y_start from .vec (already relative to center)
 ; Check if Y mirroring is enabled
 TST >MIRROR_Y
@@ -4670,8 +4781,8 @@ CLR VIA_shift_reg       ; SR=0: no draw during moveto
 INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A                  ; Restore X
 STA VIA_port_a          ; X to DAC
-; T1 scale from DRAW_SCALE variable ($7F=normal)
-LDA >DRAW_SCALE
+; Timing setup (match core: hardcoded $7F)
+LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
 LEAX 2,X                ; Skip next_y, next_x
@@ -4717,23 +4828,22 @@ DSWM_W2:
 LDA VIA_int_flags
 ANDA #$40
 BEQ DSWM_W2
-CLR VIA_port_a          ; PA=0: stop X integrator FIRST (alg_xsh=128=rsh → dx=0)
-CLR VIA_port_b          ; PB=0: Y mux enabled → ysh=0 (stop Y integrator)
-INC VIA_port_b          ; PB=1: Y mux hold (lock Y at 0)
-CLR VIA_shift_reg       ; beam off (rate=0 so no drift during these 3 insns)
+CLR VIA_port_a          ; stop X integrator drift between segments
+CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)
 LBRA DSWM_LOOP          ; Long branch
 ; Next path: repeat mirror logic for new path header
 DSWM_NEXT_PATH:
 TFR X,D
 PSHS D
-; Read per-path intensity from vector data (check DRAW_VEC_INTENSITY override)
-LDA ,X+                 ; Read FCB intensity from vector data
+; Check intensity override (same logic as start)
+LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
+BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override
+LDA ,X+                 ; Otherwise, read intensity from vector data
+BRA DSWM_NEXT_SET_INTENSITY
+DSWM_NEXT_USE_OVERRIDE:
+LEAX 1,X                ; Skip intensity byte in vector data
 DSWM_NEXT_SET_INTENSITY:
-TST >DRAW_VEC_INTENSITY  ; 0 = no override, use FCB
-BEQ DSWM_NEXT_USE_FCB_INT
-LDA >DRAW_VEC_INTENSITY  ; non-zero override
-DSWM_NEXT_USE_FCB_INT:
-PSHS A                  ; save intensity for later
+PSHS A
 LDB ,X+                 ; y_start
 TST >MIRROR_Y
 BEQ DSWM_NEXT_NO_NEGATE_Y
@@ -4747,19 +4857,8 @@ NEGA
 DSWM_NEXT_NO_NEGATE_X:
 ADDA >DRAW_VEC_X        ; Add X offset
 STD >TEMP_YX
-PULS A                  ; restore intensity
-STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
-PSHS A                  ; save brightness for Z-axis write
-LDA #$05
-STA >$D000              ; PB=$05: pre-condition (BIOS Intensity_a step 1)
-LDA #$04
-STA >$D000              ; PB=$04: select Z-axis channel
-PULS A                  ; restore brightness
-STA >$D001              ; PA=brightness while Z-axis selected
-LDA #$00
-STA >$D000              ; PB=$00: deselect
-LDA #$01
-STA >$D000              ; PB=$01: restore X-integrator channel
+PULS A                  ; Get intensity back
+STA >$C832              ; Vec_Misc_Count (direct, DP-safe)
 PULS D
 ADDD #3
 TFR D,X
@@ -4787,8 +4886,8 @@ CLR VIA_shift_reg       ; SR=0: no draw during moveto
 INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A
 STA VIA_port_a          ; X to DAC
-; T1 scale from DRAW_SCALE variable ($7F=normal)
-LDA >DRAW_SCALE
+; Timing setup (match core: hardcoded $7F)
+LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
 LEAX 2,X
@@ -4801,6 +4900,180 @@ BEQ DSWM_W3
 LBRA DSWM_LOOP          ; Long branch
 DSWM_DONE:
 RTS
+; === SLR_DRAW_CLIPPED_PATH ===
+SLR_DRAW_CLIPPED_PATH:
+    LDA >DRAW_VEC_INTENSITY ; check override
+    BNE SDCP_USE_OVERRIDE
+    LDA ,X+                 ; read intensity from path data
+    BRA SDCP_SET_INTENS
+SDCP_USE_OVERRIDE:
+    LEAX 1,X                ; skip intensity byte
+SDCP_SET_INTENS:
+    STA >$C832              ; Vec_Misc_Count (DDRB-safe, no JSR)
+    LDB ,X+                 ; B = y_start (relative to center)
+    LDA ,X+                 ; A = x_start (relative to center)
+    ADDB >DRAW_VEC_Y        ; B = abs_y
+    STB >SDCP_ABS_Y         ; save abs_y for moveto (NOT TMPVAL — SHOW_LEVEL's top_screen lives there)
+    TFR A,B                 ; B = x_start (SEX extends B, not A)
+    SEX                      ; sign-extend B→D (A=sign, B=x_start)
+    ADDD >DRAW_VEC_X_HI     ; D = abs_x_16 = SEX(x_start) + screen_x_16
+    ; D = abs_x_16. Save it in 16-bit tracker SLR_TRUE_X (unclamped).
+    STD >SLR_TRUE_X
+    ; Compute clamped beam position for hardware Moveto.
+    TSTA
+    BEQ SDCP_INIT_POS
+    INCA
+    BEQ SDCP_INIT_NEG_OK    ; A was $FF (small negative)
+    ; Way off — clamp to nearest edge by sign of original A (now in INCA result)
+    LDB #$80                ; default to left edge
+    LDA >SLR_TRUE_X         ; original hi byte
+    BMI SDCP_USE_CLAMPED    ; negative → -128 (left)
+    LDB #$7F                ; positive way off → +127 (right)
+    BRA SDCP_USE_CLAMPED
+SDCP_INIT_NEG_OK:
+    CMPB #$80
+    BHS SDCP_USE_CLAMPED    ; -128..-1, valid
+    LDB #$80                ; clamp
+    BRA SDCP_USE_CLAMPED
+SDCP_INIT_POS:
+    CMPB #$7F
+    BLS SDCP_USE_CLAMPED
+    LDB #$7F                ; clamp positive
+SDCP_USE_CLAMPED:
+    TFR B,A                  ; A = clamped beam x
+    STA >SLR_CUR_X          ; clamped value goes to integrator
+    CLR VIA_shift_reg
+    LDA #$CC
+    STA VIA_cntl
+    CLR VIA_port_a
+    LDA #$03
+    STA VIA_port_b
+    LDA #$02
+    STA VIA_port_b
+    LDA #$02
+    STA VIA_port_b
+    LDA #$01
+    STA VIA_port_b
+    LDB >SDCP_ABS_Y         ; B = abs_y
+    STB VIA_port_a          ; DY → DAC (PB=1: hold)
+    CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
+    LDA >SLR_CUR_X          ; abs_x (load = settling for Y)
+    PSHS A                  ; ~4 more settling cycles
+    LDA #$CE
+    STA VIA_cntl            ; PCR=$CE: /ZERO high
+    CLR VIA_shift_reg       ; SR=0: beam off
+    INC VIA_port_b          ; PB=1: lock Y direction
+    PULS A                  ; restore abs_x
+    STA VIA_port_a          ; DX → DAC
+    LDA >DRAW_T1_SCALED     ; effective T1 for this object (scale * 127)
+    STA VIA_t1_cnt_lo       ; load T1 latch
+    LEAX 2,X                ; skip next_y, next_x (the 0,0)
+    CLR VIA_t1_cnt_hi       ; start T1 → ramp
+SDCP_MOVETO_W:
+    LDA VIA_int_flags
+    ANDA #$40
+    BEQ SDCP_MOVETO_W
+    ; PB=1 on exit — draw loop ready
+SDCP_SEG_LOOP:
+    LDA ,X+                 ; flags
+    CMPA #2
+    LBEQ SDCP_DONE
+    LDB ,X+                 ; B = dy
+    STB >TMPPTR2            ; save dy
+    LDA ,X+                 ; A = dx (8-bit signed)
+    ; --- 16-bit add: true_new_x_16 = SLR_TRUE_X + SEX(dx) ---
+    TFR A,B                 ; B = dx
+    SEX                      ; D = sign-extended dx (A=sign, B=dx)
+    ADDD >SLR_TRUE_X        ; D = new true_x_16
+    STD >SLR_TRUE_X         ; update 16-bit tracker
+    ; --- Clamp D to [-128, +127] → 8-bit clamped_new_x in B ---
+    TSTA
+    BEQ SDCP_SEG_POS
+    INCA
+    BEQ SDCP_SEG_NEG_OK     ; A was $FF
+    ; Way off — clamp by sign of original D
+    LDA >SLR_TRUE_X         ; reload hi byte
+    BMI SDCP_SEG_CLAMP_LEFT
+    LDB #$7F                ; positive way off → +127
+    BRA SDCP_SEG_CLAMPED
+SDCP_SEG_CLAMP_LEFT:
+    LDB #$80                ; negative way off → -128
+    BRA SDCP_SEG_CLAMPED
+SDCP_SEG_NEG_OK:
+    CMPB #$80
+    BHS SDCP_SEG_CLAMPED
+    LDB #$80
+    BRA SDCP_SEG_CLAMPED
+SDCP_SEG_POS:
+    CMPB #$7F
+    BLS SDCP_SEG_CLAMPED
+    LDB #$7F
+SDCP_SEG_CLAMPED:
+    ; B = clamped_new_x. Compute beam_dx = B - SLR_CUR_X (8-bit signed).
+    LDA >SLR_CUR_X
+    PSHS B                  ; save clamped_new_x
+    NEGA                    ; A = -cur_x
+    ADDA ,S                 ; A = clamped_new_x - cur_x = beam_dx
+    PULS B                  ; B = clamped_new_x
+    ; Update SLR_CUR_X to new clamped position
+    STB >SLR_CUR_X
+    ; Decide beam ON/OFF/skip:
+    ; - beam_dx != 0                       → beam ON,  ramp(beam_dx, dy)
+    ; - beam_dx == 0 AND cur at edge AND dy==0 → skip (zero motion)
+    ; - beam_dx == 0 AND cur at edge AND dy!=0 → beam OFF ramp(0, dy)
+    ;   (Y must track logical position so subsequent segments draw at correct Y)
+    ; - beam_dx == 0 AND not at edge       → beam ON,  ramp(0, dy) — vertical
+    TSTA
+    BNE SDCP_SEG_DRAW       ; non-zero beam_dx → draw
+    CMPB #$80               ; at left edge?
+    BEQ SDCP_SEG_OFF_X      ; yes → fully off-screen left
+    CMPB #$7F               ; at right edge?
+    BEQ SDCP_SEG_OFF_X      ; yes → fully off-screen right
+SDCP_SEG_DRAW:
+    LDB >TMPPTR2            ; restore dy
+    ; A = beam_dx (visible X delta), B = dy. Beam ON ramp.
+    STB VIA_port_a          ; DY → DAC (PB=1: hold)
+    CLR VIA_port_b          ; PB=0: mux for DY
+    NOP
+    NOP
+    NOP
+    INC VIA_port_b          ; PB=1: lock DY
+    STA VIA_port_a          ; DX → DAC
+    LDA #$FF
+    STA VIA_shift_reg       ; beam ON
+    CLR VIA_t1_cnt_hi       ; start T1
+SDCP_W_DRAW:
+    LDA VIA_int_flags
+    ANDA #$40
+    BEQ SDCP_W_DRAW
+    CLR VIA_shift_reg       ; beam OFF
+    LBRA SDCP_SEG_LOOP
+
+    ; --- Off-screen-X path: dx contribution is invisible, but Y must track ---
+SDCP_SEG_OFF_X:
+    LDB >TMPPTR2            ; B = dy
+    TSTB                     ; dy == 0?
+    LBEQ SDCP_SEG_LOOP      ; no Y motion either → skip entire segment
+    ; Ramp(0, dy) with beam OFF. A is already 0 (beam_dx).
+    CLRA                     ; defensive: ensure dx=0
+    STB VIA_port_a          ; DY → DAC
+    CLR VIA_port_b
+    NOP
+    NOP
+    NOP
+    INC VIA_port_b
+    STA VIA_port_a          ; DX = 0
+    ; beam stays OFF (no STA VIA_shift_reg)
+    CLR VIA_t1_cnt_hi       ; start T1 (ramp, beam off)
+SDCP_W_OFF_X:
+    LDA VIA_int_flags
+    ANDA #$40
+    BEQ SDCP_W_OFF_X
+    LBRA SDCP_SEG_LOOP
+
+SDCP_DONE:
+    RTS
+
 ;**** PRINT_TEXT String Data ****
 PRINT_TEXT_STR_43:
     FCC "+"
