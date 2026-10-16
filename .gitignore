@@ -112,7 +112,7 @@ examples/snowbros_sbt/dumps/
 examples/snowbros_sbt/build/
 examples/snowbros_sbt/build_wasm/
 examples/snowbros_sbt/build_uvm2/pico/
-examples/*/build/uvm2/
+examples/**/build/uvm2/
 
 # THE ARCADE ROM DOES NOT GO IN HERE. This repository is PUBLIC
 # (github.com/tullulah/vectrex-studio, checked with `gh repo view`), and the project's
