@@ -1686,6 +1686,26 @@ export class Thumb2 implements ICpu {
       return 5;
     }
 
+    // REV / REV16 / RBIT / REVSH, the 32-bit encodings: hw0 = 1111 1010 1001 Rm,
+    // hw1 = 1111 Rd 10op Rm (op 00 REV, 01 REV16, 10 RBIT, 11 REVSH). GCC emits REV16 for a
+    // byte-swapped halfword (__builtin_bswap16, or two byte loads it recognises as one): the
+    // 16-bit encoding only reaches r0-r7, and without these the emulator stopped dead at the
+    // first one (Starblade's 68000 fetch, 2026-10-25) with "Unimplemented 32-bit LD/ST".
+    if ((hw0 & 0xfff0) === 0xfa90 && (hw1 & 0xf0c0) === 0xf080) {
+      const rm = hw1 & 0xf;
+      const rd = (hw1 >>> 8) & 0xf;
+      const v = this.regs[rm] >>> 0;
+      let r: number;
+      switch ((hw1 >>> 4) & 3) {
+        case 0: r = ((v >>> 24) | ((v >>> 8) & 0xff00) | ((v << 8) & 0xff0000) | (v << 24)) >>> 0; break;
+        case 1: r = (((v >>> 8) & 0x00ff00ff) | ((v << 8) & 0xff00ff00)) >>> 0; break;
+        case 2: { r = 0; for (let i = 0; i < 32; i++) if (v & (1 << i)) r |= 1 << (31 - i); r >>>= 0; break; }
+        default: { const h = ((v & 0xff) << 8) | ((v >>> 8) & 0xff); r = ((h << 16) >> 16) >>> 0; break; }
+      }
+      this.regs[rd] = r;
+      return 1;
+    }
+
     // CLZ Rd, Rm — count leading zeros. hw0 = 1111 1010 1011 Rm, hw1 = 1111 Rd 1000 Rm.
     if ((hw0 & 0xfff0) === 0xfab0 && (hw1 & 0xf0f0) === 0xf080) {
       const rm = hw1 & 0xf;

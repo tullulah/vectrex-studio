@@ -232,6 +232,7 @@ const PIO_TXEMPTY_SM0 = 1 << 24;   // pio.h: FSTAT TXEMPTY empieza en el bit 24
 const PIO_TXFULL_SM0  = 1 << 16;   // FSTAT TXFULL, bits 19:16
 const PIO_TX_FIFO     = 4;         // TX FIFO depth (not joined: vectrex-bus sets no FJOIN)
 const DMA_BUSY        = 1 << 26;   // CTRL_TRIG BUSY on the RP2350 (24 on the RP2040)
+const DMA_IRQ_1       = 11;        // RP2350 intctrl.h: DMA_IRQ_0 10, DMA_IRQ_1 11
 
 // ── Timing ──────────────────────────────────────────────────────────────────
 /** RP2350 core cycles per Vectrex bus cycle (150 MHz / 1.5 MHz). */
@@ -404,6 +405,21 @@ export class Uvm2System implements ISystem, IBus {
   /** Registros del DMA. DIECISEIS CANALES y no uno: el stream del bus se queda
    * con el 0 y el jack coge el mas alto que encuentre libre. */
   private dmaRegs = new Uint32Array(16 * 16);
+  /* LA INTERRUPCION DEL CANAL 0, EN CORE 1 (DMA_IRQ_1). El SDK manda la pasada al PIO por
+   * trozos y rearma el canal desde el fin de cada uno (uvm2_core1.c, UVM2_WORKER_STREAM),
+   * mientras core 1 hace el trabajo del juego. Sin ella el stream solo avanzaba cuando el
+   * juego bombeaba, y el haz se quedaba sin palabras entre bombeo y bombeo: un emulador
+   * que dibujaba PEOR que la consola por una razon solo suya. Solo el canal 0 y solo esa
+   * linea: INTE1 (con sus alias atomicos de set/clear), INTS1 (escribir 1 limpia). El canal
+   * "acaba" cuando su lote cabe ya en el TX FIFO, lo mismo que deja de leerse BUSY. */
+  private dmaInte1 = 0;
+  private dmaInts1 = 0;
+  /** The channel whose words are in the PIO's queue, -1 none: it "finishes" when they fit in
+   *  the TX FIFO, and then raises its INTS1 bit and triggers the channel it is chained to. Any
+   *  channel writing PIO0's TX FIFO is the bus stream: channel 0 (vectrex-bus) and, chained to
+   *  it, the SDK's second one (uvm2_core1.c, two channels each reading its buffer as a ring). */
+  private dmaVuela = -1;
+  irqsDma1 = 0;
   /** El canal que alimenta a PIO2, -1 si el juego no ha armado el jack. */
   private jackCh = -1;
   private jackMask = 0;          /* mascara del anillo, en bytes */
@@ -1276,6 +1292,22 @@ export class Uvm2System implements ISystem, IBus {
         return 0;
       }
     }
+    if (this.dmaVuela >= 0 && this.pioEnCola() <= PIO_TX_FIFO) {
+      const ch = this.dmaVuela;
+      this.dmaVuela = -1;
+      this.dmaInts1 = (this.dmaInts1 | (1 << ch)) >>> 0;
+      const ctrl = this.dmaRegs[((ch * DMA_CH_STRIDE) + DMA_CTRL_TRIG) >>> 2] >>> 0;
+      const chain = (ctrl >>> 13) & 0xF;           // CHAIN_TO, 16:13 on the RP2350
+      const cctrl = this.dmaRegs[((chain * DMA_CH_STRIDE) + DMA_CTRL_TRIG) >>> 2] >>> 0;
+      if (chain !== ch && (cctrl & DMA_EN) &&
+          (this.dmaRegs[((chain * DMA_CH_STRIDE) + 4) >>> 2] >>> 0) === PIO0_TXF0) this.dmaTransferencia(chain);
+    }
+    if ((this.dmaInts1 & this.dmaInte1) && this.cpu1.getException() === 0 &&
+        !(this.cpu1 as any).primask && (this.cpu1 as any).itState === 0) {
+      this.irqsDma1++;
+      this.entraExcepcion(this.cpu1, 16 + DMA_IRQ_1);
+      return 1;
+    }
     this.enCore1 = true;
     if (this.jit !== null && this.relojCore0 + this.quantum - this.relojCore1 >= JIT_MARGEN && (pc1 & 1) === 0 && (this.cpu1 as any).itState === 0) {
       const blk = this.jit.block(1, pc1);
@@ -1500,14 +1532,24 @@ export class Uvm2System implements ISystem, IBus {
 
   /** La transferencia del canal 0: las n palabras del lote, a la cola del PIO (pioPeriodo
    *  las saca al ritmo del bus; el canal sigue BUSY mientras no quepan en el TX FIFO). */
-  private dmaTransferencia(): void {
-    const src = this.dmaRegs[DMA_READ_ADDR >>> 2] >>> 0;
-    const n   = this.dmaRegs[DMA_TRANS_COUNT >>> 2] & 0x0FFFFFFF;   // 31:28 = MODE
+  private dmaTransferencia(ch = 0): void {
+    const b = (ch * DMA_CH_STRIDE) >>> 2;
+    const src = this.dmaRegs[b + (DMA_READ_ADDR >>> 2)] >>> 0;
+    const n   = this.dmaRegs[b + (DMA_TRANS_COUNT >>> 2)] & 0x0FFFFFFF;   // 31:28 = MODE
+    const ctrl = this.dmaRegs[b + (DMA_CTRL_TRIG >>> 2)] >>> 0;
+    /* RING on the read side (RING_SEL, bit 12, clear): the address wraps within 2^RING_SIZE
+     * bytes (bits 11:8 on the RP2350) */
+    const ring = (ctrl & (1 << 12)) ? 0 : (ctrl >>> 8) & 0xF;
+    const mask = ring ? ((1 << ring) - 1) >>> 0 : 0xFFFFFFFF;
+    let a = src;
     for (let i = 0; i < n && i < 65536; i++) {
       this.dmaPalabras++;
-      this.pioPalabra(this.read32((src + i * 4) >>> 0) >>> 0);
+      this.pioPalabra(this.read32(a) >>> 0);
+      a = ring ? (((a & ~mask) | ((a + 4) & mask)) >>> 0) : ((a + 4) >>> 0);
     }
-    this.dmaRegs[DMA_TRANS_COUNT >>> 2] = 0;
+    this.dmaRegs[b + (DMA_READ_ADDR >>> 2)] = a;
+    if (ch === 0) this.dmaRegs[b + (DMA_TRANS_COUNT >>> 2)] = 0;   // vectrex-bus writes it each time
+    this.dmaVuela = ch;
   }
 
   /* THE STREAM RUNS IN BUS TIME, NEXT TO THE CPU.
@@ -1527,6 +1569,10 @@ export class Uvm2System implements ISystem, IBus {
   private pioCola = new Uint32Array(1 << 17);
   private pioSale = 0;       // words taken (index of the next one, unwrapped)
   private pioEntra = 0;      // words queued
+  /** E periods the PIO saw, and those with nothing to send (no word, no park running): the
+   *  beam without a list, which is what a two-core hand-over can leave behind. */
+  pioPeriodos = 0;
+  pioOcioso = 0;
   private pioParkResto = 0;  // periods left of the park being presented
   private pioTrasEscritura = false;   // the previous period presented a write
   private pioEnCola(): number { return this.pioEntra - this.pioSale; }
@@ -1577,7 +1623,8 @@ export class Uvm2System implements ISystem, IBus {
       this.gpioOut = ((this.gpioOut & ~PINES) | this.placa.park) >>> 0;
     }
     if (this.pioParkResto > 0) { this.pioParkResto--; return; }
-    if (this.pioSale === this.pioEntra) return;
+    this.pioPeriodos++;
+    if (this.pioSale === this.pioEntra) { this.pioOcioso++; return; }
     const w = this.pioCola[this.pioSale++ & (this.pioCola.length - 1)];
     if (w & 1) {
       this.gpioOut = ((this.gpioOut & ~PINES) | ((((w >>> 1) & ((1 << this.placa.outCount) - 1)) << this.placa.outBase) & PINES)) >>> 0;
@@ -1839,9 +1886,13 @@ export class Uvm2System implements ISystem, IBus {
     /* DMA: se lee lo ultimo escrito; CTRL_TRIG del canal 0 con BUSY mientras la cola del PIO
      * tenga mas palabras de las que caben en el TX FIFO (ver pioCola). */
     if (((addr & 0xFFFFF000) >>> 0) === DMA_BASE) {
-      const off = addr & 0xFFC, shift = (addr & 3) * 8;
+      const off0 = addr & 0xFFC, shift = (addr & 3) * 8;
+      if (off0 === 0x41C) return (((this.dmaInts1 & this.dmaInte1) >>> 0) >>> shift) & 0xFF;   // INTS1
+      if (off0 === 0x414) return (this.dmaInte1 >>> shift) & 0xFF;
+      const off = off0 < 0x400 ? Uvm2System.dmaCanonico(off0) : off0;
       let word = this.dmaRegs[off >>> 2] ?? 0;
-      if (off === DMA_CTRL_TRIG && this.pioEnCola() > PIO_TX_FIFO) {      // channel 0: see pioCola
+      if (off < 0x400 && off % DMA_CH_STRIDE === DMA_CTRL_TRIG && ((off / DMA_CH_STRIDE) | 0) === this.dmaVuela &&
+          this.pioEnCola() > PIO_TX_FIFO) {      // the channel feeding the PIO: see pioCola
         word |= DMA_BUSY;
         if (this.enCore1 && (addr & 3) === 0) this.sondeoCore1(this.ciclosHastaTomar(this.pioEnCola() - PIO_TX_FIFO));
       }
@@ -1889,6 +1940,11 @@ export class Uvm2System implements ISystem, IBus {
       }
       else if (off === 0x010) word = this.gpioOut;
       else if (off === 0x030) word = this.gpioOe;
+      /* CPUID (+0x000): which core is reading. It answered 0 to both, so get_core_num() on
+       * core 1 said 0 and code that splits work by core did core 0's half on core 1: in
+       * Starblade the drawing's tick serviced the jack instead of yielding, and the beam
+       * sat 44 ms a frame without a list, in the emulator only. */
+      else if (off === 0x000) word = this.enCore1 ? 1 : 0;
       /* SPINLOCK0..31 (0x100..0x17C): leer es reclamar y devuelve el bit del cerrojo si se
        * consigue. Aqui siempre se consigue: no hay contienda que modelar entre nucleos a
        * este nivel, y sin esto la critical_section de rp235x-hal (BIOS) gira para siempre
@@ -1987,15 +2043,31 @@ export class Uvm2System implements ISystem, IBus {
         }
         return;
       }
+      {   /* INTE1 / INTS1 del DMA: ver dmaInte1 */
+        const w = (addr & ~3) >>> 0, b = ((data & 0xFF) << ((addr & 3) * 8)) >>> 0;
+        if (w === DMA_BASE + 0x414) { this.dmaInte1 = ((this.dmaInte1 & ~(0xFF << ((addr & 3) * 8))) | b) >>> 0; return; }
+        if (w === DMA_BASE + 0x2414) { this.dmaInte1 = (this.dmaInte1 | b) >>> 0; return; }
+        if (w === DMA_BASE + 0x3414) { this.dmaInte1 = (this.dmaInte1 & ~b) >>> 0; return; }
+        if (w === DMA_BASE + 0x41C) { this.dmaInts1 = (this.dmaInts1 & ~b) >>> 0; return; }
+      }
       if (((addr & 0xFFFFF000) >>> 0) === DMA_BASE) {
-        const off = addr & 0xFFC, shift = (addr & 3) * 8;
+        const off0 = addr & 0xFFC, shift = (addr & 3) * 8;
+        /* the four register aliases of a channel, onto its four registers; only the last
+         * register of each alias triggers (al1_ctrl is CTRL without starting the channel) */
+        const off = off0 < 0x400 ? Uvm2System.dmaCanonico(off0) : off0;
+        const disparo = off0 < 0x400 && (off0 % DMA_CH_STRIDE) % 16 === 12;
         const i = off >>> 2;
         this.dmaRegs[i] = (((this.dmaRegs[i] ?? 0) & ~(0xFF << shift)) | (data << shift)) >>> 0;
-        if (off % DMA_CH_STRIDE === DMA_CTRL_TRIG && (addr & 3) === 3 &&
-            (this.dmaRegs[i] & DMA_EN)) {
-          if (off < DMA_CH_STRIDE) {
-            this.dmaTransferencia();              // canal 0: el stream del bus
-          } else if ((this.dmaRegs[i - 2] >>> 0) === PIO2_TXF0) {
+        /* CTRL's BUSY (26) and error bits (29-31) are not writable: a read-modify-write of
+         * a running channel's CTRL (the SDK cutting its chain) carried BUSY back in, and the
+         * channel read busy for ever */
+        if (off < 0x400 && off % DMA_CH_STRIDE === DMA_CTRL_TRIG) this.dmaRegs[i] = (this.dmaRegs[i] & ~0xE4000000) >>> 0;
+        const ctrlI = (((off / DMA_CH_STRIDE) | 0) * DMA_CH_STRIDE + DMA_CTRL_TRIG) >>> 2;
+        if (off0 < 0x400 && disparo && (addr & 3) === 3 && (this.dmaRegs[ctrlI] & DMA_EN)) {
+          const chN = (off / DMA_CH_STRIDE) | 0;
+          if ((this.dmaRegs[(chN * DMA_CH_STRIDE + 4) >>> 2] >>> 0) === PIO0_TXF0 || chN === 0) {
+            this.dmaTransferencia(chN);           // el stream del bus
+          } else if (off % DMA_CH_STRIDE === DMA_CTRL_TRIG && (this.dmaRegs[i - 2] >>> 0) === PIO2_TXF0) {
             /* CUALQUIER OTRO CANAL QUE ESCRIBA AL TX FIFO DE PIO2 ES EL JACK, y
              * se reconoce por su DESTINO y no por su numero: el driver coge el
              * canal libre mas alto que encuentre, asi que cual le toca depende
@@ -2142,15 +2214,52 @@ export class Uvm2System implements ISystem, IBus {
     cpu.setException?.(11);   // SVCall
   }
 
-  /** Undo the above when the handler returns to EXC_RETURN. */
+  /** A channel's register aliases (RP2350 dma.h: AL1 0x10 CTRL READ WRITE COUNT_TRIG, AL2 0x20
+   *  CTRL COUNT READ WRITE_TRIG, AL3 0x30 CTRL WRITE COUNT READ_TRIG) onto its four registers
+   *  (READ 0x0, WRITE 0x4, COUNT 0x8, CTRL_TRIG 0xC). */
+  private static dmaCanonico(off: number): number {
+    const base = off - (off % DMA_CH_STRIDE), o = off % DMA_CH_STRIDE;
+    const mapa = [0x0, 0x4, 0x8, 0xC,  0xC, 0x0, 0x4, 0x8,  0xC, 0x8, 0x0, 0x4,  0xC, 0x4, 0x8, 0x0];
+    return base + mapa[(o >>> 2) & 15];
+  }
+
+  /** An interrupt: the same frame as an svc, but ASYNCHRONOUS, so it keeps what the
+   *  interrupted code cannot lose: the flags (in the stacked xPSR) and an 8-byte aligned
+   *  stack (bit 9 of the xPSR says the entry had to align it), as the M33 does. The
+   *  return address is the instruction not yet executed. */
+  private entraExcepcion(cpu: Thumb2, exc: number): void {
+    let sp = cpu.getReg(13) >>> 0, xpsr = (0x01000000 | ((cpu as any).cpsr & 0xF8000000)) >>> 0;
+    if (sp & 4) { sp -= 4; xpsr |= 1 << 9; }
+    sp = (sp - 32) >>> 0;
+    const put = (i: number, v: number) => {
+      const a = sp + i * 4;
+      this.write8(a, v & 0xFF); this.write8(a + 1, (v >>> 8) & 0xFF);
+      this.write8(a + 2, (v >>> 16) & 0xFF); this.write8(a + 3, (v >>> 24) & 0xFF);
+    };
+    put(0, cpu.getReg(0)); put(1, cpu.getReg(1));
+    put(2, cpu.getReg(2)); put(3, cpu.getReg(3));
+    put(4, cpu.getReg(12)); put(5, cpu.getReg(14));
+    put(6, cpu.getReg(15)); put(7, xpsr);
+    cpu.setReg(13, sp);
+    cpu.setReg(14, EXC_RETURN);
+    cpu.setReg(15, this.read32(this.vtor + exc * 4) & ~1);
+    cpu.setException(exc);
+  }
+
+  /** Undo the above when the handler returns to EXC_RETURN. The flags come back from the
+   *  stacked xPSR only when an interrupt stacked them (bit 24 + what entraExcepcion wrote);
+   *  an svc's frame carries 0x01000000 and its caller's flags are what the handler left,
+   *  as before. */
   private exceptionReturn(cpu: Thumb2 = this.cpu): void {
     const sp = cpu.getReg(13) >>> 0;
     const get = (i: number) => this.read32(sp + i * 4);
+    const xpsr = get(7) >>> 0;
     cpu.setReg(0, get(0)); cpu.setReg(1, get(1));
     cpu.setReg(2, get(2)); cpu.setReg(3, get(3));
     cpu.setReg(12, get(4)); cpu.setReg(14, get(5));
     cpu.setReg(15, get(6) & ~1);
-    cpu.setReg(13, (sp + 32) >>> 0);
+    cpu.setReg(13, (sp + 32 + ((xpsr >>> 9) & 1) * 4) >>> 0);
+    if (cpu.getException() >= 16) (cpu as any).cpsr = (((cpu as any).cpsr & ~0xF8000000) | (xpsr & 0xF8000000)) >>> 0;
     cpu.setException(0);   // de vuelta a modo hilo
   }
 
