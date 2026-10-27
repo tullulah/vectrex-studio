@@ -325,7 +325,8 @@ export function validateVclip(raw: unknown, joints?: string[]): Issue[] {
     }
   }
   const sets = isObj(raw.sets) ? raw.sets : {};
-  if (!isObj(raw.sets)) out.push({ message: 'sets must be an object' });
+  /* absent is fine (no sets); present and not an object is not */
+  if (raw.sets !== undefined && !isObj(raw.sets)) out.push({ message: 'sets must be an object' });
   for (const [name, s] of Object.entries(sets)) {
     if (!isObj(s)) { out.push({ message: `set "${name}" must be an object`, set: name }); continue; }
     if (s.poses !== undefined) {
@@ -378,15 +379,24 @@ export function sampleClip(raw: VclipRaw, clip: ClipRaw, t: number, joints: stri
 export type Edit = { raw: VclipRaw } | { error: string };
 
 /** Who uses pose `p`: clip keys and set roles, for messages. */
+/** A library's sets, or none. `sets` is optional: the compiler (vpy_cli
+ * compile-asset) takes a library without it and docs/ASSETS.md shows it as one
+ * part of a library, not a required one. Reading raw.sets straight crashed the clip
+ * pane on open (TypeError in clipUsers) for any such file, before the validator's
+ * issue list could be shown — so every reader goes through here. */
+function setsOf(raw: VclipRaw): Record<string, SetRaw> {
+  return isObj(raw.sets) ? (raw.sets as Record<string, SetRaw>) : {};
+}
+
 export function poseUsers(raw: VclipRaw, p: string): string[] {
   const out: string[] = [];
   for (const [n, c] of Object.entries(raw.clips)) if (c.keys.some((k) => k.pose === p)) out.push(`clip ${n}`);
-  for (const [n, s] of Object.entries(raw.sets)) for (const [role, v] of Object.entries(s.poses ?? {})) if (v === p) out.push(`set ${n} (${role})`);
+  for (const [n, s] of Object.entries(setsOf(raw))) for (const [role, v] of Object.entries(s.poses ?? {})) if (v === p) out.push(`set ${n} (${role})`);
   return out;
 }
 export function clipUsers(raw: VclipRaw, c: string): string[] {
   const out: string[] = [];
-  for (const [n, s] of Object.entries(raw.sets)) for (const [role, v] of Object.entries(s.clips ?? {})) if (v === c) out.push(`set ${n} (${role})`);
+  for (const [n, s] of Object.entries(setsOf(raw))) for (const [role, v] of Object.entries(s.clips ?? {})) if (v === c) out.push(`set ${n} (${role})`);
   return out;
 }
 
@@ -409,7 +419,7 @@ export function renamePose(raw: VclipRaw, from: string, to: string): Edit {
   const clips: Record<string, ClipRaw> = {};
   for (const [n, c] of Object.entries(raw.clips)) clips[n] = { ...c, keys: c.keys.map((k) => (k.pose === from ? { ...k, pose: to } : k)) };
   const sets: Record<string, SetRaw> = {};
-  for (const [n, s] of Object.entries(raw.sets)) {
+  for (const [n, s] of Object.entries(setsOf(raw))) {
     sets[n] = s.poses ? { ...s, poses: Object.fromEntries(Object.entries(s.poses).map(([r, v]) => [r, v === from ? to : v])) } : s;
   }
   return { raw: { ...raw, poses, clips, sets } };
@@ -437,7 +447,7 @@ export function renameClip(raw: VclipRaw, from: string, to: string): Edit {
   const clips: Record<string, ClipRaw> = {};
   for (const [n, c] of Object.entries(raw.clips)) clips[n === from ? to : n] = c;
   const sets: Record<string, SetRaw> = {};
-  for (const [n, s] of Object.entries(raw.sets)) {
+  for (const [n, s] of Object.entries(setsOf(raw))) {
     sets[n] = s.clips ? { ...s, clips: Object.fromEntries(Object.entries(s.clips).map(([r, v]) => [r, v === from ? to : v])) } : s;
   }
   return { raw: { ...raw, clips, sets } };
