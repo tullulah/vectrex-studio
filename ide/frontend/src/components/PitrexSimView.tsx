@@ -659,8 +659,16 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
             const prestado: AudioContext | null = audioRef.current?.ctx ?? null;
             const ctxJ: AudioContext = prestado ?? new AudioContext();
             const propio = !prestado;
-            const BLOQUE = 2048;
-            const scratch = (instance as any)._malloc(BLOQUE * 2);
+            /* TWO QUEUES, AND EACH IS LATENCY. RENDER is how far ahead the game's
+             * mixer is asked for samples: a sound started now is not heard until
+             * what was already rendered has played, so 2048 at 32 kHz was up to
+             * 64 ms late before the browser saw it. BLOQUE is the ScriptProcessor's
+             * buffer, which the browser double-buffers: 2048 at 44.1 kHz was
+             * another ~93 ms. kuroishi's bomb sounded "half a second after the
+             * press" (2026-10-28); 256 and 1024 take that to ~8 + ~46 ms. */
+            const BLOQUE = 1024;
+            const RENDER = 256;
+            const scratch = (instance as any)._malloc(RENDER * 2);
             /* Vecino mas cercano de los 32 kHz del cartucho a los del navegador:
              * es ADPCM de 4 bits subido, y un filtro no le devolveria nada. */
             const paso = 32000 / ctxJ.sampleRate;
@@ -674,8 +682,8 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
                 while (frac >= 1) {
                   frac -= 1;
                   if (leido >= tengo) {
-                    (instance as any)._stream_render(scratch, BLOQUE);
-                    tengo = BLOQUE; leido = 0;
+                    (instance as any)._stream_render(scratch, RENDER);
+                    tengo = RENDER; leido = 0;
                   }
                   held = (instance as any).HEAP16[(scratch >> 1) + leido++] / 32768;
                 }
@@ -686,7 +694,44 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
             const despierta = () => { if (ctxJ.state !== 'running' && !mutedRef.current) ctxJ.resume().catch(() => {}); };
             ['keydown', 'pointerdown', 'mousedown', 'click', 'touchstart']
               .forEach((e) => window.addEventListener(e, despierta, { capture: true }));
-            jackRef.current = { ctxJ, nodo, despierta, propio };
+            /* ── AND THE NEXT PIECE, WHEN THE GAME ASKS FOR ONE BY NAME ──────────
+             *
+             * KUROMUS.PCM above is only the first piece. A game that changes piece
+             * (kuroishi: one per stage) says which file it wants (`stream_wanted`,
+             * "" when it is not waiting) and takes it with `stream_host_music`;
+             * (0, 0) means the card has no such file, and the game takes its own
+             * fallback and asks again. Without these exports nothing changes. */
+            let sondeo: number | undefined;
+            const inst: any = instance;
+            if (typeof inst._stream_wanted === 'function' && typeof inst._stream_host_music === 'function') {
+              const dados: number[] = [];
+              let pidiendo = '';
+              const leerTexto = (ptr: number): string => {
+                let t = '';
+                for (let k = 0; ptr && k < 64; k++) { const c = inst.HEAPU8[ptr + k]; if (!c) break; t += String.fromCharCode(c); }
+                return t;
+              };
+              sondeo = window.setInterval(async () => {
+                if (cancelled || disposedRef.current) return;
+                const ruta = leerTexto(inst._stream_wanted());
+                if (!ruta || ruta === pidiendo) return;
+                pidiendo = ruta;
+                const b = await leer(ruta);
+                if (cancelled || disposedRef.current) return;
+                if (leerTexto(inst._stream_wanted()) !== ruta) { pidiendo = ''; return; }   /* asked for another meanwhile */
+                if (!b) { log.current?.(`[PiTrex simulator] jack: no esta ${ruta} en ${lista!.dir}`); inst._stream_host_music(0, 0); pidiendo = ''; return; }
+                const ptr = inst._malloc(b.length);
+                inst.HEAPU8.set(b, ptr);
+                inst._stream_host_music(ptr, b.length);
+                dados.push(ptr);
+                /* the game plays from the buffer it was given: keep the current one
+                   and the one before it, which may still be sounding this block */
+                while (dados.length > 2) inst._free(dados.shift());
+                pidiendo = '';
+                log.current?.(`[PiTrex simulator] jack: ${ruta} (${b.length} B)`);
+              }, 200);
+            }
+            jackRef.current = { ctxJ, nodo, despierta, propio, sondeo };
             log.current?.(`[PiTrex simulator] jack en ${propio ? 'su propio' : 'el mismo'} `
                           + `AudioContext que el chip (${ctxJ.sampleRate} Hz)`);
           } else if (typeof (instance as any)._jukebox_wanted === 'function' &&
