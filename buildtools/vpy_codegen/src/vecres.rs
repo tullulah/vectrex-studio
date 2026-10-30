@@ -661,6 +661,7 @@ impl VecResource {
             indices: Vec<u8>,
         }
         let mut path_data: Vec<PathData> = Vec::new();
+        let mut clamped_points = 0usize;
 
         for path in &visible {
             if path.points.is_empty() {
@@ -668,6 +669,11 @@ impl VecResource {
             }
             let mut indices = Vec::new();
             for pt in &path.points {
+                if pt.x < -63 || pt.x > 63 || pt.y < -63 || pt.y > 63
+                    || pt.z.unwrap_or(0) < -63 || pt.z.unwrap_or(0) > 63
+                {
+                    clamped_points += 1;
+                }
                 let x = pt.x.clamp(-63, 63) as i8;
                 let y = pt.y.clamp(-63, 63) as i8;
                 let z = pt.z.unwrap_or(0).clamp(-63, 63) as i8;
@@ -675,6 +681,14 @@ impl VecResource {
                 indices.push(idx);
             }
             path_data.push(PathData { closed: path.closed, indices });
+        }
+
+        if clamped_points > 0 {
+            eprintln!(
+                "[WARNING] vector asset '{}': {} point(s) exceed the m6809 3D coordinate range (±63) \
+                 and were clamped in the DRAW_VECTOR_3D data; scale the asset down or draw it 2D",
+                name_to_use, clamped_points
+            );
         }
 
         let total_pts: usize = path_data.iter().map(|p| p.indices.len()).sum();

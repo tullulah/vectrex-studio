@@ -170,7 +170,11 @@ asset's own `name` field should equal its file name. `asset_create` sets it for 
   and `closed: true` joins the last point to the first.
 - A point can also carry these optional fields:
   - `z` (-127..127) makes the sprite a 3D wireframe for `DRAW_VECTOR_3D`. Angles there
-    run 0-127 for a full turn.
+    run 0-127 for a full turn. On m6809 the 3D rotation is 8-bit table math: vertex
+    coordinates are clamped to ±63 in the emitted data (the compiler warns), and the
+    runtime clamps its rotation intermediates to the same range — so a large model
+    tumbled on several axes squashes gracefully at extreme angles instead of
+    glitching, and is exact at up to about ±26 per axis.
   - `intensity` sets the brightness of the segment to that point.
 - `collisionMesh` and `walkableAreas` (`[{"y","x_min","x_max","y2"?}]`) are optional.
   They make a sprite a platform in levels and are edited in the Vector Editor.
