@@ -1999,6 +1999,28 @@ SL_END_{n}:\n",
     )
 }
 
+/// Inline clamp of A to ±63 — the SMUL_PROD table's operand range — with unique
+/// labels per call site. DV3D_ROTATE's intermediates (y1, z1, x2) are multiplied
+/// again in the next rotation stage; a model larger than ~±26 tumbled on two or
+/// three axes pushes them past row 63, and the LUT then reads past SMUL_PROD
+/// (deterministic garbage coordinates: vertices streak to the screen edges), or
+/// wraps the i8 sign outright past ±127. Clamping turns that into a graceful
+/// squash of the silhouette at extreme angles instead.
+fn inline_clamp63(n: usize) -> String {
+    format!(
+        "    CMPA #$3F           ; clamp to ±63 (SMUL_LUT operand range)\n\
+         BGT DV3D_CL{n}_HI\n\
+         CMPA #$C1\n\
+         BGE DV3D_CL{n}_OK\n\
+         LDA #$C1\n\
+         BRA DV3D_CL{n}_OK\n\
+         DV3D_CL{n}_HI:\n\
+         LDA #$3F\n\
+         DV3D_CL{n}_OK:\n",
+        n = n
+    )
+}
+
 /// Emit DV3D_ROTATE with all 10 SMUL_LUT calls inlined (no JSR/RTS overhead).
 /// Saves 14c × 10 calls = 140c per vertex rotation.
 fn emit_dv3d_rotate_inlined() -> String {
@@ -2012,6 +2034,8 @@ fn emit_dv3d_rotate_inlined() -> String {
 ;         ROT3D_COS_X/Y/Z = cos angle offsets: (angle+32)&0x7F\n\
 ;         ROT3D_OX, ROT3D_OY (i8 screen offsets)\n\
 ; Output: ROT3D_SCR_X, ROT3D_SCR_Y\n\
+; Intermediates y1/z1/x2 are clamped to ±63 before their store: they are the\n\
+; multiply operands of the next stage, and the LUT only covers |val|≤63.\n\
 ; Destroys: A, B, X, Y, ROT3D_TEMP, ROT3D_TEMP2, ROT3D_Y1, ROT3D_Z1, ROT3D_X2\n\
 DV3D_ROTATE:\n\
     LDY #SMUL_PROD      ; Y = table base — shared by all inlined SMUL_LUT calls\n\
@@ -2027,8 +2051,10 @@ DV3D_ROTATE:\n\
     s.push_str(
 "    STA >ROT3D_TEMP2\n\
     LDA >ROT3D_TEMP\n\
-    SUBA >ROT3D_TEMP2\n\
-    STA >ROT3D_Y1\n\
+    SUBA >ROT3D_TEMP2\n");
+    s.push_str(&inline_clamp63(0));
+    s.push_str(
+"    STA >ROT3D_Y1\n\
 \n\
     LDA >ROT3D_RY\n\
     LDB >ROT3D_AX\n");
@@ -2039,8 +2065,10 @@ DV3D_ROTATE:\n\
     LDB >ROT3D_COS_X\n");
     s.push_str(&inline_smul_lut(3));  // A = RZ*cX
     s.push_str(
-"    ADDA >ROT3D_TEMP\n\
-    STA >ROT3D_Z1\n\
+"    ADDA >ROT3D_TEMP\n");
+    s.push_str(&inline_clamp63(1));
+    s.push_str(
+"    STA >ROT3D_Z1\n\
 \n\
     ; -- Y-axis rotation: x2 = x*cY + z1*sY --\n\
     LDA >ROT3D_RX\n\
@@ -2052,8 +2080,10 @@ DV3D_ROTATE:\n\
     LDB >ROT3D_AY\n");
     s.push_str(&inline_smul_lut(5));  // A = Z1*sY
     s.push_str(
-"    ADDA >ROT3D_TEMP\n\
-    STA >ROT3D_X2\n\
+"    ADDA >ROT3D_TEMP\n");
+    s.push_str(&inline_clamp63(2));
+    s.push_str(
+"    STA >ROT3D_X2\n\
 \n\
     ; -- Z-axis rotation: sx = x2*cZ - y1*sZ + OX,  sy = x2*sZ + y1*cZ + OY --\n\
     LDA >ROT3D_X2\n\
@@ -2069,6 +2099,13 @@ DV3D_ROTATE:\n\
     LDA >ROT3D_TEMP\n\
     SUBA >ROT3D_TEMP2\n\
     ADDA >ROT3D_OX\n\
+    BVC DV3D_SX_OK      ; saturate to ±127 on signed overflow (as DRAW_VEC_ROT)\n\
+    BMI DV3D_SX_POS     ; wrapped negative -> true value > 127\n\
+    LDA #$81\n\
+    BRA DV3D_SX_OK\n\
+DV3D_SX_POS:\n\
+    LDA #$7F\n\
+DV3D_SX_OK:\n\
     STA >ROT3D_SCR_X\n\
 \n\
     LDA >ROT3D_X2\n\
@@ -2082,6 +2119,13 @@ DV3D_ROTATE:\n\
     s.push_str(
 "    ADDA >ROT3D_TEMP\n\
     ADDA >ROT3D_OY\n\
+    BVC DV3D_SY_OK      ; saturate to ±127 on signed overflow\n\
+    BMI DV3D_SY_POS\n\
+    LDA #$81\n\
+    BRA DV3D_SY_OK\n\
+DV3D_SY_POS:\n\
+    LDA #$7F\n\
+DV3D_SY_OK:\n\
     STA >ROT3D_SCR_Y\n\
     RTS\n\
 \n");
@@ -2503,7 +2547,7 @@ DV3D_DRAWLINE_WAIT:\n\
 ; DRAW_VECTOR_3D_RUNTIME - Draw 3D-rotated vector (vertex-dedup + LUT version)\n\
 ; ============================================================================\n\
 ; Input:  X = pointer to _NAME_3D_DATA (vertex-indexed format)\n\
-;         ROT3D_AX, ROT3D_AY, ROT3D_AZ = raw angles (0-127)\n\
+;         ROT3D_AX, ROT3D_AY, ROT3D_AZ = angles (any i8; masked to 0-127 on entry)\n\
 ;         ROT3D_OX, ROT3D_OY = screen offsets\n\
 ; Data format:\n\
 ;   FDB vertex_count         ; unique vertex count (high byte skipped)\n\
@@ -2514,6 +2558,17 @@ DV3D_DRAWLINE_WAIT:\n\
 ; Destroys: A, B, X, U, all ROT3D_* vars\n\
 DRAW_VECTOR_3D_RUNTIME:\n\
     TFR X,U             ; U = ROM data pointer\n\
+\n\
+    ; --- Mask angles to 0-127 (SMUL_PROD column range); callers may pass any i8 ---\n\
+    LDA >ROT3D_AX\n\
+    ANDA #$7F\n\
+    STA >ROT3D_AX\n\
+    LDA >ROT3D_AY\n\
+    ANDA #$7F\n\
+    STA >ROT3D_AY\n\
+    LDA >ROT3D_AZ\n\
+    ANDA #$7F\n\
+    STA >ROT3D_AZ\n\
 \n\
     ; --- Compute cos angle offsets: ROT3D_COS_X = (AX+32)&0x7F, etc. ---\n\
     LDA >ROT3D_AX\n\
