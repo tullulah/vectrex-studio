@@ -1225,7 +1225,7 @@ fn emit_beep() -> String {
     s.push_str("    push    {r4, lr}\n");
     s.push_str("    ldr     r4, =BEEP_FRAMES_LEFT\n    ldr     r0, [r4]\n");
     s.push_str("    cmp     r0, #0\n    beq     vbu_done\n");
-    s.push_str("    sub     r0, r0, #1\n    str     r0, [r4]\n");
+    s.push_str("    subs    r0, r0, #1          @ sets Z: str does not\n    str     r0, [r4]\n");
     s.push_str("    bne     vbu_done\n"); // still counting
     // Timer just expired: mute PSG channel A
     s.push_str("    mov     r0, #8\n    mov     r1, #0\n    bl      psg_write\n"); // vol=0

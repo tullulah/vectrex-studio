@@ -686,7 +686,7 @@ The music/SFX engine is updated automatically every frame when the program uses 
 
 ### Jukebox (uvm2)
 
-Recorded music and effects off the SD card, out of the UVMC2's audio jack — the same player the C games use, compiled into the image when a program calls any of these. A track is `<dir>/<ID>.PCM` on the card (4-bit IMA ADPCM, `RJMU` header); the effects are one pack, `<dir>/SFX.PCM` (`RJSX`: numbered groups of clips, one of a group at random), loaded whole into the cartridge's PSRAM. The track playing is streamed into PSRAM a slice a frame while it plays, and a new one cross-fades in. Five voices mix over the music: 0 an engine or hum, 1 yours, 2 the world, 3 voices (they duck the music), 4 things passing. The compiler calls the jukebox at the start of every frame; there is nothing to update. Where there is no jack, no PSRAM or no file, every call is silent: `SFX_PCM` returns 0, so the program can fall back to `PLAY_SFX`.
+Recorded music and effects off the SD card, out of the UVMC2's audio jack — the same player the C games use, compiled into the image when a program calls any of these. A track is `<dir>/<ID>.PCM` on the card (4-bit IMA ADPCM, `RJMU` header); the effects are one pack, `<dir>/SFX.PCM` (`RJSX`: numbered groups of clips, one of a group at random), loaded whole into the cartridge's PSRAM. The track playing is streamed into PSRAM a slice a frame while it plays, and a new one cross-fades in. Eight voices mix over the music: 0 an engine or hum, 1 yours, 2 the world, 3 voices (they duck the music), 4 things passing, 5-7 free for the game. The compiler calls the jukebox at the start of every frame; there is nothing to update. Where there is no jack, no PSRAM or no file, every call is silent: `SFX_PCM` returns 0, so the program can fall back to `PLAY_SFX`.
 
 | Function | Description |
 |----------|-------------|
@@ -701,6 +701,17 @@ Recorded music and effects off the SD card, out of the UVMC2's audio jack — th
 | `SFX_PCM_MOVE(voice, x, y, z)` | Move a voice that is playing (a ship going by) |
 | `SFX_PCM_STOP(voice)` / `SFX_PCM_BUSY(voice)` | Stop a voice / 1 while it plays |
 | `LISTENER(x, y, z, fx, fz)` | Where the listener is (usually the camera) and its heading on the floor, for the placed sounds |
+
+The jukebox's string arguments (`JUKEBOX_DIR`, `MUSIC_TRACK`) must be literals: a `const` holding a string compiles to a number there, and the card finds nothing. A new track starts at full volume when nothing was playing; it cross-fades only from another.
+
+**The OPTIONS screen (uvm2).** Like the C games, a VPy game can open on the Vectrex Studio card and the SDK's OPTIONS screen (PLAY, REFRESH, BRIGHTNESS, CONTROLS, CALIBRATE, START IN MENU), by declaring it in the project's `[uvm2]` section:
+
+```toml
+[uvm2]
+options = "MYGAME"     # its settings file on the card, config/MYGAME.CFG (up to 8 letters, digits or _)
+title   = "MY GAME"    # the screen's heading (default: the options name)
+audio   = true         # adds SOUND JACK / VECTREX; VECTREX leaves the jack off (the jukebox is silent)
+```
 
 ### Level System
 

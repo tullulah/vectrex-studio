@@ -5,8 +5,8 @@
  * frame while it already plays, into one of two slots so the next one loads while this one
  * plays on and the two cross-fade. The effects are one pack, <dir>/SFX.PCM ("RJSX": groups
  * of clips, one of a group at random), loaded whole into PSRAM and mixed over the music on
- * five voices (0 an engine or hum, 1 yours, 2 the world, 3 voices -- they duck the music --,
- * 4 things passing), each placed in the world against a listener.
+ * eight voices (0 an engine or hum, 1 yours, 2 the world, 3 voices -- they duck the music --,
+ * 4 things passing, 5-7 free for the game's own use), each placed in the world against a listener.
  *
  * Shipped inside vpy_cli and compiled into the image when a program uses these builtins.
  * vpy_cli injects vpyj_frame() at the start of every frame. Where there is no jack or no
@@ -173,8 +173,11 @@ static int16_t slot_take(int s)
     return t->held;
 }
 
-/* ── EFFECTS: ROTJ/SFX.PCM (tools/sfx.py), whole in PSRAM, four voices over the music ── */
-#define NVOICE 5                  /* 0 hum/engine, 1 yours, 2 the world, 3 voices (duck the music), 4 pass-bys */
+/* ── EFFECTS: ROTJ/SFX.PCM (tools/sfx.py), whole in PSRAM, eight voices over the music ── */
+/* 0 hum/engine, 1 yours, 2 the world, 3 voices (duck the music), 4 pass-bys, 5-7 the game's.
+   Eight and not five since hidden_zoo, whose many short sounds kept cutting each other off:
+   a voice that is silent costs one test per sample in the mix. */
+#define NVOICE 8
 typedef struct { uint32_t base, n, pos, step, frac; int32_t pred; int idx, gain, loop; int16_t held, gl, gr; } voice_t;
 static voice_t s_v[NVOICE];
 static int s_sfx;                 /* 0 not asked, 1 loading, 2 ready, 3 none */
@@ -319,7 +322,10 @@ static void start_in(int s, const char *id, int reuse)
     slot_t *t = &s_slot[s];
     if (!reuse) { copy_id(t->id, id); t->state = SL_LOAD; t->len = 0; t->partial = 0; }
     t->head = 0;                                    /* from the top again */
-    s_old = s_cur; s_cur = s; s_fade = 0;
+    s_old = s_cur; s_cur = s;
+    /* A cross-fade only when there is something to fade from: out of silence (nothing
+       playing, or the music stopped) the new track starts at full, not swelling in. */
+    s_fade = s_old >= 0 ? 0 : FADE;
     copy_id(s_want, id);
 }
 
@@ -335,10 +341,13 @@ static uvm2_sd_file s_file, s_sfile;
 static uint32_t s_kbs;
 #define SLICE 2048u
 
+extern volatile int32_t uvm2_setting_audio;   /* uvm2_config.c: 0 the jack, 1 the console (OPTIONS' SOUND) */
 static void bring_up(void)
 {
     s_tried = 1;
-    s_jack = uvm2_jack_init();
+    /* SOUND VECTREX on the OPTIONS screen: no jack at all, so every call is silent and the
+       program's PSG sounds (its fallback when SFX_PCM returns 0) are what plays. */
+    s_jack = uvm2_setting_audio ? 0 : uvm2_jack_init();
     if (uvm2_psram_ready != 1) { uvm2_qmi_bring_up(); uvm2_psram_ready = uvm2_psram_init(); }
     s_ram = uvm2_psram_ready == 1;
     if (s_ram) uvm2_psram_enable_xip();

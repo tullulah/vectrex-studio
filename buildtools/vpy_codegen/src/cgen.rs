@@ -457,6 +457,25 @@ impl<'a> Gen<'a> {
                 let f = if u == "DRAW_VECTOR" { "vpy_draw_vector" } else { "vpy_draw_vector_ex" };
                 format!("({f}({}_vec, {}), 0)", asset_sym(name), rest.join(", "))
             }
+            // a sprite turned about its centre: libvpy's vpy_draw_vector_rot, in VPy's own
+            // angle unit (the one SIN/COS take), as the ARM backend draws it; with a mirror
+            // and an intensity (4 to 6 arguments, as the manual says) vpy_draw_vector_rot_ex
+            "DRAW_VECTOR_ROT" => {
+                if !(4..=6).contains(&n) {
+                    self.err(line, format!("`{}()` takes 4 to 6 arguments, got {n}", info.name));
+                    return "0".into();
+                }
+                let Some(name) = self.asset_name(info, 0, AssetType::Vector, "vector") else { return "0".into() };
+                self.vecs.insert(name.to_string());
+                let rest: Vec<String> = (1..4).map(|i| arg(self, i)).collect();
+                if n == 4 {
+                    format!("(vpy_draw_vector_rot({}_vec, {}), 0)", asset_sym(name), rest.join(", "))
+                } else {
+                    let mirror = arg(self, 4);
+                    let intensity = if n == 6 { arg(self, 5) } else { "0".to_string() };
+                    format!("(vpy_draw_vector_rot_ex({}_vec, {}, {mirror}, {intensity}), 0)", asset_sym(name), rest.join(", "))
+                }
+            }
             "PLAY_SFX" => {
                 if !want(self, 1) {
                     return "0".into();
