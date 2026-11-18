@@ -2132,7 +2132,6 @@ fn build_rp2350_c(
     let assets = discover_assets(&source_path.to_path_buf());
     vpy_codegen::known_functions::register(unified);
     vpy_codegen::validate::check_duplicate_names(unified).map_err(|e| anyhow::anyhow!("{e}"))?;
-    vpy_codegen::validate::check_duplicate_names(unified).map_err(|e| anyhow::anyhow!("{e}"))?;
     vpy_codegen::validate::check_array_literals(unified).map_err(|e| anyhow::anyhow!("{e}"))?;
     vpy_codegen::arm::three_d::check(unified, &assets, "rp2350-c").map_err(|e| anyhow::anyhow!("{e}"))?;
     vpy_codegen::validate::check_array_types(unified, "rp2350").map_err(|e| anyhow::anyhow!("{e}"))?;

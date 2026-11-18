@@ -20,11 +20,12 @@
 static int32_t s_save[VPYS_N];
 static int s_top;                  /* one past the highest slot set: what gets written */
 
-void vpys_set(int i, int v)
+int32_t vpys_set(int i, int v)     /* int32_t: what the C backend declares (WASM checks) */
 {
-    if ((unsigned)i >= VPYS_N) return;
+    if ((unsigned)i >= VPYS_N) return 0;
     s_save[i] = v;
     if (i + 1 > s_top) s_top = i + 1;
+    return 0;
 }
 
 int vpys_get(int i)

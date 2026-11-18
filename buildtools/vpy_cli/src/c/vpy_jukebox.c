@@ -28,6 +28,7 @@ __attribute__((weak)) int32_t vpyx_args[12];
    and its arguments in r0-r3 (and vpyx_args[]) -- SP aligned to 8 bytes as the AAPCS asks,
    whatever the expression being evaluated had pushed, then put back. (Weak: both
    vpy3d_bridge.c and vpy_jukebox.c carry it, either may be in the image alone.) */
+#if defined(__arm__)
 __attribute__((naked, weak)) void vpyx_call(void)
 {
     __asm volatile(
@@ -39,18 +40,19 @@ __attribute__((naked, weak)) void vpyx_call(void)
         "mov sp, r4\n"
         "pop {r4, pc}\n");
 }
+#endif
 
 static char s_dir[17] = "";        /* the card folder (JUKEBOX_DIR) */
 
-void jukebox_play(const char *id);
+int32_t jukebox_play(const char *id);
 int  jukebox_live(void);
 const char *jukebox_report(void);
 int  jukebox_boot_progress(void);
 void jukebox_update(int mode);
 void jukebox_listener(int32_t x, int32_t y, int32_t z, int32_t fx, int32_t fz);
 int  jukebox_sfx_at(int group, int voice, int gain, int loop, int32_t x, int32_t y, int32_t z);
-void jukebox_voice_at(int voice, int32_t x, int32_t y, int32_t z);
-void jukebox_sfx_stop(int voice);
+int32_t jukebox_voice_at(int voice, int32_t x, int32_t y, int32_t z);
+int32_t jukebox_sfx_stop(int voice);
 int  jukebox_sfx_busy(int voice);
 enum { JB_SCREEN = 0, JB_PLAY = 1, JB_BOOT = 2 };
 
@@ -226,9 +228,9 @@ void jukebox_listener(int32_t x, int32_t y, int32_t z, int32_t fx, int32_t fz)
     if (m) { s_rx = (int32_t)((int64_t)rx * 1024 / m); s_rz = (int32_t)((int64_t)rz * 1024 / m); }
 }
 static uint32_t isq(uint64_t n) { uint64_t r = 0, b = (uint64_t)1 << 62; while (b > n) b >>= 2; while (b) { if (n >= r + b) { n -= r + b; r = (r >> 1) + b; } else r >>= 1; b >>= 2; } return (uint32_t)r; }
-void jukebox_voice_at(int voice, int32_t x, int32_t y, int32_t z)
+int32_t jukebox_voice_at(int voice, int32_t x, int32_t y, int32_t z)
 {
-    if (voice < 0 || voice >= NVOICE) return;
+    if (voice < 0 || voice >= NVOICE) return 0;
     int64_t dx = x - s_lis[0], dy = y - s_lis[1], dz = z - s_lis[2];
     uint32_t d = isq((uint64_t)(dx * dx + dy * dy + dz * dz)), h = isq((uint64_t)(dx * dx + dz * dz));
     int32_t g = d <= NEAR ? 256 : d >= FAR ? 0 : (int32_t)(256 - (int64_t)(d - NEAR) * 256 / (FAR - NEAR));
@@ -238,6 +240,7 @@ void jukebox_voice_at(int voice, int32_t x, int32_t y, int32_t z)
     int32_t l = 256 - pan, r = 256 + pan;          /* the near ear full, the far one fading */
     s_v[voice].gl = (int16_t)((l > 256 ? 256 : l) * g >> 8);
     s_v[voice].gr = (int16_t)((r > 256 ? 256 : r) * g >> 8);
+    return 0;
 }
 int jukebox_sfx_at(int group, int voice, int gain, int loop, int32_t x, int32_t y, int32_t z)
 {
@@ -245,7 +248,7 @@ int jukebox_sfx_at(int group, int voice, int gain, int loop, int32_t x, int32_t 
     jukebox_voice_at(voice, x, y, z);
     return 1;
 }
-void jukebox_sfx_stop(int voice) { if (voice >= 0 && voice < NVOICE) s_v[voice].n = 0; }
+int32_t jukebox_sfx_stop(int voice) { if (voice >= 0 && voice < NVOICE) s_v[voice].n = 0; return 0; }
 int  jukebox_sfx_busy(int voice) { return voice >= 0 && voice < NVOICE && s_v[voice].n; }
 
 static int16_t voice_take(voice_t *v)
@@ -354,13 +357,13 @@ static void bring_up(void)
     s_slot[0].cap = 0x300000u; s_slot[1].cap = 0x300000u;
 }
 
-void jukebox_play(const char *id)
+int32_t jukebox_play(const char *id)
 {
     if (!s_tried) bring_up();
-    if (!s_jack || !s_ram) return;
-    if (!id || !*id) { s_old = s_cur; s_cur = -1; s_fade = 0; s_want[0] = 0; return; }
-    if (s_cur >= 0 && same(s_slot[s_cur].id, id) && s_slot[s_cur].state != SL_DEAD) return;
-    for (int k = 0; k < 2; k++) if (s_slot[k].state == SL_DEAD && same(s_slot[k].id, id)) return;   /* not on the card */
+    if (!s_jack || !s_ram) return 0;
+    if (!id || !*id) { s_old = s_cur; s_cur = -1; s_fade = 0; s_want[0] = 0; return 0; }
+    if (s_cur >= 0 && same(s_slot[s_cur].id, id) && s_slot[s_cur].state != SL_DEAD) return 0;
+    for (int k = 0; k < 2; k++) if (s_slot[k].state == SL_DEAD && same(s_slot[k].id, id)) return 0;   /* not on the card */
     int s = slot_for(id);
     int reuse = s_slot[s].state != SL_IDLE && s_slot[s].state != SL_DEAD && !s_slot[s].partial && same(s_slot[s].id, id);
     if (!reuse) {                                   /* open it: the one loading before is dropped */
@@ -375,10 +378,11 @@ void jukebox_play(const char *id)
             s_slot[s_loading].state = s_slot[s_loading].len >= HEAD ? SL_DONE : SL_IDLE;
         }
         s_file.ok = 0;
-        if (!uvm2_sd_open(path, &s_file)) { copy_id(s_slot[s].id, id); s_slot[s].state = SL_DEAD; return; }
+        if (!uvm2_sd_open(path, &s_file)) { copy_id(s_slot[s].id, id); s_slot[s].state = SL_DEAD; return 0; }
         s_loading = s;
     }
     start_in(s, id, reuse);
+    return 0;
 }
 
 int jukebox_live(void)
@@ -492,9 +496,75 @@ void jukebox_update(int mode)
     }
 }
 
+#elif defined(__EMSCRIPTEN__)
+/* ── THE WEB AND THE IDE'S WASM SIMULATOR: the host hands over the card's files ──
+ * The same protocol as kuroishi's stream.c, so the player that drives it
+ * (vectrex-studio-web sim-player.tsx, the IDE's PitrexSimView.tsx) needs nothing new:
+ *   stream_host_load(music, n, effects, n)  at the start: SFX.PCM (stream.json's "effects")
+ *   stream_wanted()                         the track the game is waiting for, "" if none
+ *   stream_host_music(bytes, n)             its bytes (0, 0: not on the card)
+ *   stream_render(out, n)                   the mix, mono, at 32 kHz
+ * Each track is copied into the slot's own buffer: the host frees what it gave. */
+#include <stdlib.h>
+#include <string.h>
+#include <emscripten/emscripten.h>
+
+static unsigned char *s_own[2];
+static int s_wait = -1;            /* the slot waiting for its bytes */
+static char s_wait_name[24];
+
+EMSCRIPTEN_KEEPALIVE void stream_host_load(const unsigned char *mus, int nm, const unsigned char *sfx, int ns)
+{
+    (void)mus; (void)nm;           /* the tracks come one by one, by name */
+    if (sfx && ns > 8 && sfx[0] == 'R' && sfx[1] == 'J' && sfx[2] == 'S' && sfx[3] == 'X') {
+        s_sfx_mem = (unsigned char *)malloc((size_t)ns);
+        if (s_sfx_mem) { memcpy(s_sfx_mem, sfx, (size_t)ns); s_sfx_len = (uint32_t)ns; s_sfx = 2; return; }
+    }
+    s_sfx = 3;
+}
+EMSCRIPTEN_KEEPALIVE const char *stream_wanted(void) { return s_wait >= 0 ? s_wait_name : ""; }
+EMSCRIPTEN_KEEPALIVE void stream_host_music(const unsigned char *b, int n)
+{
+    if (s_wait < 0) return;
+    const int s = s_wait;
+    s_wait = -1;
+    free(s_own[s]);
+    s_own[s] = 0; s_mem[s] = 0;
+    if (!b || n < (int)HDR || !(s_own[s] = (unsigned char *)malloc((size_t)n))) { s_slot[s].state = SL_DEAD; return; }
+    memcpy(s_own[s], b, (size_t)n);
+    s_mem[s] = s_own[s];
+    s_slot[s].len = (uint32_t)n;
+    s_slot[s].state = SL_DONE;
+}
+EMSCRIPTEN_KEEPALIVE void stream_render(int16_t *out, int n) { render_lr(out, 0, n); }
+
+int32_t jukebox_play(const char *id)
+{
+    if (!id || !*id) { s_old = s_cur; s_cur = -1; s_fade = 0; s_want[0] = 0; return 0; }
+    if (s_cur >= 0 && same(s_slot[s_cur].id, id) && s_slot[s_cur].state != SL_DEAD) return 0;
+    for (int k = 0; k < 2; k++) if (s_slot[k].state == SL_DEAD && same(s_slot[k].id, id)) return 0;
+    int s = slot_for(id);
+    int reuse = s_slot[s].state == SL_DONE && !s_slot[s].partial && same(s_slot[s].id, id);
+    if (!reuse) {
+        if (s_wait >= 0 && s_wait != s) s_slot[s_wait].state = SL_IDLE;   /* asked for another */
+        int k = 0;
+        for (int j = 0; id[j] && k < 16; j++) s_wait_name[k++] = id[j];
+        s_wait_name[k++] = '.'; s_wait_name[k++] = 'P'; s_wait_name[k++] = 'C'; s_wait_name[k++] = 'M';
+        s_wait_name[k] = 0;
+        s_mem[s] = 0;
+        s_wait = s;
+    }
+    start_in(s, id, reuse);
+    return 0;
+}
+int  jukebox_live(void) { return s_cur >= 0 && s_slot[s_cur].state != SL_DEAD; }
+const char *jukebox_report(void) { return ""; }
+int  jukebox_boot_progress(void) { return 256; }   /* nothing to wait for: the host feeds it */
+void jukebox_update(int mode) { (void)mode; }       /* the host pulls the mix (stream_render) */
+
 #else
 /* Not on the cartridge runtime: silence (the program keeps its PSG sounds). */
-void jukebox_play(const char *id) { (void)id; }
+int32_t jukebox_play(const char *id) { (void)id; return 0; }
 int  jukebox_live(void) { return 0; }
 const char *jukebox_report(void) { return ""; }
 int  jukebox_boot_progress(void) { return 256; }
@@ -504,19 +574,23 @@ void jukebox_update(int mode) { (void)mode; }
 /* ── the VPy builtins ──────────────────────────────────────────────────────────────── */
 static int s_mode;                 /* JB_SCREEN, JB_PLAY or JB_BOOT (JUKEBOX_MODE) */
 
-void vpyj_dir(const char *d)
+/* (The builtins return int32_t even when there is nothing to say: the C backend declares
+   every builtin int32_t f(int32_t...), and on WASM a signature that differs is a trap.) */
+int32_t vpyj_dir(const char *d)
 {
     int k = 0;
     while (d && d[k] && k < 16) { s_dir[k] = d[k]; k++; }
     s_dir[k] = 0;
+    return 0;
 }
-void vpyj_mode(int m) { s_mode = m < 0 ? 0 : m > 2 ? 2 : m; }
+int32_t vpyj_mode(int m) { s_mode = m < 0 ? 0 : m > 2 ? 2 : m; return 0; }
 void vpyj_frame(void) { jukebox_update(s_mode); }
 int  vpyj_sfx(int group, int voice, int gain, int loop) { return jukebox_sfx(group, voice, gain, loop); }
 /* fz: argument 5, in vpyx_args[0] */
-void vpyj_listener(int32_t x, int32_t y, int32_t z, int32_t fx)
+int32_t vpyj_listener(int32_t x, int32_t y, int32_t z, int32_t fx)
 {
     jukebox_listener(x, y, z, fx, vpyx_args[0]);
+    return 0;
 }
 /* (x, y, z): arguments 5-7, which the codegen passes in vpyx_args[] */
 int  vpyj_sfx_at(int group, int voice, int gain, int loop)
