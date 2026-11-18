@@ -2131,6 +2131,8 @@ fn build_rp2350_c(
     }
     let assets = discover_assets(&source_path.to_path_buf());
     vpy_codegen::known_functions::register(unified);
+    vpy_codegen::validate::check_duplicate_names(unified).map_err(|e| anyhow::anyhow!("{e}"))?;
+    vpy_codegen::validate::check_duplicate_names(unified).map_err(|e| anyhow::anyhow!("{e}"))?;
     vpy_codegen::validate::check_array_literals(unified).map_err(|e| anyhow::anyhow!("{e}"))?;
     vpy_codegen::arm::three_d::check(unified, &assets, "rp2350-c").map_err(|e| anyhow::anyhow!("{e}"))?;
     vpy_codegen::validate::check_array_types(unified, "rp2350").map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -2216,6 +2218,14 @@ fn build_rp2350_c(
         defs.push(vpy_codegen::arm::three_d::Group::Juke.define().to_string());
         println!("  {} jukebox: silent on this cartridge (no audio jack); the PSG sounds play", "note:".yellow());
     }
+    if vpy_codegen::arm::three_d::uses_save(unified) {
+        // The debug cartridge's BIOS has no write path to the card: the table lasts the session.
+        let save = build_dir.join("vpy_save.c");
+        std::fs::write(&save, VPY_SAVE_C).with_context(|| format!("Failed to write {}", save.display()))?;
+        srcs.push(sdk_source(&save.canonicalize().unwrap_or(save), sdk_opt.as_deref(), &build_dir)?);
+        defs.push(vpy_codegen::arm::three_d::Group::Save.define().to_string());
+        println!("  {} SAVE_*: nothing is kept on this cartridge (no write path to its card)", "note:".yellow());
+    }
     // the project's own (pools, limits): [rp2350] defs, else [uvm2] defs
     if let Some(pd) = rp2350_key(input, "defs") {
         defs.extend(pd.split(';').map(|d| d.trim().to_string()).filter(|d| !d.is_empty()));
@@ -2277,6 +2287,7 @@ fn build_rp2350_c(
 /// The C side of VPy's 3D builtins (vpy_codegen arm/three_d.rs emits the calls).
 const VPY3D_BRIDGE_C: &str = include_str!("c/vpy3d_bridge.c");
 const VPY_JUKEBOX_C: &str = include_str!("c/vpy_jukebox.c");
+const VPY_SAVE_C: &str = include_str!("c/vpy_save.c");
 const VPY_FAULT_C: &str = include_str!("c/vpy_fault.c");
 
 /// libvpy's vector font, cut out of the SDK's vpy.c: from its first glyph table
@@ -2354,6 +2365,8 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
     let generated = if c_backend {
         println!("\n{}", "Phase 3: UVM2 C codegen (libvpy)".bright_cyan().bold());
         vpy_codegen::known_functions::register(&unified);
+        vpy_codegen::validate::check_duplicate_names(&unified).map_err(|e| anyhow::anyhow!("{e}"))?;
+        vpy_codegen::validate::check_duplicate_names(&unified).map_err(|e| anyhow::anyhow!("{e}"))?;
         vpy_codegen::validate::check_array_literals(&unified).map_err(|e| anyhow::anyhow!("{e}"))?;
         vpy_codegen::arm::three_d::check(&unified, &assets, "uvm2").map_err(|e| anyhow::anyhow!("{e}"))?;
         vpy_codegen::validate::check_array_types(&unified, "uvm2").map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -2522,6 +2535,15 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         // from their Makefile); without it the image links the host stub and the jack is mute.
         c_defs.push("VPY_RP2350".to_string());
         println!("  {} jukebox: music and effects off the SD card", "✓".green());
+    }
+    // SAVE_*: a table of numbers kept on the SD card (config/NAME.SAV).
+    if vpy_codegen::arm::three_d::uses_save(&unified) {
+        let save = build_dir.join("vpy_save.c");
+        std::fs::write(&save, VPY_SAVE_C)
+            .with_context(|| format!("Failed to write {}", save.display()))?;
+        game_srcs.push(sdk_source(&save.canonicalize().unwrap_or(save), sdk_opt.as_deref(), &build_dir)?);
+        c_defs.push(vpy_codegen::arm::three_d::Group::Save.define().to_string());
+        println!("  {} SAVE_*: numbers kept on the SD card", "✓".green());
     }
     // The SDK's OPTIONS screen, with the Vectrex Studio card before it, as the C games have it:
     // `[uvm2] options = "NAME"` (the config file's name on the card, 8.3: config/NAME.CFG),

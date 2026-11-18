@@ -194,7 +194,7 @@ fn emit_draw_vector() -> String {
 
 // ─── vpy_draw_vector_rot ──────────────────────────────────────────────────
 //
-// DRAW_VECTOR_ROT("name", x, y, angle [, mirror [, intensity]]): the asset's
+// DRAW_VECTOR_ROT("name", x, y, angle [, mirror [, intensity [, scale]]]): the asset's
 // ordinary _NAME_VECTORS paths turned by `angle` (0-127 = one full turn,
 // counter-clockwise; the unit of SIN/COS/DRAW_VECTOR_3D) about the sprite origin.
 //
@@ -205,7 +205,9 @@ fn emit_draw_vector() -> String {
 // through SYS_DRAW_DELTA_Q4, which splits long strokes itself.
 //
 // ABI: r0=_NAME_VECTORS, r1=x, r2=y, r3=angle, [sp]=mirror (bit0 flip X, bit1
-// flip Y, in sprite space before turning), [sp+4]=intensity (0 = each path's own). Locals: [sp+0]=ux [sp+4]=uy [sp+8]=last x q4
+// flip Y, in sprite space before turning), [sp+4]=intensity (0 = each path's own),
+// [sp+8]=scale (1/256, 256 = own size: sin and cos are scaled by it once per call, so it
+// costs nothing per point). Locals: [sp+0]=ux [sp+4]=uy [sp+8]=last x q4
 // [sp+12]=last y q4 [sp+16]=cos [sp+20]=sin.
 fn emit_draw_vector_rot() -> String {
     // r0,r1 = (ux,uy) -> (x,y) in 1/16 units. Clobbers r3, r12.
@@ -226,7 +228,7 @@ fn emit_draw_vector_rot() -> String {
         s.push_str("    mul     r1, r1, r12\n    add     r1, r1, #512\n    asr     r1, r1, #10   @ y' in 1/16\n");
     }
     let mut s = String::new();
-    s.push_str("@ vpy_draw_vector_rot(r0=asset, r1=x, r2=y, r3=angle 0-127, [sp]=mirror, [sp+4]=intensity)\n");
+    s.push_str("@ vpy_draw_vector_rot(r0=asset, r1=x, r2=y, r3=angle 0-127, [sp]=mirror, [sp+4]=intensity, [sp+8]=scale)\n");
     s.push_str(".global vpy_draw_vector_rot\n.type vpy_draw_vector_rot, %function\n.thumb_func\nvpy_draw_vector_rot:\n");
     s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 36 bytes\n");
     s.push_str("    sub     sp, sp, #24         @ ux uy lastx lasty cos sin\n");
@@ -244,6 +246,12 @@ fn emit_draw_vector_rot() -> String {
     s.push_str("    ldrsb   r1, [r0, r3]\n    str     r1, [sp, #20]   @ sin\n");
     s.push_str("    add     r3, r3, #32\n    and     r3, r3, #0x7F\n");
     s.push_str("    ldrsb   r1, [r0, r3]\n    str     r1, [sp, #16]   @ cos = sin(a+32)\n");
+    // the scale, 1/256: sin and cos times it, once (256 = the asset's own size)
+    s.push_str("    ldr     r2, [sp, #68]       @ scale (24 locals + 36 saved + 8)\n");
+    s.push_str("    cmp     r2, #256\n    beq     dvr_noscale\n");
+    s.push_str("    ldr     r1, [sp, #20]\n    mul     r1, r1, r2\n    asr     r1, r1, #8\n    str     r1, [sp, #20]\n");
+    s.push_str("    ldr     r1, [sp, #16]\n    mul     r1, r1, r2\n    asr     r1, r1, #8\n    str     r1, [sp, #16]\n");
+    s.push_str("dvr_noscale:\n");
     s.push_str("    ldr     r5, [r4]            @ path_count\n");
     s.push_str("    mov     r6, #0\n");
     s.push_str("dvr_pl:\n");

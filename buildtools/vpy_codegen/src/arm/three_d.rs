@@ -80,6 +80,8 @@ pub enum Group {
     Soft,
     /// vpy_jukebox.c (in vpy_cli, not the SDK): music and effects off the SD card.
     Juke,
+    /// vpy_save.c (in vpy_cli): a table of numbers kept on the SD card (SAVE_*).
+    Save,
 }
 
 impl Group {
@@ -91,6 +93,7 @@ impl Group {
             Group::Bones => &["vpybone.c", "vpyik.c"],
             Group::Soft => &["vpysoft.c"],
             Group::Juke => &[],
+            Group::Save => &[],
         }
     }
     /// The define that compiles its part of the bridge.
@@ -101,11 +104,12 @@ impl Group {
             Group::Bones => "VPYX_BONES",
             Group::Soft => "VPYX_SOFT",
             Group::Juke => "VPYX_JUKE",
+            Group::Save => "VPYX_SAVE",
         }
     }
     /// Does it sit on vpy3d (and so need the 3D bridge)?
     pub fn is_3d(self) -> bool {
-        self != Group::Juke
+        self != Group::Juke && self != Group::Save
     }
 }
 
@@ -228,6 +232,11 @@ const BUILTINS: &[Builtin] = &[
     Builtin { name: "SFX_PCM_STOP", c_fn: "jukebox_sfx_stop", args: &[Int], optional: 0, group: Juke },
     Builtin { name: "SFX_PCM_BUSY", c_fn: "jukebox_sfx_busy", args: &[Int], optional: 0, group: Juke },
     Builtin { name: "LISTENER", c_fn: "vpyj_listener", args: &[Int, Int, Int, Int, Int], optional: 0, group: Juke },
+    // vpy_save.c: numbers kept on the SD card, config/NAME.SAV
+    Builtin { name: "SAVE_SET", c_fn: "vpys_set", args: &[Int, Int], optional: 0, group: Save },
+    Builtin { name: "SAVE_GET", c_fn: "vpys_get", args: &[Int], optional: 0, group: Save },
+    Builtin { name: "SAVE_WRITE", c_fn: "vpys_write", args: &[Str], optional: 0, group: Save },
+    Builtin { name: "SAVE_READ", c_fn: "vpys_read", args: &[Str], optional: 0, group: Save },
 ];
 
 fn find(name: &str) -> Option<&'static Builtin> {
@@ -296,6 +305,11 @@ pub fn uses_jukebox(module: &Module) -> bool {
     groups(module).contains(&Juke)
 }
 
+/// Does `module` call any SAVE_* builtin?
+pub fn uses_save(module: &Module) -> bool {
+    groups(module).contains(&Save)
+}
+
 /// The meshes and scenes `module` names, each once, sorted (the slot numbers).
 pub fn usage(module: &Module) -> Usage {
     let mut meshes = std::collections::BTreeSet::new();
@@ -352,7 +366,11 @@ pub fn check(module: &Module, assets: &[AssetInfo], target: &str) -> Result<(), 
         // links into the uvm2 image, and into the rp2350 cartridge's when the program is
         // built as C (vpy_cli: `[rp2350] backend = "c"`, target "rp2350-c").
         if target != "uvm2" && target != "rp2350-c" {
-            let what = if b.group == Juke { "a jukebox builtin (the UVMC2's audio jack)" } else { "a 3D builtin (vpy3d)" };
+            let what = match b.group {
+                Juke => "a jukebox builtin (the UVMC2's audio jack)",
+                Save => "a SAVE builtin (the SD card)",
+                _ => "a 3D builtin (vpy3d)",
+            };
             let rp2350 = if target == "rp2350" { " (or on rp2350 with `backend = \"c\"` in the project's [rp2350] section)" } else { "" };
             errors.push(format!(
                 "line {line}: `{}()` is {what}; it is available on the uvm2 target only{rp2350}, not on {target}",

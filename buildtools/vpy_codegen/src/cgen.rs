@@ -461,13 +461,15 @@ impl<'a> Gen<'a> {
             // angle unit (the one SIN/COS take), as the ARM backend draws it; with a mirror
             // and an intensity (4 to 6 arguments, as the manual says) vpy_draw_vector_rot_ex
             "DRAW_VECTOR_ROT" => {
-                if !(4..=6).contains(&n) {
-                    self.err(line, format!("`{}()` takes 4 to 6 arguments, got {n}", info.name));
+                if !(4..=7).contains(&n) {
+                    self.err(line, format!("`{}()` takes 4 to 7 arguments, got {n}", info.name));
                     return "0".into();
                 }
                 let Some(name) = self.asset_name(info, 0, AssetType::Vector, "vector") else { return "0".into() };
                 self.vecs.insert(name.to_string());
                 let rest: Vec<String> = (1..4).map(|i| arg(self, i)).collect();
+                // (a 7th argument, the scale, is the ARM backend's: libvpy has none, so the
+                // sprite is drawn at its own size and the scale is ignored)
                 if n == 4 {
                     format!("(vpy_draw_vector_rot({}_vec, {}), 0)", asset_sym(name), rest.join(", "))
                 } else {

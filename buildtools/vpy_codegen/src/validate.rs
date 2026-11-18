@@ -14,6 +14,34 @@ fn item_name(item: &Item) -> &str {
     }
 }
 
+/// A name defined twice at the top level (const, global or function) is refused.
+///
+/// VPy names are case-insensitive, and two definitions of one name compiled without
+/// a word: the later silently took the earlier's place in some uses and not in others
+/// (hidden_zoo's `const CREDITS = 2` over its credits text: the screen hung the console).
+pub fn check_duplicate_names(module: &Module) -> Result<(), String> {
+    let mut seen: std::collections::HashMap<String, (String, usize, &str)> = Default::default();
+    let mut errors = Vec::new();
+    for item in &module.items {
+        let (name, line, what) = match item {
+            Item::Const { name, source_line, .. } => (name.as_str(), *source_line, "const"),
+            Item::GlobalLet { name, source_line, .. } => (name.as_str(), *source_line, "global"),
+            Item::Function(f) => (f.name.as_str(), f.line, "function"),
+            _ => continue,
+        };
+        let key = name.to_ascii_uppercase();
+        if let Some((first, first_line, first_what)) = seen.get(&key) {
+            errors.push(format!(
+                "line {line}: {what} '{name}' is already defined as {first_what} '{first}' at line \
+                 {first_line} (VPy names are case-insensitive): rename one"
+            ));
+        } else {
+            seen.insert(key, (name.to_string(), line, what));
+        }
+    }
+    if errors.is_empty() { Ok(()) } else { Err(errors.join("\n")) }
+}
+
 /// Global array literals must hold only number literals or only string literals.
 ///
 /// Every backend lays array literals out as data at compile time: a computed
@@ -312,10 +340,11 @@ pub fn check_vector_asset_calls(
         }
         let line = call.source_line;
         let n = call.args.len();
-        if !(4..=6).contains(&n) {
+        let arm = matches!(target, "uvm2" | "rp2350" | "rp2350-c");
+        if !(4..=7).contains(&n) || (n == 7 && !arm) {
             errors.push(format!(
                 "line {line}: DRAW_VECTOR_ROT takes 4 to 6 arguments (\"name\", x, y, angle [, mirror \
-                 [, intensity]]), got {n}"
+                 [, intensity]]), and a 7th, the scale, on uvm2 and rp2350; got {n}"
             ));
             return;
         }
@@ -349,6 +378,13 @@ mod tests {
 
     fn module(src: &str) -> Module {
         vpy_parser::parser::parse(vpy_parser::lex(src).unwrap(), "t.vpy").unwrap()
+    }
+
+    #[test]
+    fn a_name_defined_twice_is_refused() {
+        let err = check_duplicate_names(&module("const CREDITS = 2\nconst credits = [\"A\"]\n")).unwrap_err();
+        assert!(err.contains("already defined"), "{err}");
+        assert!(check_duplicate_names(&module("const A = 1\nb = 2\n")).is_ok());
     }
 
     #[test]

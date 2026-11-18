@@ -237,6 +237,7 @@ pub fn generate_from_module_with_hints(
     hints: &CodeSizeHints,
 ) -> Result<GeneratedASM, CodegenError> {
     known_functions::register(module);
+    validate::check_duplicate_names(module).map_err(CodegenError::Error)?;
     validate::check_array_literals(module).map_err(CodegenError::Error)?;
     arm::three_d::check(module, assets, "m6809").map_err(CodegenError::Error)?;
     validate::check_array_types(module, "m6809").map_err(CodegenError::Error)?;
@@ -276,6 +277,7 @@ pub fn generate_from_module_with_target(
     target: &Target,
 ) -> Result<GeneratedASM, CodegenError> {
     known_functions::register(module);
+    validate::check_duplicate_names(module).map_err(CodegenError::Error)?;
     validate::check_array_literals(module).map_err(CodegenError::Error)?;
     let target_name = match target {
         Target::M6809 => "m6809",

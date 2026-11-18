@@ -580,14 +580,21 @@ pub fn emit_call(
         }
     }
 
-    // Special case: DRAW_VECTOR_ROT("name", x, y, angle [, mirror [, intensity]])
-    // ABI: r0=_NAME_VECTORS, r1=x, r2=y, r3=angle, [sp]=mirror, [sp+4]=intensity.
+    // Special case: DRAW_VECTOR_ROT("name", x, y, angle [, mirror [, intensity [, scale]]])
+    // ABI: r0=_NAME_VECTORS, r1=x, r2=y, r3=angle, [sp]=mirror, [sp+4]=intensity,
+    // [sp+8]=scale (1/256: 256 = the asset's own size).
     // Without an intensity argument the SET_INTENSITY override of the frame is
     // passed (0 = each path's own), as plain DRAW_VECTOR does.
     if info.name == "DRAW_VECTOR_ROT" {
         if let Some(Expr::StringLit(asset_name)) = args.first() {
             let sym_base = asset_name.to_uppercase().replace('-', "_").replace(' ', "_");
             let symbol = format!("_{sym_base}_VECTORS");
+            if let Some(scale) = args.get(6) {
+                s.push_str(&emit_arg(scale, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #256\n");
+            }
+            s.push_str("    push    {r0}\n");
             if let Some(intensity) = args.get(5) {
                 s.push_str(&emit_arg(intensity, var_addrs)?);
             } else {
@@ -608,7 +615,7 @@ pub fn emit_call(
             }
             s.push_str("    pop     {r3}\n    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
             s.push_str("    bl      vpy_draw_vector_rot\n");
-            s.push_str("    add     sp, sp, #8          @ discard mirror, intensity\n");
+            s.push_str("    add     sp, sp, #12         @ discard mirror, intensity, scale\n");
             return Ok(s);
         }
     }

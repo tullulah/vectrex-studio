@@ -603,7 +603,7 @@ The tables of this section are the doc lines of `vpy_cli builtins` (and so of th
 | `DRAW_VECTOR("name", x, y[, mirror])` | Draw a `.vec` asset at (x, y) |
 | `DRAW_VECTOR_EX("name", x, y, mirror, intensity)` | Draw a `.vec` asset with mirror and intensity override |
 | `DRAW_VECTOR_3D("name", ax, ay, az, x, y)` | Draw a 3D `.vec` asset rotated by (ax, ay, az) |
-| `DRAW_VECTOR_ROT("name", x, y, angle[, mirror[, intensity]])` | Draw a `.vec` asset turned by `angle` about its origin (0–127 = one full turn, counter-clockwise, the unit of `sin`/`cos`); `mirror` flips it before turning, `intensity` > 0 overrides every path |
+| `DRAW_VECTOR_ROT("name", x, y, angle[, mirror[, intensity[, scale]]])` | Draw a `.vec` asset turned by `angle` about its origin (0–127 = one full turn, counter-clockwise, the unit of `sin`/`cos`); `mirror` flips it before turning, `intensity` > 0 overrides every path; `scale` (uvm2 and rp2350's ARM backend; ignored through C) in 1/256, 256 = its own size |
 
 **Parameters:**
 - `mirror`: `0`=none, `1`=flip X, `2`=flip Y, `3`=flip both
@@ -703,6 +703,16 @@ Recorded music and effects off the SD card, out of the UVMC2's audio jack — th
 | `LISTENER(x, y, z, fx, fz)` | Where the listener is (usually the camera) and its heading on the floor, for the placed sounds |
 
 The jukebox's string arguments (`JUKEBOX_DIR`, `MUSIC_TRACK`) must be literals: a `const` holding a string compiles to a number there, and the card finds nothing. A new track starts at full volume when nothing was playing; it cross-fades only from another.
+
+### Saving to the card (uvm2)
+
+A table of up to 64 numbers kept on the SD card across power-offs (high scores, unlocked levels, settings), as text in `config/NAME.SAV`, one number a line, so it can be read and edited on a PC. `NAME` is a string literal of up to 8 letters, digits or `_`. Without a card, and on the debug cartridge, nothing is kept: `SAVE_READ` returns 0 and the program plays on with its own defaults.
+
+| Function | Description |
+|----------|-------------|
+| `SAVE_SET(i, v)` / `SAVE_GET(i)` | Set / read slot `i` (0..63) of the table |
+| `SAVE_WRITE("NAME")` | Write slots 0 up to the highest one set (at most 512 bytes of text). Returns 1 if written |
+| `SAVE_READ("NAME")` | Read the file back into the table, in order. Returns how many numbers it read (0: no card or no file) |
 
 **The OPTIONS screen (uvm2).** Like the C games, a VPy game can open on the Vectrex Studio card and the SDK's OPTIONS screen (PLAY, REFRESH, BRIGHTNESS, CONTROLS, CALIBRATE, START IN MENU), by declaring it in the project's `[uvm2]` section:
 
